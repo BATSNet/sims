@@ -366,3 +366,88 @@ async def list_incidents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list incidents: {str(e)}"
         )
+
+
+class AssignRequest(BaseModel):
+    """Request model for assigning incident to organization"""
+    organization_id: int
+    notes: Optional[str] = None
+
+
+@incident_router.post("/{incident_id}/assign", response_model=IncidentResponse)
+async def assign_incident(
+    incident_id: str,
+    assign_data: AssignRequest,
+    db: Session = Depends(get_db)
+):
+    """Assign/forward an incident to an organization"""
+    try:
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Check if organization exists
+        from models.organization_model import OrganizationORM
+        org = db.query(OrganizationORM).filter(
+            OrganizationORM.id == assign_data.organization_id
+        ).first()
+
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization {assign_data.organization_id} not found"
+            )
+
+        # Assign the incident
+        incident.routed_to = assign_data.organization_id
+        incident.status = 'in_progress'
+        incident.updated_at = datetime.utcnow()
+
+        # Add notes to metadata if provided
+        if assign_data.notes:
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'assignment_history' not in incident.meta_data:
+                incident.meta_data['assignment_history'] = []
+            incident.meta_data['assignment_history'].append({
+                'organization_id': assign_data.organization_id,
+                'organization_name': org.name,
+                'assigned_at': datetime.utcnow().isoformat(),
+                'notes': assign_data.notes
+            })
+
+        db.commit()
+        db.refresh(incident)
+
+        logger.info(f"Assigned incident {incident_id} to organization {org.name}")
+
+        # Prepare response
+        response = IncidentResponse.from_orm(incident)
+
+        # Broadcast assignment via WebSocket
+        try:
+            await websocket_manager.broadcast_incident(
+                incident_data=response.dict(),
+                event_type='incident_assigned'
+            )
+            logger.info(f"Broadcasted incident assignment {incident_id} via WebSocket")
+        except Exception as ws_error:
+            logger.error(f"Failed to broadcast incident assignment via WebSocket: {ws_error}")
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error assigning incident: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign incident: {str(e)}"
+        )

@@ -7,10 +7,9 @@ import uuid
 
 from sqlalchemy import Column, BigInteger, TIMESTAMP, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class ChatSessionORM(Base):

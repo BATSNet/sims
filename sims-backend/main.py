@@ -16,8 +16,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from dashboard import dashboard
 from incident_chat import incident_page
+from organizations import organizations_page
 from transcription_service import TranscriptionService
 from endpoints.incident import incident_router
+from endpoints.organization import organization_router
 from db.connection import get_db
 from models.incident_model import IncidentCreate
 from websocket import websocket_manager
@@ -47,8 +49,9 @@ app.add_static_files('/static/uploads', str(UPLOAD_PATH))
 # Initialize transcription service
 transcription_service = TranscriptionService()
 
-# Register incident router
+# Register routers
 app.include_router(incident_router)
+app.include_router(organization_router)
 
 
 @app.websocket("/ws/incidents")
@@ -145,6 +148,13 @@ async def incident():
 
     # Just the chat content, no frame
     await incident_page()
+
+
+@ui.page('/organizations')
+async def organizations():
+    """Organization management page"""
+    async with theme.frame('Organizations'):
+        await organizations_page()
 
 
 @ui.page('/health')
