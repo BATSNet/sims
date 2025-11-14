@@ -8,12 +8,11 @@ import uuid
 
 from sqlalchemy import Column, String, Float, TIMESTAMP, ARRAY, Text, BigInteger, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel, Field
 from geoalchemy2 import Geometry
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class IncidentStatus(str, Enum):

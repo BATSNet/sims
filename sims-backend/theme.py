@@ -105,7 +105,6 @@ def inject_custom_css():
 
             ::-webkit-scrollbar-thumb {
                 background: rgba(99, 171, 255, 0.3);
-                border-radius: 4px;
             }
 
             ::-webkit-scrollbar-thumb:hover {
@@ -118,7 +117,7 @@ def inject_custom_css():
                 grid-template-columns: 1fr 320px;
                 gap: 0;
                 margin: 0 0 3rem;
-                background: rgba(26, 31, 46, 0.6);
+                background: #1a1f2e;
                 border-left: 3px solid rgba(255, 68, 68, 0.3);
                 width: 100%;
             }
@@ -148,14 +147,14 @@ def inject_custom_css():
             }
 
             .metric-card {
-                background: rgba(13, 38, 55, 0.3);
+                background: #0d2637;
                 padding: 24px;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
                 transition: background 0.2s ease;
             }
 
             .metric-card:hover {
-                background: rgba(13, 38, 55, 0.5);
+                background: #0f2d40;
             }
 
             .metric-label {
@@ -176,16 +175,18 @@ def inject_custom_css():
 
             /* Section Title */
             .section-title {
+                font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
                 font-size: 32px;
-                font-weight: 300;
+                font-weight: 700;
                 color: #fff;
                 letter-spacing: 2px;
                 margin: 0 0 1.5rem;
+                text-transform: uppercase;
             }
 
             /* Table Section */
             .table-section {
-                background: rgba(26, 31, 46, 0.6);
+                background: #1a1f2e;
                 margin: 0;
             }
 
@@ -238,7 +239,7 @@ def inject_custom_css():
             /* Table styling */
             .q-table thead tr,
             .q-table tbody td {
-                background: rgba(13, 38, 55, 0.2);
+                background: #0d2637;
             }
 
             .q-table thead th {
@@ -247,7 +248,7 @@ def inject_custom_css():
                 text-transform: uppercase;
                 letter-spacing: 1px;
                 font-weight: 600;
-                background: rgba(13, 38, 55, 0.4);
+                background: #0a1d2a;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             }
 
@@ -258,7 +259,7 @@ def inject_custom_css():
             }
 
             .q-table tbody tr:hover {
-                background: rgba(26, 31, 46, 0.4);
+                background: #1a1f2e;
                 border-left-color: #FF4444;
             }
 
@@ -352,7 +353,22 @@ def inject_custom_css():
             .leaflet-popup-content-wrapper {
                 background: rgba(26, 31, 46, 0.95) !important;
                 color: #fff;
+            }
+
+            .custom-popup-critical .leaflet-popup-content-wrapper {
                 border-left: 3px solid #FF4444;
+            }
+
+            .custom-popup-high .leaflet-popup-content-wrapper {
+                border-left: 3px solid #ffa600;
+            }
+
+            .custom-popup-medium .leaflet-popup-content-wrapper {
+                border-left: 3px solid #63ABFF;
+            }
+
+            .custom-popup-low .leaflet-popup-content-wrapper {
+                border-left: 3px solid rgba(255, 255, 255, 0.4);
             }
 
             .leaflet-popup-content {
@@ -413,7 +429,7 @@ def inject_custom_css():
             }
 
             .q-card {
-                background: rgba(26, 31, 46, 0.6);
+                background: #1a1f2e;
                 border: 1px solid rgba(255, 255, 255, 0.1);
             }
 
@@ -429,6 +445,7 @@ def inject_custom_css():
 
             .q-btn {
                 text-transform: none;
+                border-radius: 0 !important;
             }
 
             /* Chat interface styling */
@@ -437,7 +454,6 @@ def inject_custom_css():
             }
 
             .chat-messages .q-card {
-                border-radius: 12px;
                 padding: 12px 16px;
             }
 
@@ -472,9 +488,13 @@ async def frame(title: str = "SIMS Command"):
         with ui.column().classes('flex-1 p-6 space-y-1'):
             ui.label('Command Center').classes('text-xs font-bold text-gray-400 mb-2 title-font')
 
-            with ui.link(target='/').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 rounded no-underline'):
+            with ui.link(target='/').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline'):
                 ui.icon('dashboard')
                 ui.label('Dashboard').classes('title-font')
+
+            with ui.link(target='/organizations').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline'):
+                ui.icon('corporate_fare')
+                ui.label('Organizations').classes('title-font')
 
         with ui.column().classes('w-full p-6 mt-auto'):
             ui.button('Logout', on_click=lambda: None).props('outline color=white').classes('w-full logout-btn')
@@ -485,7 +505,7 @@ async def frame(title: str = "SIMS Command"):
             ui.label(title).classes('page-title')
             with ui.row().classes('items-center gap-4'):
                 ui.label('System Operational').classes('text-sm text-gray-400')
-                ui.element('div').classes('w-2 h-2 bg-[#FF4444] rounded-full')
+                ui.element('div').classes('w-2 h-2 bg-[#FF4444]')
 
     # Main content area - no padding, let individual sections control their own layout
     with ui.column().classes('w-full'):
