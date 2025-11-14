@@ -9,12 +9,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from nicegui import app, ui
-from fastapi import UploadFile, File, HTTPException
+from fastapi import UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from dashboard import dashboard
 from incident_chat import incident_page
 from transcription_service import TranscriptionService
+from endpoints.incident import incident_router
+from db.connection import get_db
+from models.incident_model import IncidentCreate
+from websocket import websocket_manager
 import theme
 
 # Configure logging
@@ -41,17 +47,85 @@ app.add_static_files('/static/uploads', str(UPLOAD_PATH))
 # Initialize transcription service
 transcription_service = TranscriptionService()
 
+# Register incident router
+app.include_router(incident_router)
 
-class IncidentCreate(BaseModel):
-    title: str
-    description: str
-    imageUrl: Optional[str] = None
-    audioUrl: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    heading: Optional[float] = None
-    timestamp: Optional[str] = None
-    metadata: Optional[dict] = None
+
+@app.websocket("/ws/incidents")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time incident updates"""
+    client_id = None
+
+    try:
+        headers = dict(websocket.headers)
+        logger.info(f"WebSocket connection attempt with headers: {headers}")
+
+        # Check if this is a mobile app connection
+        app_id = next((value for key, value in headers.items()
+                       if key.lower() == 'sims_app_id'), None)
+
+        # For now, accept all connections (authentication can be added later)
+        # Generate client ID from app_id or use a UUID
+        if app_id:
+            client_id = f"mobile_{app_id}_{uuid.uuid4().hex[:8]}"
+        else:
+            client_id = f"web_{uuid.uuid4().hex[:8]}"
+
+        # Accept the WebSocket connection
+        await websocket.accept()
+        await websocket_manager.connect(websocket, client_id)
+
+        logger.info(f"WebSocket connection established: {client_id}")
+
+        # Message loop
+        while True:
+            try:
+                data = await websocket.receive_json()
+                logger.info(f"WebSocket message from {client_id}: {data}")
+
+                message_type = data.get('type')
+
+                if message_type == 'subscribe':
+                    channel = data.get('channel')
+                    if channel:
+                        await websocket_manager.subscribe(client_id, channel)
+                        # Send confirmation
+                        await websocket_manager.broadcast_to_client(client_id, {
+                            'type': 'subscribed',
+                            'channel': channel,
+                            'timestamp': datetime.utcnow().isoformat()
+                        })
+
+                elif message_type == 'unsubscribe':
+                    channel = data.get('channel')
+                    if channel:
+                        await websocket_manager.unsubscribe(client_id, channel)
+                        await websocket_manager.broadcast_to_client(client_id, {
+                            'type': 'unsubscribed',
+                            'channel': channel,
+                            'timestamp': datetime.utcnow().isoformat()
+                        })
+
+                elif message_type == 'ping':
+                    await websocket_manager.broadcast_to_client(client_id, {
+                        'type': 'pong',
+                        'timestamp': datetime.utcnow().isoformat()
+                    })
+
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected: {client_id}")
+                break
+            except Exception as e:
+                logger.error(f"Message processing error for {client_id}: {e}")
+                break
+
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            await websocket.close(code=1011, reason="Internal server error")
+    finally:
+        if client_id:
+            await websocket_manager.disconnect(client_id)
 
 
 @ui.page('/')
@@ -181,33 +255,13 @@ async def upload_audio(file: UploadFile = File(...)):
 
 
 @app.post('/api/incidents')
-async def create_incident(incident: IncidentCreate):
-    """Create a new incident report"""
-    try:
-        incident_id = f'INC-{uuid.uuid4().hex[:8].upper()}'
-
-        incident_data = {
-            'id': incident_id,
-            'title': incident.title,
-            'description': incident.description,
-            'imageUrl': incident.imageUrl,
-            'audioUrl': incident.audioUrl,
-            'latitude': incident.latitude,
-            'longitude': incident.longitude,
-            'heading': incident.heading,
-            'timestamp': incident.timestamp or datetime.now().isoformat(),
-            'metadata': incident.metadata or {},
-            'status': 'open',
-            'priority': 'medium',
-        }
-
-        logger.info(f'Incident created: {incident_id}')
-
-        return JSONResponse(content=incident_data, status_code=201)
-
-    except Exception as e:
-        logger.error(f'Error creating incident: {e}', exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+async def create_incident_legacy(incident: IncidentCreate, db: Session = Depends(get_db)):
+    """
+    Legacy endpoint for backward compatibility with Flutter app.
+    Routes to the incident router endpoint.
+    """
+    from endpoints.incident import create_incident
+    return await create_incident(incident, db)
 
 
 def main():
