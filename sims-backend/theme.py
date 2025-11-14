@@ -55,11 +55,31 @@ def inject_custom_css():
                 background: linear-gradient(180deg, #0D2637 0%, #0a1d2a 100%);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 color: #fff;
+                font-size: 15px;
             }
 
             /* Typography - Titles */
-            h1, h2, h3, .header-title, .section-title, .dashboard-title, .table-title {
+            h1, h2, h3, .header-title, .section-title, .dashboard-title, .table-title, .title-font {
                 font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
+            }
+
+            /* Page title in header */
+            .page-title {
+                font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-weight: 900;
+                font-size: 1.75rem;
+                color: #ccc;
+            }
+
+            /* Logout button */
+            .logout-btn {
+                font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
+            }
+
+            /* Sidebar logo */
+            .sidebar-logo {
+                width: 208px;
+                height: auto;
             }
 
             /* Sidebar and header styling */
@@ -139,7 +159,7 @@ def inject_custom_css():
             }
 
             .metric-label {
-                font-size: 11px;
+                font-size: 12px;
                 color: rgba(255, 255, 255, 0.4);
                 text-transform: uppercase;
                 letter-spacing: 1px;
@@ -148,7 +168,7 @@ def inject_custom_css():
             }
 
             .metric-value {
-                font-size: 36px;
+                font-size: 42px;
                 font-weight: 600;
                 color: #fff;
                 line-height: 1;
@@ -156,7 +176,7 @@ def inject_custom_css():
 
             /* Section Title */
             .section-title {
-                font-size: 24px;
+                font-size: 32px;
                 font-weight: 300;
                 color: #fff;
                 letter-spacing: 2px;
@@ -179,7 +199,7 @@ def inject_custom_css():
             }
 
             .table-title {
-                font-size: 14px;
+                font-size: 16px;
                 font-weight: 600;
                 color: #fff;
                 letter-spacing: 1px;
@@ -222,7 +242,7 @@ def inject_custom_css():
             }
 
             .q-table thead th {
-                font-size: 10px;
+                font-size: 11px;
                 color: rgba(255, 255, 255, 0.5);
                 text-transform: uppercase;
                 letter-spacing: 1px;
@@ -243,7 +263,7 @@ def inject_custom_css():
             }
 
             .q-table tbody td {
-                font-size: 13px;
+                font-size: 14px;
                 color: rgba(255, 255, 255, 0.8);
             }
 
@@ -299,24 +319,24 @@ def inject_custom_css():
 
             /* Cell styling */
             .cell-id {
-                font-size: 13px;
+                font-size: 14px;
                 color: #fff;
                 font-weight: 600;
                 letter-spacing: 0.5px;
             }
 
             .cell-time {
-                font-size: 12px;
+                font-size: 13px;
                 color: rgba(255, 255, 255, 0.7);
             }
 
             .cell-location {
-                font-size: 12px;
+                font-size: 13px;
                 color: rgba(255, 255, 255, 0.6);
             }
 
             .cell-description {
-                font-size: 13px;
+                font-size: 14px;
                 color: rgba(255, 255, 255, 0.85);
             }
 
@@ -330,7 +350,7 @@ def inject_custom_css():
             }
 
             .leaflet-popup-content-wrapper {
-                background: rgba(26, 31, 46, 0.95);
+                background: rgba(26, 31, 46, 0.95) !important;
                 color: #fff;
                 border-left: 3px solid #FF4444;
             }
@@ -341,7 +361,7 @@ def inject_custom_css():
             }
 
             .leaflet-popup-tip {
-                background: rgba(26, 31, 46, 0.95);
+                background: rgba(26, 31, 46, 0.95) !important;
             }
 
             .popup-title {
@@ -432,23 +452,22 @@ async def frame(title: str = "SIMS Command"):
     # Sidebar with logo
     with ui.left_drawer(top_corner=True, bottom_corner=False).classes('w-64 bg-[#0D2637]'):
         with ui.column().classes('items-center p-6'):
-            ui.image('/static/sims-logo.svg').props('fit=scale-down').style('width: 208px; height: auto;')
+            ui.image('/static/sims-logo.svg').props('fit=scale-down').classes('sidebar-logo')
 
         with ui.column().classes('flex-1 p-6 space-y-1'):
-            ui.label('COMMAND CENTER').classes('text-xs font-bold text-gray-400 mb-2').style('font-family: "Stack Sans Notch", sans-serif;')
+            ui.label('Command Center').classes('text-xs font-bold text-gray-400 mb-2 title-font')
 
             with ui.link(target='/').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 rounded no-underline'):
                 ui.icon('dashboard')
-                ui.label('Dashboard').style('font-family: "Stack Sans Notch", sans-serif;')
+                ui.label('Dashboard').classes('title-font')
 
-            with ui.link(target='/incidents').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 rounded no-underline'):
-                ui.icon('warning')
-                ui.label('Incidents').style('font-family: "Stack Sans Notch", sans-serif;')
+        with ui.column().classes('w-full p-6 mt-auto'):
+            ui.button('Logout', on_click=lambda: None).props('outline color=white').classes('w-full logout-btn')
 
     # Header
     with ui.header(elevated=False, bordered=False).classes('bg-[#0D2637] border-b border-[rgba(255,255,255,0.1)]'):
-        with ui.row().classes('items-center justify-between w-full px-6 py-3'):
-            ui.label(title).classes('text-xl font-light tracking-wide').style('font-family: "Stack Sans Notch", sans-serif;')
+        with ui.row().classes('items-end justify-between w-full px-6 py-3'):
+            ui.label(title).classes('page-title')
             with ui.row().classes('items-center gap-4'):
                 ui.label('System Operational').classes('text-sm text-gray-400')
                 ui.element('div').classes('w-2 h-2 bg-[#FF4444] rounded-full')
