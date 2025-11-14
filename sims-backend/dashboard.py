@@ -142,32 +142,39 @@ async def render_map(incidents: List[Dict]):
         'low': 'rgba(255, 255, 255, 0.4)'
     }
 
-    # Add custom square markers for each incident
+    # Add custom square markers for each incident using JavaScript
     for incident in incidents:
         lat = incident['location']['lat']
         lon = incident['location']['lon']
         priority = incident['priority']
         color = colors.get(priority, '#63ABFF')
 
-        # Create marker with custom icon
-        marker = m.marker(latlng=(lat, lon))
+        # Escape strings for JavaScript
+        inc_id = incident['id'].replace("'", "\\'")
+        inc_desc = incident['description'].replace("'", "\\'")
 
-        # Set custom square icon with color and glow
-        icon_html = f'<div style="background: {color}; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px {color};"></div>'
-        icon_js = f'''L.divIcon({{
-            html: '{icon_html}',
-            className: 'custom-marker',
-            iconSize: [16, 16],
-            iconAnchor: [8, 8]
-        }})'''
+        # Create marker with custom icon and popup using JavaScript
+        js_code = f'''
+            (function() {{
+                var icon = L.divIcon({{
+                    html: '<div style="background: {color}; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px {color};"></div>',
+                    className: 'custom-marker',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                }});
 
-        marker.run_method(':setIcon', icon_js)
+                var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
 
-        # Add click handler to show incident details
-        def make_handler(inc):
-            return lambda: ui.notify(f"{inc['id']}: {inc['description']}", type='info')
+                var popupContent = '<div class="popup-title">{inc_id}</div>' +
+                                 '<div class="popup-description">{inc_desc}</div>' +
+                                 '<div class="popup-priority priority-{priority}">{priority.upper()}</div>';
 
-        marker.on('click', make_handler(incident))
+                marker.bindPopup(popupContent);
+                marker.addTo(getElement({m.id}).map);
+            }})();
+        '''
+
+        ui.run_javascript(js_code)
 
 
 async def render_stats(incidents: List[Dict]):
@@ -204,118 +211,117 @@ async def render_overview(incidents: List[Dict]):
 
 async def render_incident_table(incidents: List[Dict]):
     """Render the incident table with filters"""
-    # Wrap table in content container
+    # Section title in container
     with ui.element('div').classes('content-container'):
-        # Section title
-        ui.label('ACTIVE INCIDENTS').classes('section-title w-full')
+        ui.label('Active Incidents').classes('section-title w-full')
 
-        # Table section
-        with ui.element('div').classes('table-section w-full'):
-            # Table header bar with filters
-            with ui.element('div').classes('table-header-bar'):
-                ui.label('Incident Log').classes('table-title')
+    # Table section - full width
+    with ui.element('div').classes('table-section w-full'):
+        # Table header bar with filters
+        with ui.element('div').classes('table-header-bar'):
+            ui.label('Incident Log').classes('table-title')
 
-                with ui.element('div').classes('table-actions'):
-                    ui.button('All', on_click=lambda: None).classes('filter-btn active')
-                    ui.button('Critical', on_click=lambda: None).classes('filter-btn')
-                    ui.button('High', on_click=lambda: None).classes('filter-btn')
-                    ui.button('Today', on_click=lambda: None).classes('filter-btn')
+            with ui.element('div').classes('table-actions'):
+                ui.button('All', on_click=lambda: None).classes('filter-btn active')
+                ui.button('Critical', on_click=lambda: None).classes('filter-btn')
+                ui.button('High', on_click=lambda: None).classes('filter-btn')
+                ui.button('Today', on_click=lambda: None).classes('filter-btn')
 
-            # Table columns
-            columns = [
-                {'name': 'id', 'label': 'Incident ID', 'field': 'id', 'align': 'left'},
-                {'name': 'timestamp', 'label': 'Time', 'field': 'timestamp', 'align': 'left'},
-                {'name': 'location', 'label': 'Location', 'field': 'location', 'align': 'left'},
-                {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left'},
-                {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left'},
-                {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
-            ]
+        # Table columns
+        columns = [
+            {'name': 'id', 'label': 'Incident ID', 'field': 'id', 'align': 'left'},
+            {'name': 'timestamp', 'label': 'Time', 'field': 'timestamp', 'align': 'left'},
+            {'name': 'location', 'label': 'Location', 'field': 'location', 'align': 'left'},
+            {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left'},
+            {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left'},
+            {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
+        ]
 
-            # Format incidents for table
-            rows = []
-            for incident in incidents:
-                rows.append({
-                    'id': incident['id'],
-                    'timestamp': incident['timestamp'].split(' ')[1],  # Just time
-                    'location': incident['location']['label'],
-                    'description': incident['description'],
-                    'priority': incident['priority'],
-                    'action': incident['id'],
-                })
+        # Format incidents for table
+        rows = []
+        for incident in incidents:
+            rows.append({
+                'id': incident['id'],
+                'timestamp': incident['timestamp'].split(' ')[1],  # Just time
+                'location': incident['location']['label'],
+                'description': incident['description'],
+                'priority': incident['priority'],
+                'action': incident['id'],
+            })
 
-            table = ui.table(
-                columns=columns,
-                rows=rows,
-                row_key='id'
-            ).classes('w-full')
+        table = ui.table(
+            columns=columns,
+            rows=rows,
+            row_key='id'
+        ).classes('w-full')
 
-            # Custom cell templates
-            table.add_slot('body-cell-id', '''
-                <q-td :props="props">
-                    <span class="cell-id">{{ props.value }}</span>
-                </q-td>
-            ''')
+        # Custom cell templates
+        table.add_slot('body-cell-id', '''
+            <q-td :props="props">
+                <span class="cell-id">{{ props.value }}</span>
+            </q-td>
+        ''')
 
-            table.add_slot('body-cell-timestamp', '''
-                <q-td :props="props">
-                    <span class="cell-time">{{ props.value }}</span>
-                </q-td>
-            ''')
+        table.add_slot('body-cell-timestamp', '''
+            <q-td :props="props">
+                <span class="cell-time">{{ props.value }}</span>
+            </q-td>
+        ''')
 
-            table.add_slot('body-cell-location', '''
-                <q-td :props="props">
-                    <span class="cell-location">{{ props.value }}</span>
-                </q-td>
-            ''')
+        table.add_slot('body-cell-location', '''
+            <q-td :props="props">
+                <span class="cell-location">{{ props.value }}</span>
+            </q-td>
+        ''')
 
-            table.add_slot('body-cell-description', '''
-                <q-td :props="props">
-                    <span class="cell-description">{{ props.value }}</span>
-                </q-td>
-            ''')
+        table.add_slot('body-cell-description', '''
+            <q-td :props="props">
+                <span class="cell-description">{{ props.value }}</span>
+            </q-td>
+        ''')
 
-            table.add_slot('body-cell-priority', '''
-                <q-td :props="props">
-                    <span :class="'priority-badge priority-' + props.value">
-                        {{ props.value.toUpperCase() }}
-                    </span>
-                </q-td>
-            ''')
+        table.add_slot('body-cell-priority', '''
+            <q-td :props="props">
+                <span :class="'priority-badge priority-' + props.value">
+                    {{ props.value.toUpperCase() }}
+                </span>
+            </q-td>
+        ''')
 
-            table.add_slot('body-cell-action', '''
-                <q-td :props="props">
-                    <q-btn
-                        flat
-                        dense
-                        label="FORWARD"
-                        class="action-button"
-                        @click="$emit('forward', props.row.id)"
-                    />
-                </q-td>
-            ''')
+        table.add_slot('body-cell-action', '''
+            <q-td :props="props">
+                <q-btn
+                    flat
+                    dense
+                    label="FORWARD"
+                    class="action-button"
+                    @click="$emit('forward', props.row.id)"
+                />
+            </q-td>
+        ''')
 
-            # Handle forward action
-            async def handle_forward(e):
-                incident_id = e.args
-                with ui.dialog() as dialog, ui.card():
-                    ui.label(f'Forward incident {incident_id}').classes('text-lg mb-4')
-                    ui.label('Select organization:').classes('mb-2')
+        # Handle forward action
+        async def handle_forward(e):
+            incident_id = e.args
+            with ui.dialog() as dialog, ui.card():
+                ui.label(f'Forward incident {incident_id}').classes('text-lg mb-4')
+                ui.label('Select organization:').classes('mb-2')
 
-                    for org in ORGANIZATIONS:
-                        with ui.row().classes('w-full mb-2'):
-                            ui.button(
-                                org['name'],
-                                on_click=lambda org_id=org['id']: [
-                                    forward_incident(incident_id, org_id),
-                                    dialog.close()
-                                ]
-                            ).classes('w-full')
+                for org in ORGANIZATIONS:
+                    with ui.row().classes('w-full mb-2'):
+                        ui.button(
+                            org['name'],
+                            on_click=lambda org_id=org['id']: [
+                                forward_incident(incident_id, org_id),
+                                dialog.close()
+                            ]
+                        ).classes('w-full')
 
-                    ui.button('Cancel', on_click=dialog.close).classes('mt-4')
+                ui.button('Cancel', on_click=dialog.close).classes('mt-4')
 
-                dialog.open()
+            dialog.open()
 
-            table.on('forward', handle_forward)
+        table.on('forward', handle_forward)
 
 
 async def dashboard():
