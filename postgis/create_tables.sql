@@ -8,11 +8,10 @@ CREATE TABLE IF NOT EXISTS contact (
     date DATE DEFAULT CURRENT_DATE,
     time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-	picture_path TEXT,
-	video_path TEXT,
+	content_path TEXT,
+	mime_type TEXT,
     text_description TEXT,
 
-	audio_description_path TEXT,
 	audio_transcript TEXT,
 	transcript_summary TEXT,
 
