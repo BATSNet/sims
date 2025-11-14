@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS contact (
             AND LENGTH(user_phone) BETWEEN  10 AND 13
         ),
 	location GEOMETRY(POINT, 4326) NOT NULL,
-	time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    date DATE DEFAULT CURRENT_DATE,
+    time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
 	picture_path TEXT,
 	video_path TEXT,
