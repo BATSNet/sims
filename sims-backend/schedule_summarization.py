@@ -51,9 +51,14 @@ keycloak_openid = KeycloakOpenID(
 )
 
 def summarize_chats(db):
-    # check all chats every minute and summarize
+    # checks all chats summarizes
     # those that have changes since last summarization
-    # compare last_summarized with last_modified
+    # compares last_summarized with last_modified.
+    # for the selection where summaries are not up to date,
+    # prepares them for sequential api calls to llm inference endpoints.
+    # then writes the summaries into 'summary' field
+    # and updates the 'last_cummarized'
+
     selection = db.query(ChatSessionORM).filter(
                     ChatSessionORM.last_summarized < ChatSessionORM.last_modified)
 
