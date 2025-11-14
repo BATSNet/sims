@@ -1,0 +1,129 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Claude Code files
+CLAUDE.md.bak
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# PyTest
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Alembic
+alembic/versions/*.pyc
+
+# Flutter
+sims-app/.dart_tool/
+sims-app/.flutter-plugins
+sims-app/.flutter-plugins-dependencies
+sims-app/.packages
+sims-app/.pub-cache/
+sims-app/.pub/
+sims-app/build/
+sims-app/flutter_*.png
+sims-app/pubspec.lock
+
+# Android
+sims-app/android/app/debug
+sims-app/android/app/profile
+sims-app/android/app/release
+sims-app/android/.gradle
+sims-app/android/local.properties
+sims-app/android/**/GeneratedPluginRegistrant.java
+sims-app/android/gradlew
+sims-app/android/gradlew.bat
+sims-app/android/gradle/wrapper/gradle-wrapper.jar
+sims-app/android/.cxx/
+sims-app/android/captures/
+*.jks
+*.keystore
+
+# iOS
+sims-app/ios/Flutter/flutter_export_environment.sh
+sims-app/ios/Flutter/App.framework
+sims-app/ios/Flutter/Flutter.framework
+sims-app/ios/Flutter/Flutter.podspec
+sims-app/ios/Pods/
+sims-app/ios/.symlinks/
+sims-app/ios/Flutter/Generated.xcconfig
+sims-app/ios/**/GeneratedPluginRegistrant.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Uploads and media
+uploads/
+media/
+*.mp4
+*.avi
+*.mov
+*.wav
+*.mp3
+
+# Backups
+*.bak
+*.backup
