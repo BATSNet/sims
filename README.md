@@ -30,7 +30,6 @@ Traditional reporting chains are too slow for real-time situational awareness. P
 - Threat identification: Real-time situational awareness for patrol units
 
 ## Architecture
-
 ### Mobile App (sims-app)
 Flutter-based Android application for rapid incident capture:
 - Camera and voice recording
