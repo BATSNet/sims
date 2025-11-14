@@ -430,6 +430,21 @@ def inject_custom_css():
             .q-btn {
                 text-transform: none;
             }
+
+            /* Chat interface styling */
+            .chat-messages {
+                max-height: calc(100vh - 200px);
+            }
+
+            .chat-messages .q-card {
+                border-radius: 12px;
+                padding: 12px 16px;
+            }
+
+            /* Hidden elements for Flutter bridge */
+            .hidden {
+                display: none !important;
+            }
         </style>
     ''')
 
