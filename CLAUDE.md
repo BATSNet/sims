@@ -146,6 +146,27 @@ flutter test
 flutter doctor
 ```
 
+### App Configuration
+
+The Flutter app uses `lib/src/config/app_config.dart` to manage backend URLs:
+
+**For Development:**
+1. Edit `lib/src/config/app_config.dart`
+2. Set `isDevelopment = true`
+3. Update URLs:
+   - `devBaseUrl`: For Android emulator (default: `http://10.0.2.2:8080`)
+   - `devBaseUrlPhysical`: For physical devices (use your computer's IP)
+
+**Important URLs:**
+- Android emulator uses `10.0.2.2` to access host machine's localhost
+- Physical devices need your computer's local IP (e.g., `192.168.1.100:8080`)
+
+**Example config for localhost:8080:**
+```dart
+static const String devBaseUrl = 'http://10.0.2.2:8080'; // Emulator
+static const String devBaseUrlPhysical = 'http://192.168.1.100:8080'; // Physical device
+```
+
 ### Docker
 
 ```bash
