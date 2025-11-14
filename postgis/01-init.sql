@@ -105,7 +105,11 @@ CREATE TABLE IF NOT EXISTS chat_session (
     session_id UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
     incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
     user_phone VARCHAR(13),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    summary TEXT,
+    last_summarized TIMESTAMPTZ
 );
 
 -- Chat session indexes
