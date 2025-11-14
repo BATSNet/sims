@@ -54,10 +54,13 @@ def summarize_chats(db):
     # checks all chats summarizes
     # those that have changes since last summarization
     # compares last_summarized with last_modified.
-    # for the selection where summaries are not up to date,
-    # prepares them for sequential api calls to llm inference endpoints.
-    # then writes the summaries into 'summary' field
-    # and updates the 'last_cummarized'
+    # for the selection of sessions where summaries are not up to date,
+    # get all the text messages and audio transcripts:
+    # go through the chatmessages and for the audio fetch the transcripts;
+    # for text get the text directly
+    # then do sequential api calls to llm inference endpoints to summarize
+    # then write the summaries into 'summary' field
+    # and updates the 'last_summarized'
 
     selection = db.query(ChatSessionORM).filter(
                     ChatSessionORM.last_summarized < ChatSessionORM.last_modified)
