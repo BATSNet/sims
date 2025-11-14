@@ -23,7 +23,7 @@ app.add_static_files('/static', str(RESOURCES_PATH))
 @ui.page('/')
 async def index():
     """Main dashboard page"""
-    async with theme.frame('SIMS Command'):
+    async with theme.frame('S.I.M.S. Command'):
         await dashboard()
 
 
