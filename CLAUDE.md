@@ -148,24 +148,58 @@ flutter doctor
 
 ### App Configuration
 
-The Flutter app uses `lib/src/config/app_config.dart` to manage backend URLs:
+#### Configuring Backend IP and Port
 
-**For Development:**
-1. Edit `lib/src/config/app_config.dart`
-2. Set `isDevelopment = true`
-3. Update URLs:
-   - `devBaseUrl`: For Android emulator (default: `http://10.0.2.2:8080`)
-   - `devBaseUrlPhysical`: For physical devices (use your computer's IP)
+The Flutter app connects to the backend server. To change the IP address and port:
 
-**Important URLs:**
-- Android emulator uses `10.0.2.2` to access host machine's localhost
-- Physical devices need your computer's local IP (e.g., `192.168.1.100:8080`)
-
-**Example config for localhost:8080:**
-```dart
-static const String devBaseUrl = 'http://10.0.2.2:8080'; // Emulator
-static const String devBaseUrlPhysical = 'http://192.168.1.100:8080'; // Physical device
+**Configuration File Location:**
 ```
+sims-app/lib/src/config/app_config.dart
+```
+
+**Step-by-Step Instructions:**
+
+1. Open `sims-app/lib/src/config/app_config.dart` in your editor
+
+2. Find these configuration constants:
+   ```dart
+   static const bool isDevelopment = true;
+   static const String devBaseUrl = 'http://10.0.2.2:8080';
+   static const String devBaseUrlPhysical = 'http://192.168.1.100:8080';
+   static const String prodBaseUrl = 'https://api.sims.example.com';
+   ```
+
+3. **For Android Emulator:**
+   - Change the port in `devBaseUrl` (e.g., from `:8080` to `:3000`)
+   - Use `10.0.2.2` as the IP (this is the emulator's special IP to access host machine)
+   - Example: `'http://10.0.2.2:3000'`
+
+4. **For Physical Android Device:**
+   - Find your computer's local IP address:
+     - Windows: Run `ipconfig` in cmd, look for "IPv4 Address"
+     - Mac/Linux: Run `ifconfig` or `ip addr`, look for local network IP
+   - Change `devBaseUrlPhysical` to your computer's IP and port
+   - Example: `'http://192.168.1.100:8080'`
+
+5. **For Production:**
+   - Set `isDevelopment = false`
+   - Update `prodBaseUrl` with your production server URL
+
+**Common Scenarios:**
+
+| Scenario | Configuration |
+|----------|--------------|
+| Backend on localhost:8080 (emulator) | `devBaseUrl = 'http://10.0.2.2:8080'` |
+| Backend on localhost:3000 (emulator) | `devBaseUrl = 'http://10.0.2.2:3000'` |
+| Backend on different port (emulator) | `devBaseUrl = 'http://10.0.2.2:PORT'` |
+| Physical device, PC IP 192.168.1.100 | `devBaseUrlPhysical = 'http://192.168.1.100:8080'` |
+| Production server | Set `isDevelopment = false`, update `prodBaseUrl` |
+
+**Important Notes:**
+- Android emulator MUST use `10.0.2.2` (not `localhost` or `127.0.0.1`)
+- Physical devices must use your computer's actual network IP address
+- Both devices must be on the same WiFi network
+- Restart the Flutter app after changing configuration
 
 ### Docker
 
