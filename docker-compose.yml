@@ -8,11 +8,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-sims}
+      LOAD_DEMO: ${LOAD_DEMO:-false}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgis/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgis:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -31,6 +32,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-sims}
+      OBJECT_STORAGE_DIR: /app/uploads
       FEATHERLESS_API_KEY: ${FEATHERLESS_API_KEY}
       DEEPINFRA_API_KEY: ${DEEPINFRA_API_KEY}
     ports:
@@ -41,7 +43,8 @@ services:
     volumes:
       - ./sims-backend:/app
       - ./uploads:/app/uploads
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./resources:/resources
+    command: python main.py
 
 volumes:
   postgres_data:

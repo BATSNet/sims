@@ -10,8 +10,8 @@ from magic.compat import mime_magic
 from pydantic import UUID4
 from pydantic.v1 import BaseModel
 from sqlalchemy.orm import Session, declarative_base
-from ..models.contact_model import RawContactModel, ContactEntry
-from ..db.connection import get_db
+from models.contact_model import RawContactModel, ContactEntry
+from db.connection import get_db
 
 load_dotenv()
 
