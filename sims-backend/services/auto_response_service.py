@@ -52,7 +52,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
             logger.info(f"Sent typing indicator for incident {incident_id}")
         except Exception as e:
             logger.error(f"Error sending typing indicator: {e}", exc_info=True)
@@ -181,7 +182,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
 
         except Exception as e:
             logger.error(f"Error sending thank you message: {e}", exc_info=True)
@@ -228,7 +230,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
 
         except Exception as e:
             logger.error(f"Error sending fallback message: {e}", exc_info=True)

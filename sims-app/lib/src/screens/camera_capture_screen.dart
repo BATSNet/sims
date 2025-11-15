@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ import '../services/media_upload_service.dart';
 import '../repositories/user_repository.dart';
 import '../config/app_config.dart';
 import '../utils/sims_colors.dart';
+import '../connection/websocket_service.dart';
 
 export '../services/media_upload_service.dart' show UploadResult;
 
@@ -70,9 +72,11 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final AudioService _audioService = AudioService();
   final LocationService _locationService = LocationService();
   final MediaUploadService _uploadService = MediaUploadService();
+  final WebSocketService _websocketService = WebSocketService();
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription? _websocketSubscription;
 
   bool _isInitialized = false;
   FlashMode _flashMode = FlashMode.auto;
@@ -80,7 +84,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   bool _showTextInput = false;
   String? _currentIncidentId; // Formatted ID (INC-xxx) for display
   String? _currentIncidentUuid; // Database UUID for API calls
-  bool _isProcessing = false;
   bool _creatingIncident = false; // Flag to prevent concurrent incident creation
   late final String _sessionId; // Generate immediately on screen creation
 
@@ -90,6 +93,46 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     // Generate session ID immediately - don't wait for backend
     _sessionId = const Uuid().v4();
     _initializeServices();
+    _initializeWebSocket();
+  }
+
+  void _initializeWebSocket() {
+    // Listen for incoming WebSocket messages
+    _websocketSubscription = _websocketService.messageStream.listen((message) {
+      if (message['type'] == 'chat_message') {
+        _handleIncomingChatMessage(message);
+      }
+    });
+
+    // Ensure WebSocket is connected
+    if (!_websocketService.isConnected) {
+      _websocketService.connect();
+    }
+    _websocketService.subscribeToIncidents();
+  }
+
+  void _handleIncomingChatMessage(Map<String, dynamic> message) {
+    // Only handle messages for our current incident
+    if (_currentIncidentUuid != null && message['incident_id'] == _currentIncidentUuid) {
+      final messageData = message['message'];
+      final content = messageData['data']['content'] as String?;
+      final isTyping = messageData['data']['is_typing'] as bool? ?? false;
+
+      if (content != null) {
+        setState(() {
+          // Add AI response message
+          _messages.add(ChatMessage(
+            id: const Uuid().v4(),
+            type: MessageType.text,
+            text: content,
+            timestamp: DateTime.now(),
+          ));
+        });
+        _scrollToBottom();
+
+        debugPrint('Received chat message: $content');
+      }
+    }
   }
 
   Future<void> _initializeServices() async {
@@ -122,6 +165,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
   @override
   void dispose() {
+    _websocketSubscription?.cancel();
     _cameraService.dispose();
     _audioService.dispose();
     _textController.dispose();
@@ -267,6 +311,26 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
 
     _scrollToBottom();
+
+    // Send text message to backend
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/incident/$_currentIncidentUuid/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'session_id': _sessionId,
+          'message': text,
+        }),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        debugPrint('Failed to send chat message: ${response.body}');
+      } else {
+        debugPrint('Chat message sent successfully');
+      }
+    } catch (e) {
+      debugPrint('Error sending chat message: $e');
+    }
   }
 
   Future<void> _takePicture() async {
@@ -277,7 +341,42 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         return;
       }
 
-      await _uploadMedia(image, MessageType.image);
+      // Show image immediately in chat (WhatsApp style)
+      final messageId = const Uuid().v4();
+      final message = ChatMessage(
+        id: messageId,
+        type: MessageType.image,
+        localFile: image,
+        timestamp: DateTime.now(),
+        isUploading: true,
+      );
+
+      setState(() {
+        _messages.add(message);
+      });
+
+      _scrollToBottom();
+
+      // Create incident in background if needed
+      if (_currentIncidentId == null) {
+        _currentIncidentId = await _createIncident();
+        if (_currentIncidentId == null) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                isUploading: false,
+                failed: true,
+              );
+            }
+          });
+          _showError('Failed to create incident');
+          return;
+        }
+      }
+
+      // Upload in background
+      _uploadMediaInBackground(image, MessageType.image, messageId);
     } catch (e) {
       _showError('Error taking picture: $e');
     }
@@ -304,8 +403,42 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         return;
       }
 
-      setState(() {});
-      await _uploadMedia(video, MessageType.video);
+      // Show video immediately in chat (WhatsApp style)
+      final messageId = const Uuid().v4();
+      final message = ChatMessage(
+        id: messageId,
+        type: MessageType.video,
+        localFile: video,
+        timestamp: DateTime.now(),
+        isUploading: true,
+      );
+
+      setState(() {
+        _messages.add(message);
+      });
+
+      _scrollToBottom();
+
+      // Create incident in background if needed
+      if (_currentIncidentId == null) {
+        _currentIncidentId = await _createIncident();
+        if (_currentIncidentId == null) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                isUploading: false,
+                failed: true,
+              );
+            }
+          });
+          _showError('Failed to create incident');
+          return;
+        }
+      }
+
+      // Upload in background
+      _uploadMediaInBackground(video, MessageType.video, messageId);
     } catch (e) {
       _showError('Error stopping video recording: $e');
       setState(() {});
@@ -320,7 +453,42 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         return;
       }
 
-      await _uploadMedia(audio, MessageType.audio);
+      // Show audio immediately in chat (WhatsApp style)
+      final messageId = const Uuid().v4();
+      final message = ChatMessage(
+        id: messageId,
+        type: MessageType.audio,
+        localFile: audio,
+        timestamp: DateTime.now(),
+        isUploading: true,
+      );
+
+      setState(() {
+        _messages.add(message);
+      });
+
+      _scrollToBottom();
+
+      // Create incident in background if needed
+      if (_currentIncidentId == null) {
+        _currentIncidentId = await _createIncident();
+        if (_currentIncidentId == null) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                isUploading: false,
+                failed: true,
+              );
+            }
+          });
+          _showError('Failed to create incident');
+          return;
+        }
+      }
+
+      // Upload in background
+      _uploadMediaInBackground(audio, MessageType.audio, messageId);
     } else {
       final started = await _audioService.startRecording();
       if (!started) {
@@ -339,41 +507,48 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       if (pickedFile == null) return;
 
       final image = File(pickedFile.path);
-      await _uploadMedia(image, MessageType.image);
+
+      // Show image immediately in chat (WhatsApp style)
+      final messageId = const Uuid().v4();
+      final message = ChatMessage(
+        id: messageId,
+        type: MessageType.image,
+        localFile: image,
+        timestamp: DateTime.now(),
+        isUploading: true,
+      );
+
+      setState(() {
+        _messages.add(message);
+      });
+
+      _scrollToBottom();
+
+      // Create incident in background if needed
+      if (_currentIncidentId == null) {
+        _currentIncidentId = await _createIncident();
+        if (_currentIncidentId == null) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                isUploading: false,
+                failed: true,
+              );
+            }
+          });
+          _showError('Failed to create incident');
+          return;
+        }
+      }
+
+      // Upload in background
+      _uploadMediaInBackground(image, MessageType.image, messageId);
     } catch (e) {
       _showError('Error picking image: $e');
     }
   }
 
-  Future<void> _uploadMedia(File file, MessageType type) async {
-    // Create incident if not already created
-    if (_currentIncidentId == null) {
-      _currentIncidentId = await _createIncident();
-      if (_currentIncidentId == null) {
-        _showError('Failed to create incident');
-        return;
-      }
-    }
-
-    // Use session ID for all chat messages, not a new UUID per message
-    final message = ChatMessage(
-      id: _sessionId,
-      type: type,
-      localFile: file,
-      timestamp: DateTime.now(),
-      isUploading: true,
-    );
-
-    setState(() {
-      _messages.add(message);
-      _isProcessing = true;
-    });
-
-    _scrollToBottom();
-
-    // Upload in background (non-blocking)
-    _uploadMediaInBackground(file, type, _sessionId);
-  }
 
   Future<void> _uploadMediaInBackground(File file, MessageType type, String messageId) async {
     try {
@@ -401,7 +576,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               mediaUrl: result.url,
             );
-            _isProcessing = false;
           });
 
           // Delete local file after successful upload to save storage
@@ -422,7 +596,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               failed: true,
             );
-            _isProcessing = false;
           });
         }
         _showError('Failed to upload ${type.name}');
@@ -437,7 +610,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               failed: true,
             );
-            _isProcessing = false;
           });
         }
       }
@@ -742,29 +914,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                 ),
               ),
 
-            // Loading overlay when processing
-            if (_isProcessing)
-              Container(
-                color: Colors.black54,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(
-                        color: SimsColors.teal,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Processing...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
