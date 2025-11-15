@@ -426,96 +426,95 @@ class IncidentOverviewScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (incident.imageUrl != null)
-                  ClipRRect(
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                    child: Image.network(
-                      incident.imageUrl!,
-                      width: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 80,
-                          color: SimsColors.navyBlueDark,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 32,
-                            color: SimsColors.gray600,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 3,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: priorityColor,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                incident.title,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: SimsColors.white,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (incident.imageUrl != null)
+                ClipRRect(
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                  child: Image.network(
+                    incident.imageUrl!,
+                    width: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 80,
+                        color: SimsColors.navyBlueDark,
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          size: 32,
+                          color: SimsColors.gray600,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          incident.description,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: SimsColors.white.withOpacity(0.7),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 12,
-                              color: SimsColors.gray600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatDateTime(incident.createdAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: SimsColors.gray600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: priorityColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              incident.title,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: SimsColors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        incident.description,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: SimsColors.white.withOpacity(0.7),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 12,
+                            color: SimsColors.gray600,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDateTime(incident.createdAt),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: SimsColors.gray600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
