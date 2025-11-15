@@ -551,7 +551,7 @@ async def list_incidents(
             query = query.filter(IncidentORM.priority == priority_filter)
 
         # Eager load media relationships
-        query = query.options(joinedload(IncidentORM.media))
+        query = query.options(joinedload(IncidentORM.media_files))
 
         incidents = query.order_by(
             IncidentORM.created_at.desc()
@@ -563,9 +563,9 @@ async def list_incidents(
             image_url = None
             audio_url = None
 
-            # Use eager-loaded media relationship
-            if hasattr(inc, 'media') and inc.media:
-                for media in inc.media:
+            # Use eager-loaded media_files relationship
+            if hasattr(inc, 'media_files') and inc.media_files:
+                for media in inc.media_files:
                     if media.media_type == 'image' and not image_url:
                         image_url = media.file_url
                     elif media.media_type == 'audio' and not audio_url:
