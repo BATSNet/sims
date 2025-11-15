@@ -290,29 +290,35 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    // Create message ID for tracking
+    final messageId = const Uuid().v4();
+
+    // Show message immediately in chat (WhatsApp style)
+    final message = ChatMessage(
+      id: messageId,
+      type: MessageType.text,
+      text: text,
+      timestamp: DateTime.now(),
+      isUploading: true, // Show uploading indicator
+    );
+
+    setState(() {
+      _messages.add(message);
+      _textController.clear(); // Clear input immediately
+    });
+
+    _scrollToBottom();
+
     // Create incident if not already created
     if (_currentIncidentId == null) {
       _currentIncidentId = await _createIncident(description: text);
       if (_currentIncidentId == null) {
         _showError('Failed to create incident');
+        // Mark message as failed
+        _updateMessageStatus(messageId, failed: true);
         return;
       }
     }
-
-    // Use session ID for all chat messages, not a new UUID per message
-    final message = ChatMessage(
-      id: _sessionId,
-      type: MessageType.text,
-      text: text,
-      timestamp: DateTime.now(),
-    );
-
-    setState(() {
-      _messages.add(message);
-      _textController.clear();
-    });
-
-    _scrollToBottom();
 
     // Send text message to backend
     try {
@@ -327,12 +333,33 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         debugPrint('Failed to send chat message: ${response.body}');
+        _updateMessageStatus(messageId, failed: true);
       } else {
         debugPrint('Chat message sent successfully');
+        _updateMessageStatus(messageId, uploaded: true);
       }
     } catch (e) {
       debugPrint('Error sending chat message: $e');
+      _updateMessageStatus(messageId, failed: true);
     }
+  }
+
+  void _updateMessageStatus(String messageId, {bool uploaded = false, bool failed = false}) {
+    setState(() {
+      final index = _messages.indexWhere((m) => m.id == messageId);
+      if (index != -1) {
+        _messages[index] = ChatMessage(
+          id: _messages[index].id,
+          type: _messages[index].type,
+          text: _messages[index].text,
+          mediaUrl: _messages[index].mediaUrl,
+          localFile: _messages[index].localFile,
+          timestamp: _messages[index].timestamp,
+          isUploading: uploaded ? false : _messages[index].isUploading,
+          failed: failed,
+        );
+      }
+    });
   }
 
   Future<void> _takePicture() async {
@@ -940,9 +967,63 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (message.type == MessageType.text)
-                    Text(
-                      message.text!,
-                      style: const TextStyle(color: Colors.white),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          message.text!,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        if (message.isUploading)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Sending...',
+                                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (message.failed)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Failed to send',
+                                  style: TextStyle(color: Colors.red, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (!message.isUploading && !message.failed)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check, color: Colors.white60, size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(color: Colors.white60, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     )
                   else if (message.type == MessageType.image)
                     Column(

@@ -499,12 +499,12 @@ async def frame(title: str = "SIMS Responder"):
 
     # Header only (no sidebar for responder portal)
     with ui.header(elevated=False, bordered=False).classes('bg-[#0A1929] border-b border-[rgba(255,255,255,0.1)]'):
-        with ui.element('div').classes('w-full max-w-full mx-auto px-4'):
+        with ui.element('div').classes('w-full max-w-6xl mx-auto px-4'):
             with ui.row().classes('items-center justify-between w-full py-3'):
                 # Logo/Title
-                with ui.row().classes('items-center gap-3'):
-                    ui.image('/static/sims-logo.svg').props('fit=scale-down').style('width: 40px; height: 40px;')
-                    ui.label(title).classes('page-title')
+                with ui.row().classes('items-center gap-4'):
+                    ui.image('/static/sims-logo.svg').style('width: 120px; height: auto;')
+                    ui.label(title).classes('page-title').style('color: #fff;')
 
                 # Status section
                 with ui.row().classes('items-center gap-3'):

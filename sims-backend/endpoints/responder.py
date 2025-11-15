@@ -223,7 +223,7 @@ async def get_incident_chat(
         ChatMessageResponse(
             role=msg['role'],
             content=msg['content'],
-            timestamp=msg['timestamp'].isoformat()
+            timestamp=msg['timestamp'] if msg['timestamp'] else datetime.utcnow().isoformat()
         )
         for msg in messages
     ]
