@@ -14,4 +14,4 @@ jobs:
           git fetch origin
           git reset --hard origin/main
           git clean -fd
-          echo "Updated to $(git rev-parse HEAD)"
+          echo "Updated to $(git rev-parse HEAD)" 
