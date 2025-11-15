@@ -56,7 +56,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         _showError('Microphone permission denied');
       }
       if (!locationPermission) {
-        _showError('Location permission denied');
+        // Just log - location is optional, don't show error to user
+        debugPrint('Location permission not available - incident will be submitted without location data');
       }
     } catch (e) {
       if (mounted) {

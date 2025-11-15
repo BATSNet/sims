@@ -14,9 +14,10 @@ class AudioService {
 
   Future<bool> initialize() async {
     try {
-      final status = await Permission.microphone.request();
+      // Check permission status (don't request - should be granted at app startup)
+      final status = await Permission.microphone.status;
       if (!status.isGranted) {
-        debugPrint('Microphone permission denied');
+        debugPrint('Microphone permission not granted - please grant permissions in app settings');
         return false;
       }
       return true;

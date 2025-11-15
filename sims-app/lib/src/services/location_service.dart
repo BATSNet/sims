@@ -37,10 +37,12 @@ class LocationData {
 class LocationService {
   Future<bool> requestPermission() async {
     try {
-      final status = await Permission.location.request();
-      return status.isGranted;
+      // Check permission status (don't request - should be granted at app startup)
+      final permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
     } catch (e) {
-      debugPrint('Error requesting location permission: $e');
+      debugPrint('Error checking location permission: $e');
       return false;
     }
   }
@@ -59,11 +61,8 @@ class LocationService {
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          debugPrint('Location permission denied');
-          return null;
-        }
+        debugPrint('Location permission not granted - please grant permissions in app settings');
+        return null;
       }
 
       if (permission == LocationPermission.deniedForever) {
