@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:video_compress/video_compress.dart';
 
 class CameraService {
   CameraController? _controller;
@@ -124,7 +125,30 @@ class CameraService {
 
     try {
       final video = await _controller!.stopVideoRecording();
-      return File(video.path);
+      final videoFile = File(video.path);
+
+      // Compress video and save as MP4
+      debugPrint('Compressing video: ${video.path}');
+      final info = await VideoCompress.compressVideo(
+        video.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: true, // Delete the original uncompressed file
+        includeAudio: true,
+      );
+
+      if (info == null || info.file == null) {
+        debugPrint('Video compression failed, using original file');
+        // If compression fails, rename to .mp4
+        final directory = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final mp4Path = '${directory.path}/VID_$timestamp.mp4';
+        final mp4File = await videoFile.copy(mp4Path);
+        await videoFile.delete();
+        return mp4File;
+      }
+
+      debugPrint('Video compressed: ${info.file!.path} (${info.filesize} bytes)');
+      return info.file;
     } catch (e) {
       debugPrint('Error stopping video recording: $e');
       return null;

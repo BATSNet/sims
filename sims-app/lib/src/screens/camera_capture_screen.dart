@@ -78,6 +78,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final List<ChatMessage> _messages = [];
   bool _showTextInput = false;
   String? _currentIncidentId;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -140,18 +141,33 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
   }
 
-  Future<String?> _createIncident() async {
+  Future<String?> _createIncident({String? description}) async {
     try {
       final location = await _locationService.getCurrentLocation();
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
 
+      // Use provided description or generate based on existing messages
+      String incidentDescription = description ?? 'Incident report';
+      if (incidentDescription == 'Incident report' && _messages.isNotEmpty) {
+        final firstMessage = _messages.first;
+        if (firstMessage.type == MessageType.image) {
+          incidentDescription = 'Incident with photo';
+        } else if (firstMessage.type == MessageType.video) {
+          incidentDescription = 'Incident with video';
+        } else if (firstMessage.type == MessageType.audio) {
+          incidentDescription = 'Incident with audio';
+        } else if (firstMessage.text != null && firstMessage.text!.isNotEmpty) {
+          incidentDescription = firstMessage.text!;
+        }
+      }
+
       final response = await http.post(
         Uri.parse('${AppConfig.baseUrl}/api/incidents'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'title': 'Incident Report',
-          'description': 'Incident reported from mobile app',
+          'title': DateTime.now().toString().substring(0, 16),
+          'description': incidentDescription,
           'latitude': location?.latitude,
           'longitude': location?.longitude,
           'heading': location?.heading,
@@ -182,7 +198,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     // Create incident if not already created
     if (_currentIncidentId == null) {
-      _currentIncidentId = await _createIncident();
+      _currentIncidentId = await _createIncident(description: text);
       if (_currentIncidentId == null) {
         _showError('Failed to create incident');
         return;
@@ -302,47 +318,81 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     setState(() {
       _messages.add(message);
+      _isProcessing = true;
     });
 
     _scrollToBottom();
 
-    // Upload based on type with incident_id
-    final UploadResult result;
-    switch (type) {
-      case MessageType.image:
-        result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
-        break;
-      case MessageType.audio:
-        result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
-        break;
-      case MessageType.video:
-        result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
-        break;
-      default:
-        result = UploadResult(success: false, error: 'Unknown message type');
-    }
+    // Upload in background (non-blocking)
+    _uploadMediaInBackground(file, type, messageId);
+  }
 
-    if (result.success && mounted) {
-      final index = _messages.indexWhere((m) => m.id == messageId);
-      if (index != -1) {
-        setState(() {
-          _messages[index] = message.copyWith(
-            isUploading: false,
-            mediaUrl: result.url,
-          );
-        });
+  Future<void> _uploadMediaInBackground(File file, MessageType type, String messageId) async {
+    try {
+      // Upload based on type with incident_id
+      final UploadResult result;
+      switch (type) {
+        case MessageType.image:
+          result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
+          break;
+        case MessageType.audio:
+          result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
+          break;
+        case MessageType.video:
+          result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
+          break;
+        default:
+          result = UploadResult(success: false, error: 'Unknown message type');
       }
-    } else if (mounted) {
-      final index = _messages.indexWhere((m) => m.id == messageId);
-      if (index != -1) {
-        setState(() {
-          _messages[index] = message.copyWith(
-            isUploading: false,
-            failed: true,
-          );
-        });
+
+      if (result.success && mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              mediaUrl: result.url,
+            );
+            _isProcessing = false;
+          });
+
+          // Delete local file after successful upload to save storage
+          try {
+            if (_messages[index].localFile != null && await _messages[index].localFile!.exists()) {
+              await _messages[index].localFile!.delete();
+              debugPrint('Deleted local file after upload: ${_messages[index].localFile!.path}');
+            }
+          } catch (e) {
+            debugPrint('Error deleting local file: $e');
+          }
+        }
+      } else if (mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              failed: true,
+            );
+            _isProcessing = false;
+          });
+        }
+        _showError('Failed to upload ${type.name}');
       }
-      _showError('Failed to upload ${type.name}');
+    } catch (e) {
+      debugPrint('Error uploading media: $e');
+      if (mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              failed: true,
+            );
+            _isProcessing = false;
+          });
+        }
+      }
     }
   }
 
@@ -641,6 +691,30 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+
+            // Loading overlay when processing
+            if (_isProcessing)
+              Container(
+                color: Colors.black54,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        color: SimsColors.teal,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Processing...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],

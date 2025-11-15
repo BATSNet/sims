@@ -147,16 +147,6 @@ async def organizations_page():
 
                     # Add marker at current position
                     marker = location_map.marker(latlng=(default_lat, default_lon))
-                    marker.draggable = True
-
-                    # Update inputs when marker is dragged
-                    def on_marker_move(e):
-                        new_lat = e.args['lat']
-                        new_lon = e.args['lng']
-                        lat_input.value = f"{new_lat:.6f}"
-                        lon_input.value = f"{new_lon:.6f}"
-
-                    marker.on('dragend', lambda e: on_marker_move(e))
 
                     # Update marker when clicking on map
                     def on_map_click(e):
