@@ -108,6 +108,9 @@ class IncidentOverviewScreen extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: _buildReportButton(context),
                 ),
+                SliverToBoxAdapter(
+                  child: _buildEmergencyContactSection(),
+                ),
                 if (recentIncidents.isEmpty)
                   SliverToBoxAdapter(
                     child: _buildWelcomeSection(context),
@@ -209,7 +212,7 @@ class IncidentOverviewScreen extends StatelessWidget {
 
   Widget _buildWelcomeSection(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 32, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: SimsColors.navyBlueLight,
@@ -242,48 +245,11 @@ class IncidentOverviewScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Tap the button above to capture your first incident report.',
+            'Tap the "Start Recording" button above to capture your first incident report. Emergency contact numbers are always available for quick reference.',
             style: TextStyle(
               fontSize: 13,
               color: SimsColors.white.withOpacity(0.9),
               height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: SimsColors.navyBlueDark.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.phone,
-                      color: SimsColors.criticalRed,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Emergency Numbers',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: SimsColors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _buildEmergencyNumber('Police', '110'),
-                const SizedBox(height: 6),
-                _buildEmergencyNumber('Fire/Medical', '112'),
-                const SizedBox(height: 6),
-                _buildEmergencyNumber('Command Center', '+49 123 456 789'),
-              ],
             ),
           ),
         ],
@@ -364,6 +330,50 @@ class IncidentOverviewScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildEmergencyContactSection() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: SimsColors.navyBlueLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: SimsColors.criticalRed.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.phone,
+                color: SimsColors.criticalRed,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Emergency Contact',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: SimsColors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildEmergencyNumber('Police', '110'),
+          const SizedBox(height: 8),
+          _buildEmergencyNumber('Fire/Medical', '112'),
+          const SizedBox(height: 8),
+          _buildEmergencyNumber('Command Center', '+49 123 456 789'),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCompactIncidentCard(BuildContext context, Incident incident) {
     final priorityColor = _getPriorityColor(incident.priority);
 
@@ -373,100 +383,102 @@ class IncidentOverviewScreen extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        height: 80,
+        constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
           color: SimsColors.navyBlueLight,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(
-          children: [
-            if (incident.imageUrl != null)
-              ClipRRect(
-                borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                child: Image.network(
-                  incident.imageUrl!,
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: 80,
-                      height: 80,
-                      color: SimsColors.navyBlueDark,
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        size: 32,
-                        color: SimsColors.gray600,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 3,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: priorityColor,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            incident.title,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: SimsColors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      incident.description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: SimsColors.white.withOpacity(0.7),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 12,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (incident.imageUrl != null)
+                ClipRRect(
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                  child: Image.network(
+                    incident.imageUrl!,
+                    width: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 80,
+                        color: SimsColors.navyBlueDark,
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          size: 32,
                           color: SimsColors.gray600,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDateTime(incident.createdAt),
-                          style: TextStyle(
-                            fontSize: 12,
+                      );
+                    },
+                  ),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: priorityColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              incident.title,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: SimsColors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        incident.description,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: SimsColors.white.withOpacity(0.7),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 12,
                             color: SimsColors.gray600,
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDateTime(incident.createdAt),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: SimsColors.gray600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

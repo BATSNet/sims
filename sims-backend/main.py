@@ -358,10 +358,26 @@ async def upload_video(
     try:
         from models.media_model import MediaORM, MediaType
 
+        logger.info(f'Uploading video file: {file.filename}, content_type: {file.content_type}')
+
         allowed_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'}
         file_ext = Path(file.filename).suffix.lower()
 
+        # If no extension, try to infer from content type
+        if not file_ext and file.content_type:
+            content_type_map = {
+                'video/mp4': '.mp4',
+                'video/quicktime': '.mov',
+                'video/x-msvideo': '.avi',
+                'video/x-matroska': '.mkv',
+                'video/webm': '.webm',
+                'video/3gpp': '.3gp',
+            }
+            file_ext = content_type_map.get(file.content_type, '.mp4')
+            logger.info(f'Inferred extension from content type: {file_ext}')
+
         if file_ext not in allowed_extensions:
+            logger.error(f'Invalid file extension: {file_ext} for file: {file.filename}')
             raise HTTPException(
                 status_code=400,
                 detail=f'Invalid file type. Allowed: {allowed_extensions}',
