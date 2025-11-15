@@ -22,9 +22,7 @@ class ChatSessionORM(Base):
     user_phone = Column(String(13))
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
 
-    # Relationships
-    incident = relationship("IncidentORM", back_populates="chat_sessions")
-    messages = relationship("ChatMessageORM", back_populates="session", cascade="all, delete-orphan")
+    # Relationships configured in models/__init__.py
 
 
 class ChatMessageORM(Base):
@@ -36,6 +34,4 @@ class ChatMessageORM(Base):
     message = Column(JSONB, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
 
-    # Relationships
-    session = relationship("ChatSessionORM", back_populates="messages")
-    media_files = relationship("MediaORM", back_populates="chat_message")
+    # Relationships configured in models/__init__.py

@@ -21,6 +21,8 @@ from transcription_service import TranscriptionService
 from endpoints.incident import incident_router
 from endpoints.organization import organization_router
 from db.connection import get_db
+# Import all models to ensure SQLAlchemy relationships are resolved
+import models
 from models.incident_model import IncidentCreate
 from websocket import websocket_manager
 import theme

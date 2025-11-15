@@ -25,6 +25,24 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
     lon = incident.get('longitude', 0)
     location_label = f"{lat:.3f}, {lon:.3f}"
 
+    # Get category and capitalize/format it
+    category = incident.get('category', 'unclassified')
+    category_formatted = category.replace('_', ' ').title()
+
+    # Get assigned organization info
+    assigned_org = None
+    is_auto_assigned = False
+    if incident.get('routed_to'):
+        assigned_org = {
+            'id': incident.get('routed_to'),
+            'name': incident.get('routed_to_name', 'Unknown')
+        }
+        # Check if it was auto-assigned
+        meta_data = incident.get('meta_data', {})
+        assignment_history = meta_data.get('assignment_history', [])
+        if assignment_history and assignment_history[-1].get('auto_assigned'):
+            is_auto_assigned = True
+
     return {
         'id': incident.get('incident_id', 'UNKNOWN'),
         'timestamp': timestamp,
@@ -37,8 +55,12 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'priority': incident.get('priority', 'medium'),
         'status': incident.get('status', 'open'),
         'type': incident.get('category', 'general'),
+        'category': category_formatted,
+        'category_raw': category,
         'reporter': incident.get('user_phone', 'Unknown'),
-        'title': incident.get('title', 'Incident')
+        'title': incident.get('title', 'Incident'),
+        'assigned_org': assigned_org,
+        'is_auto_assigned': is_auto_assigned
     }
 
 
@@ -87,13 +109,17 @@ async def assign_incident_to_org(incident_id: str, organization_id: int, notes: 
             )
             if response.status_code == 200:
                 logger.info(f"Assigned incident {incident_id} to organization {organization_id}")
-                return True
+                return {'success': True, 'message': 'Incident assigned successfully'}
+            elif response.status_code == 404:
+                logger.warning(f"Incident {incident_id} not found in database (possibly mock data)")
+                return {'success': False, 'message': f'Incident {incident_id} does not exist in database. This is mock data - create a real incident from the mobile app first.'}
             else:
                 logger.error(f"Failed to assign incident: {response.status_code}")
-                return False
+                error_detail = response.json().get('detail', 'Unknown error') if response.text else 'Unknown error'
+                return {'success': False, 'message': f'Assignment failed: {error_detail}'}
     except Exception as e:
         logger.error(f"Error assigning incident: {e}", exc_info=True)
-        return False
+        return {'success': False, 'message': f'Error: {str(e)}'}
 
 
 # Mock data for incidents (will be replaced with database queries)
@@ -194,8 +220,8 @@ def format_coordinates(lat: float, lon: float) -> str:
 
 async def render_map(incidents: List[Dict]):
     """Render the incident map with markers"""
-    # Create leaflet map
-    m = ui.leaflet(center=(51.1657, 10.4515), zoom=6).classes('w-full h-[500px]')
+    # Create leaflet map - responsive height
+    m = ui.leaflet(center=(51.1657, 10.4515), zoom=6).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
 
     # Clear default layers and add dark tiles
     m.clear_layers()
@@ -237,8 +263,8 @@ async def render_map(incidents: List[Dict]):
                     ui.notify('No organizations available', type='warning')
                     return
 
-                with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-6'):
-                    ui.label(f'Forward Incident {inc_id}').classes('text-h6 mb-4 title-font')
+                with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-4 sm:p-6'):
+                    ui.label(f'Forward Incident {inc_id}').classes('text-base sm:text-lg font-bold mb-3 sm:mb-4 title-font')
 
                     ui.label('Select Organization:').classes('text-subtitle2 mb-4')
 
@@ -287,16 +313,16 @@ async def render_map(incidents: List[Dict]):
                         org_id = e.args
                         org = next((o for o in organizations if o['id'] == org_id), None)
                         if org:
-                            success = await assign_incident_to_org(
+                            result = await assign_incident_to_org(
                                 inc_id,
                                 org_id,
                                 None
                             )
-                            if success:
+                            if result['success']:
                                 ui.notify(f'Incident {inc_id} assigned to {org["name"]}', type='positive')
                                 dialog.close()
                             else:
-                                ui.notify('Failed to assign incident', type='negative')
+                                ui.notify(result['message'], type='warning')
 
                     org_table.on('assign', on_assign)
 
@@ -381,7 +407,7 @@ async def render_overview(incidents: List[Dict]):
         await render_stats(incidents)
 
 
-async def render_incident_table(incidents: List[Dict]):
+async def render_incident_table(incidents: List[Dict], is_mock_data: bool = False):
     """Render the incident table with filters"""
     # Section title in container
     with ui.element('div').classes('content-container'):
@@ -394,21 +420,35 @@ async def render_incident_table(incidents: List[Dict]):
         columns = [
             {'name': 'id', 'label': 'Incident ID', 'field': 'id', 'align': 'left', 'sortable': True},
             {'name': 'timestamp', 'label': 'Time', 'field': 'timestamp', 'align': 'left', 'sortable': True},
+            {'name': 'category', 'label': 'Category', 'field': 'category', 'align': 'left', 'sortable': True},
             {'name': 'location', 'label': 'Location', 'field': 'location', 'align': 'left', 'sortable': True},
             {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left', 'sortable': True},
             {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left', 'sortable': True},
+            {'name': 'assigned_to', 'label': 'Assigned To', 'field': 'assigned_to', 'align': 'left', 'sortable': False},
             {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
         ]
 
         # Format incidents for table
         rows = []
         for incident in incidents:
+            # Format assigned organization for display
+            assigned_org_display = None
+            if incident.get('assigned_org'):
+                assigned_org_display = {
+                    'id': incident['assigned_org']['id'],
+                    'name': incident['assigned_org']['name'],
+                    'is_auto': incident.get('is_auto_assigned', False)
+                }
+
             rows.append({
                 'id': incident['id'],
                 'timestamp': incident['timestamp'].split(' ')[1],  # Just time
+                'category': incident.get('category', 'Unclassified'),
+                'category_raw': incident.get('category_raw', 'unclassified'),
                 'location': incident['location']['label'],
                 'description': incident['description'],
                 'priority': incident['priority'],
+                'assigned_org': assigned_org_display,
                 'action': incident['id'],
             })
 
@@ -443,6 +483,11 @@ async def render_incident_table(incidents: List[Dict]):
                 <q-td key="timestamp" :props="props">
                     <span class="cell-time">{{ props.row.timestamp }}</span>
                 </q-td>
+                <q-td key="category" :props="props">
+                    <span class="cell-category" style="font-size: 13px; color: #a0aec0;">
+                        {{ props.row.category }}
+                    </span>
+                </q-td>
                 <q-td key="location" :props="props">
                     <span class="cell-location">{{ props.row.location }}</span>
                 </q-td>
@@ -453,6 +498,20 @@ async def render_incident_table(incidents: List[Dict]):
                     <span :class="'priority-badge priority-' + props.row.priority">
                         {{ props.row.priority.toUpperCase() }}
                     </span>
+                </q-td>
+                <q-td key="assigned_to" :props="props" @click.stop>
+                    <q-chip
+                        v-if="props.row.assigned_org"
+                        :label="props.row.assigned_org.name"
+                        :icon="props.row.assigned_org.is_auto ? 'auto_awesome' : 'business'"
+                        color="primary"
+                        text-color="white"
+                        size="sm"
+                        removable
+                        @remove="$parent.$emit('remove_assignment', props.row.id)"
+                        style="font-size: 12px;"
+                    />
+                    <span v-else style="color: #718096; font-size: 12px;">Unassigned</span>
                 </q-td>
                 <q-td key="action" :props="props" @click.stop>
                     <q-btn
@@ -469,8 +528,8 @@ async def render_incident_table(incidents: List[Dict]):
             </q-tr>
             <q-tr v-show="props.expand" :props="props">
                 <q-td colspan="100%">
-                    <div class="p-4">
-                        <div class="grid grid-cols-2 gap-4">
+                    <div class="p-3 sm:p-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <div class="text-xs text-gray-400 uppercase mb-1">Incident ID</div>
                                 <div class="text-white font-bold">{{ props.row.id }}</div>
@@ -487,11 +546,11 @@ async def render_incident_table(incidents: List[Dict]):
                                 <div class="text-xs text-gray-400 uppercase mb-1">Type</div>
                                 <div class="text-white">{{ props.row.type }}</div>
                             </div>
-                            <div class="col-span-2">
+                            <div class="col-span-1 sm:col-span-2">
                                 <div class="text-xs text-gray-400 uppercase mb-1">Full Description</div>
                                 <div class="text-white">{{ props.row.description }}</div>
                             </div>
-                            <div class="col-span-2">
+                            <div class="col-span-1 sm:col-span-2">
                                 <div class="text-xs text-gray-400 uppercase mb-1">Reporter</div>
                                 <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
                             </div>
@@ -511,10 +570,10 @@ async def render_incident_table(incidents: List[Dict]):
                 ui.notify('No organizations available', type='warning')
                 return
 
-            with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-6'):
-                ui.label(f'Forward Incident {incident_id}').classes('text-h6 mb-4 title-font')
+            with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-4 sm:p-6'):
+                ui.label(f'Forward Incident {incident_id}').classes('text-base sm:text-lg font-bold mb-3 sm:mb-4 title-font')
 
-                ui.label('Select Organization:').classes('text-subtitle2 mb-4')
+                ui.label('Select Organization:').classes('text-xs sm:text-sm mb-3 sm:mb-4')
 
                 # Organization table
                 org_columns = [
@@ -561,16 +620,16 @@ async def render_incident_table(incidents: List[Dict]):
                     org_id = e.args
                     org = next((o for o in organizations if o['id'] == org_id), None)
                     if org:
-                        success = await assign_incident_to_org(
+                        result = await assign_incident_to_org(
                             incident_id,
                             org_id,
                             None
                         )
-                        if success:
+                        if result['success']:
                             ui.notify(f'Incident {incident_id} assigned to {org["name"]}', type='positive')
                             dialog.close()
                         else:
-                            ui.notify('Failed to assign incident', type='negative')
+                            ui.notify(result['message'], type='warning')
 
                 org_table.on('assign', on_assign)
 
@@ -581,21 +640,201 @@ async def render_incident_table(incidents: List[Dict]):
 
             dialog.open()
 
+        # Handle remove assignment action
+        async def handle_remove_assignment(e):
+            incident_id = e.args
+            # Call API to remove assignment
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.delete(
+                        f"{API_BASE}/incident/{incident_id}/assignment"
+                    )
+                    if response.status_code == 200:
+                        ui.notify(f'Removed assignment from incident {incident_id}', type='positive')
+                        # Refresh the dashboard to show updated data
+                        logger.info(f"Assignment removed from {incident_id}, refreshing...")
+                    else:
+                        logger.error(f"Failed to remove assignment: {response.status_code}")
+                        ui.notify('Failed to remove assignment', type='negative')
+            except Exception as error:
+                logger.error(f"Error removing assignment: {error}", exc_info=True)
+                ui.notify(f'Error: {str(error)}', type='negative')
+
         table.on('forward', handle_forward)
+        table.on('remove_assignment', handle_remove_assignment)
 
 
 async def dashboard():
     """Main dashboard page"""
-    # Load incidents from API
+    # Load initial incidents from API
     incidents = await load_incidents()
 
     # Use mock data as fallback if API fails
+    is_mock_data = False
     if not incidents:
         logger.warning("No incidents loaded from API, using mock data as fallback")
         incidents = MOCK_INCIDENTS
+        is_mock_data = True
 
-    # Overview section (Map + Stats)
-    await render_overview(incidents)
+    # Create containers that will be updated
+    with ui.element('div').classes('w-full') as overview_container:
+        await render_overview(incidents)
 
-    # Incident table
-    await render_incident_table(incidents)
+    with ui.element('div').classes('w-full') as table_container:
+        await render_incident_table(incidents, is_mock_data=is_mock_data)
+
+    # Define refresh function
+    async def refresh_dashboard():
+        """Reload incidents and refresh the dashboard"""
+        nonlocal incidents, is_mock_data
+        logger.info("Refreshing dashboard due to WebSocket update")
+
+        # Reload incidents from API
+        new_incidents = await load_incidents()
+        if new_incidents:
+            incidents = new_incidents
+            is_mock_data = False
+        else:
+            # Still no incidents, keep using mock data
+            incidents = MOCK_INCIDENTS
+            is_mock_data = True
+
+        # Clear and re-render
+        overview_container.clear()
+        table_container.clear()
+
+        with overview_container:
+            await render_overview(incidents)
+
+        with table_container:
+            await render_incident_table(incidents, is_mock_data=is_mock_data)
+
+    # Create a button that can be triggered from JavaScript (hidden)
+    refresh_button = ui.button('', on_click=refresh_dashboard).classes('hidden')
+
+    # WebSocket client JavaScript code
+    ws_code = f'''
+    (function() {{
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = protocol + '//' + window.location.host + '/ws/incidents';
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+        let heartbeatInterval = null;
+
+        function updateSystemStatus(message, isConnected) {{
+            const statusText = document.getElementById('system-status-text');
+            const statusTimestamp = document.getElementById('system-status-timestamp');
+            const statusDot = document.getElementById('system-status-dot');
+
+            if (!statusText || !statusTimestamp || !statusDot) return;
+
+            if (isConnected) {{
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', {{
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }});
+                statusText.textContent = 'System Operational';
+                statusTimestamp.textContent = timeStr;
+                statusDot.className = 'w-2 h-2 bg-[#00FF00]';
+            }} else {{
+                statusText.textContent = 'System Disconnected';
+                statusTimestamp.textContent = '--:--:--';
+                statusDot.className = 'w-2 h-2 bg-[#FF4444]';
+            }}
+        }}
+
+        function sendHeartbeat() {{
+            if (ws && ws.readyState === WebSocket.OPEN) {{
+                ws.send(JSON.stringify({{
+                    type: 'ping'
+                }}));
+            }}
+        }}
+
+        function connect() {{
+            console.log('[SIMS WebSocket] Connecting to:', wsUrl);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {{
+                console.log('[SIMS WebSocket] Connected');
+                reconnectAttempts = 0;
+                updateSystemStatus(null, true);
+
+                // Subscribe to incidents channel
+                ws.send(JSON.stringify({{
+                    type: 'subscribe',
+                    channel: 'incidents'
+                }}));
+
+                // Start heartbeat - ping every second
+                heartbeatInterval = setInterval(sendHeartbeat, 1000);
+            }};
+
+            ws.onmessage = function(event) {{
+                try {{
+                    const message = JSON.parse(event.data);
+                    console.log('[SIMS WebSocket] Message received:', message);
+
+                    // Update system status on any message
+                    updateSystemStatus(message, true);
+
+                    if (message.type === 'incident_new' ||
+                        message.type === 'incident_update' ||
+                        message.type === 'incident_assigned') {{
+
+                        console.log('[SIMS WebSocket] Incident update detected, refreshing dashboard');
+
+                        // Trigger dashboard refresh by clicking hidden button
+                        getElement({refresh_button.id}).click();
+                    }}
+                }} catch (error) {{
+                    console.error('[SIMS WebSocket] Error processing message:', error);
+                }}
+            }};
+
+            ws.onerror = function(error) {{
+                console.error('[SIMS WebSocket] Error:', error);
+                updateSystemStatus(null, false);
+            }};
+
+            ws.onclose = function() {{
+                console.log('[SIMS WebSocket] Disconnected');
+                updateSystemStatus(null, false);
+
+                // Stop heartbeat
+                if (heartbeatInterval) {{
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }}
+
+                // Attempt to reconnect
+                if (reconnectAttempts < maxReconnectAttempts) {{
+                    reconnectAttempts++;
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    console.log(`[SIMS WebSocket] Reconnecting in ${{delay}}ms (attempt ${{reconnectAttempts}})`);
+                    setTimeout(connect, delay);
+                }} else {{
+                    console.error('[SIMS WebSocket] Max reconnect attempts reached');
+                }}
+            }};
+        }}
+
+        connect();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {{
+            if (heartbeatInterval) {{
+                clearInterval(heartbeatInterval);
+            }}
+            if (ws && ws.readyState === WebSocket.OPEN) {{
+                ws.close();
+            }}
+        }});
+    }})();
+    '''
+
+    ui.run_javascript(ws_code)

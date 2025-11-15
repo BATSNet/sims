@@ -95,30 +95,30 @@ async def organizations_page():
         """Show dialog for creating/editing organization"""
         is_edit = org is not None
 
-        with ui.dialog() as dialog, ui.card().classes('w-full max-w-3xl p-6'):
-            ui.label(f"{'Edit' if is_edit else 'Add'} Organization").classes('text-h6 title-font mb-4')
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl p-4 sm:p-6'):
+            ui.label(f"{'Edit' if is_edit else 'Add'} Organization").classes('text-base sm:text-lg font-bold title-font mb-3 sm:mb-4')
 
-            with ui.grid(columns=2).classes('w-full gap-4'):
-                name_input = ui.input('Name *', value=org.get('name') if org else '').classes('col-span-2')
-                short_name_input = ui.input('Short Name', value=org.get('short_name') if org else '')
+            with ui.grid(columns='1 sm:2').classes('w-full gap-3 sm:gap-4'):
+                name_input = ui.input('Name *', value=org.get('name') if org else '').classes('col-span-1 sm:col-span-2')
+                short_name_input = ui.input('Short Name', value=org.get('short_name') if org else '').classes('col-span-1')
 
                 type_select = ui.select(
                     label='Type *',
                     options={t['value']: t['label'] for t in ORG_TYPES},
                     value=org.get('type') if org else None
-                ).classes('w-full')
+                ).classes('w-full col-span-1')
 
-                contact_person_input = ui.input('Contact Person', value=org.get('contact_person') if org else '')
-                phone_input = ui.input('Phone', value=org.get('phone') if org else '')
-                email_input = ui.input('Email', value=org.get('email') if org else '')
-                emergency_phone_input = ui.input('Emergency Phone', value=org.get('emergency_phone') if org else '')
+                contact_person_input = ui.input('Contact Person', value=org.get('contact_person') if org else '').classes('col-span-1')
+                phone_input = ui.input('Phone', value=org.get('phone') if org else '').classes('col-span-1')
+                email_input = ui.input('Email', value=org.get('email') if org else '').classes('col-span-1')
+                emergency_phone_input = ui.input('Emergency Phone', value=org.get('emergency_phone') if org else '').classes('col-span-1')
 
-                address_input = ui.input('Address', value=org.get('address') if org else '').classes('col-span-2')
-                city_input = ui.input('City', value=org.get('city') if org else '')
-                country_input = ui.input('Country', value=org.get('country', 'Germany') if org else 'Germany')
+                address_input = ui.input('Address', value=org.get('address') if org else '').classes('col-span-1 sm:col-span-2')
+                city_input = ui.input('City', value=org.get('city') if org else '').classes('col-span-1')
+                country_input = ui.input('Country', value=org.get('country', 'Germany') if org else 'Germany').classes('col-span-1')
 
-                response_area_input = ui.textarea('Response Area', value=org.get('response_area') if org else '').classes('col-span-2')
-                notes_input = ui.textarea('Notes', value=org.get('notes') if org else '').classes('col-span-2')
+                response_area_input = ui.textarea('Response Area', value=org.get('response_area') if org else '').classes('col-span-1 sm:col-span-2')
+                notes_input = ui.textarea('Notes', value=org.get('notes') if org else '').classes('col-span-1 sm:col-span-2')
 
                 active_switch = ui.switch('Active', value=org.get('active', True) if org else True)
 
@@ -164,8 +164,8 @@ async def organizations_page():
         with ui.row().classes('w-full items-center justify-between mb-6'):
             ui.button('Add Organization', icon='add', on_click=lambda: show_org_dialog()).props('outline color=white')
 
-        # Filters
-        with ui.row().classes('w-full gap-4 items-end mb-6'):
+        # Filters - responsive layout
+        with ui.row().classes('w-full gap-3 sm:gap-4 items-end mb-4 sm:mb-6 flex-wrap sm:flex-nowrap'):
             async def on_search_change(e):
                 nonlocal search_term
                 search_term = e.value
@@ -175,7 +175,7 @@ async def organizations_page():
                 'Search',
                 placeholder='Search by name, short name, or city',
                 on_change=on_search_change
-            ).classes('flex-grow').props('clearable')
+            ).classes('flex-grow min-w-full sm:min-w-0').props('clearable')
 
             async def on_type_filter_change(e):
                 nonlocal type_filter
@@ -187,9 +187,9 @@ async def organizations_page():
                 options={None: 'All Types', **{t['value']: t['label'] for t in ORG_TYPES}},
                 value=None,
                 on_change=on_type_filter_change
-            ).classes('w-64')
+            ).classes('w-full sm:w-64')
 
-            ui.button('Refresh', icon='refresh', on_click=load_organizations)
+            ui.button('Refresh', icon='refresh', on_click=load_organizations).classes('w-full sm:w-auto')
 
         # Organizations Table
         with ui.element('div').classes('table-section w-full'):
