@@ -1,13 +1,13 @@
 class AppConfig {
   // Change this to switch between dev and production
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   // Development settings
   static const String devBaseUrl = 'http://10.0.2.2:8000'; // Host machine IP for emulator
   static const String devBaseUrlPhysical = 'http://172.22.128.1:8000'; // Host machine IP for physical device
 
   // Production settings
-  static const String prodBaseUrl = 'https://api.sims.example.com';
+  static const String prodBaseUrl = 'http://91.99.179.35:8000';
 
   // Get current base URL based on environment
   static String get baseUrl {
