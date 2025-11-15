@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/permission_service.dart';
+import '../routes/app_routes.dart';
 import '../utils/sims_colors.dart';
 
 class PermissionScreen extends StatefulWidget {
@@ -171,7 +172,10 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
     if (mounted) {
       if (granted) {
-        context.go('/phone');
+        // Update the router state to reflect permissions are granted
+        AppRoutes.updatePermissionsGranted(true);
+        // Navigate to home screen
+        context.go('/');
       } else {
         setState(() {
           _isRequesting = false;
