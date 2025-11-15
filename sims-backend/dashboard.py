@@ -223,6 +223,13 @@ def format_coordinates(lat: float, lon: float) -> str:
 
 async def render_map(incidents: List[Dict]):
     """Render the incident map with markers"""
+    # Debug logging
+    logger.info(f"render_map called with {len(incidents)} incidents")
+    valid_incidents = [inc for inc in incidents if inc['location']['lat'] is not None and inc['location']['lon'] is not None]
+    logger.info(f"Found {len(valid_incidents)} incidents with valid coordinates")
+    if valid_incidents:
+        logger.info(f"Sample incident: {valid_incidents[0]}")
+
     # Add MarkerCluster CSS and JS
     ui.add_head_html('''
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -345,32 +352,49 @@ async def render_map(incidents: List[Dict]):
         ui.run_javascript(js_code)
 
     # Create marker cluster group for incidents with custom styling
+    # Wait for MarkerCluster library to load before initializing
     cluster_init_js = f'''
         (function() {{
-            // Create marker cluster group with custom options
-            var incidentClusterGroup = L.markerClusterGroup({{
-                showCoverageOnHover: true,
-                zoomToBoundsOnClick: true,
-                spiderfyOnMaxZoom: true,
-                removeOutsideVisibleBounds: true,
-                maxClusterRadius: 60,
-                iconCreateFunction: function(cluster) {{
-                    var count = cluster.getChildCount();
-                    var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
-
-                    return L.divIcon({{
-                        html: '<div style="background: rgba(255, 68, 68, 0.8); width: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; height: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; border: 3px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ' + (size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px') + '; color: white; font-weight: bold; box-shadow: 0 0 10px rgba(255, 68, 68, 0.6); cursor: pointer;"><span>' + count + '</span></div>',
-                        className: 'custom-cluster-icon',
-                        iconSize: L.point(size === 'small' ? 30 : size === 'medium' ? 40 : 50, size === 'small' ? 30 : size === 'medium' ? 40 : 50)
-                    }});
+            function initializeClusterGroup() {{
+                // Check if MarkerCluster library is loaded
+                if (typeof L === 'undefined' || typeof L.markerClusterGroup === 'undefined') {{
+                    console.log('[SIMS] Waiting for MarkerCluster library to load...');
+                    setTimeout(initializeClusterGroup, 100);
+                    return;
                 }}
-            }});
 
-            // Store reference globally so we can add markers to it
-            window.incidentClusterGroup = incidentClusterGroup;
+                console.log('[SIMS] MarkerCluster library loaded, initializing cluster group');
 
-            // Add cluster group to map
-            incidentClusterGroup.addTo(getElement({m.id}).map);
+                // Create marker cluster group with custom options
+                var incidentClusterGroup = L.markerClusterGroup({{
+                    showCoverageOnHover: true,
+                    zoomToBoundsOnClick: true,
+                    spiderfyOnMaxZoom: true,
+                    removeOutsideVisibleBounds: true,
+                    maxClusterRadius: 60,
+                    iconCreateFunction: function(cluster) {{
+                        var count = cluster.getChildCount();
+                        var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
+
+                        return L.divIcon({{
+                            html: '<div style="background: rgba(255, 68, 68, 0.8); width: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; height: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; border: 3px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ' + (size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px') + '; color: white; font-weight: bold; box-shadow: 0 0 10px rgba(255, 68, 68, 0.6); cursor: pointer;"><span>' + count + '</span></div>',
+                            className: 'custom-cluster-icon',
+                            iconSize: L.point(size === 'small' ? 30 : size === 'medium' ? 40 : 50, size === 'small' ? 30 : size === 'medium' ? 40 : 50)
+                        }});
+                    }}
+                }});
+
+                // Store reference globally so we can add markers to it
+                window.incidentClusterGroup = incidentClusterGroup;
+
+                // Add cluster group to map
+                incidentClusterGroup.addTo(getElement({m.id}).map);
+
+                console.log('[SIMS] Cluster group initialized and added to map');
+            }}
+
+            // Start initialization
+            initializeClusterGroup();
         }})();
     '''
     ui.run_javascript(cluster_init_js)
@@ -379,6 +403,12 @@ async def render_map(incidents: List[Dict]):
     for incident in incidents:
         lat = incident['location']['lat']
         lon = incident['location']['lon']
+
+        # Skip incidents without valid coordinates
+        if lat is None or lon is None:
+            logger.warning(f"Skipping incident {incident['id']} - no valid coordinates")
+            continue
+
         priority = incident['priority']
         color = colors.get(priority, '#63ABFF')
         inc_id = incident['id']
@@ -474,42 +504,50 @@ async def render_map(incidents: List[Dict]):
 
         # Create marker with custom icon and popup with clickable button using JavaScript
         # Add to cluster group instead of directly to map
+        # Wait for cluster group to be ready before adding marker
         js_code = f'''
             (function() {{
-                var markerColor = "{color}";
-                var icon = L.divIcon({{
-                    html: '<div style="background: ' + markerColor + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + markerColor + '; cursor: pointer;"></div>',
-                    className: 'custom-marker',
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8]
-                }});
+                function addMarkerToCluster() {{
+                    // Wait for cluster group to be ready
+                    if (!window.incidentClusterGroup) {{
+                        console.log('[SIMS] Waiting for cluster group to be ready...');
+                        setTimeout(addMarkerToCluster, 100);
+                        return;
+                    }}
 
-                var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
+                    var markerColor = "{color}";
+                    var icon = L.divIcon({{
+                        html: '<div style="background: ' + markerColor + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + markerColor + '; cursor: pointer;"></div>',
+                        className: 'custom-marker',
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    }});
 
-                var popupContent = '<div class="popup-title">{inc_id_escaped}</div>' +
-                                 '<div class="popup-description">{inc_desc}</div>' +
-                                 '<div class="popup-priority priority-{priority}">{priority.upper()}</div>' +
-                                 '<div style="margin-top: 12px;">' +
-                                 '<button onclick="getElement({marker_button_id}).click()" ' +
-                                 'style="background: transparent; color: white; border: 1px solid white; ' +
-                                 'padding: 6px 14px; font-size: 10px; ' +
-                                 'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
-                                 'transition: all 0.2s ease;" ' +
-                                 'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
-                                 'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">Forward</button>' +
-                                 '</div>';
+                    var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
 
-                marker.bindPopup(popupContent, {{
-                    className: 'custom-popup-{priority}'
-                }});
+                    var popupContent = '<div class="popup-title">{inc_id_escaped}</div>' +
+                                     '<div class="popup-description">{inc_desc}</div>' +
+                                     '<div class="popup-priority priority-{priority}">{priority.upper()}</div>' +
+                                     '<div style="margin-top: 12px;">' +
+                                     '<button onclick="getElement({marker_button_id}).click()" ' +
+                                     'style="background: transparent; color: white; border: 1px solid white; ' +
+                                     'padding: 6px 14px; font-size: 10px; ' +
+                                     'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
+                                     'transition: all 0.2s ease;" ' +
+                                     'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
+                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">Forward</button>' +
+                                     '</div>';
 
-                // Add marker to cluster group instead of directly to map
-                if (window.incidentClusterGroup) {{
+                    marker.bindPopup(popupContent, {{
+                        className: 'custom-popup-{priority}'
+                    }});
+
+                    // Add marker to cluster group
                     window.incidentClusterGroup.addLayer(marker);
-                }} else {{
-                    // Fallback to adding directly to map if cluster group not available
-                    marker.addTo(getElement({m.id}).map);
                 }}
+
+                // Start adding marker
+                addMarkerToCluster();
             }})();
         '''
 
@@ -664,6 +702,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 'priority': incident['priority'],
                 'assigned_org': assigned_org_display,
                 'action': incident['id'],
+                'reporter': incident.get('reporter', 'Unknown'),
+                'status': incident.get('status', 'active'),
+                'type': incident.get('type', 'Incident'),
+                'imageUrl': incident.get('imageUrl'),
+                'audioUrl': incident.get('audioUrl'),
             })
 
         table = ui.table(
@@ -767,6 +810,16 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             <div class="col-span-1 sm:col-span-2">
                                 <div class="text-xs text-gray-400 uppercase mb-1">Reporter</div>
                                 <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
+                            </div>
+                            <div v-if="props.row.imageUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Image</div>
+                                <img :src="props.row.imageUrl" class="max-w-full h-auto rounded" style="max-height: 400px;" />
+                            </div>
+                            <div v-if="props.row.audioUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Audio</div>
+                                <audio controls class="w-full">
+                                    <source :src="props.row.audioUrl" />
+                                </audio>
                             </div>
                         </div>
                     </div>

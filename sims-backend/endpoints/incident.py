@@ -73,10 +73,13 @@ async def create_incident(
             )
 
         # Create incident ORM object
+        user_phone = incident_data.user_phone or incident_data.metadata.get('user_phone')
+        logger.info(f"Creating incident with user_phone: {user_phone}")
+
         db_incident = IncidentORM(
             id=incident_uuid,
             incident_id=incident_id,
-            user_phone=incident_data.user_phone or incident_data.metadata.get('user_phone'),
+            user_phone=user_phone,
             location=location_geom,
             latitude=incident_data.latitude,
             longitude=incident_data.longitude,
@@ -303,6 +306,7 @@ async def create_incident(
 
         # Prepare response
         response = IncidentResponse.from_orm(db_incident, image_url, audio_url)
+        logger.info(f"Incident response user_phone: {response.user_phone}")
 
         # Broadcast new incident via WebSocket
         try:
@@ -320,11 +324,11 @@ async def create_incident(
             from db.connection import session as Session
             auto_response = get_auto_response_service()
 
-            # Schedule as background task
+            # Schedule as background task (use UUID not formatted ID)
             import asyncio
             asyncio.create_task(
                 auto_response.schedule_auto_response(
-                    incident_id,
+                    str(incident_uuid),  # Use UUID for WebSocket matching
                     session_id,
                     Session
                 )
@@ -905,7 +909,7 @@ async def get_chat_summary(
         )
 
 
-@incident_router.post("/api/incident/{incident_id}/chat")
+@incident_router.post("/{incident_id}/chat")
 async def add_chat_message(
     incident_id: str,
     request: dict,
