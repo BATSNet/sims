@@ -7,9 +7,10 @@ import uuid
 
 from sqlalchemy import Column, BigInteger, TIMESTAMP, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-from db.connection import Base
+Base = declarative_base()
 
 
 class ChatSessionORM(Base):
@@ -21,9 +22,11 @@ class ChatSessionORM(Base):
     incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=False)
     user_phone = Column(String(13))
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    last_modified = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    summary = Column(String, nullable=True)
+    last_summarized = Column(TIMESTAMP(timezone=True), nullable=True)
 
     # Relationships configured in models/__init__.py
-
 
 class ChatMessageORM(Base):
     """SQLAlchemy ORM model for chat_message table"""
