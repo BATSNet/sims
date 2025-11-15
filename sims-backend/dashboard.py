@@ -46,6 +46,33 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         if assignment_history and assignment_history[-1].get('auto_assigned'):
             is_auto_assigned = True
 
+    # Extract media file URLs
+    image_url = None
+    audio_url = None
+    video_url = None
+
+    # Check for media files in the incident data
+    media_files = incident.get('mediaFiles', [])
+    if media_files:
+        for media in media_files:
+            media_type = media.get('type', '').lower()
+            file_url = media.get('url') or media.get('fileUrl')
+
+            if media_type in ['image', 'photo'] and not image_url:
+                image_url = file_url
+            elif media_type in ['audio', 'voice'] and not audio_url:
+                audio_url = file_url
+            elif media_type in ['video'] and not video_url:
+                video_url = file_url
+
+    # Also check for direct URL fields (camelCase from API)
+    if not image_url:
+        image_url = incident.get('imageUrl') or incident.get('image_url')
+    if not audio_url:
+        audio_url = incident.get('audioUrl') or incident.get('audio_url')
+    if not video_url:
+        video_url = incident.get('videoUrl') or incident.get('video_url')
+
     return {
         'id': incident.get('incidentId', 'UNKNOWN'),  # camelCase from API
         'timestamp': timestamp,
@@ -63,7 +90,10 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'reporter': incident.get('userPhone', 'Unknown'),  # camelCase from API
         'title': incident.get('title', 'Incident'),
         'assigned_org': assigned_org,
-        'is_auto_assigned': is_auto_assigned
+        'is_auto_assigned': is_auto_assigned,
+        'imageUrl': image_url,
+        'audioUrl': audio_url,
+        'videoUrl': video_url,
     }
 
 
@@ -498,7 +528,6 @@ async def render_map(incidents: List[Dict]):
                 incidentClusterGroup.addTo(map);
 
                 console.log('[SIMS] Cluster group initialized and added to map');
-                console.log('[SIMS] Map has', map.getLayers().length, 'layers total');
             }}
 
             // Start initialization
@@ -887,6 +916,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 'type': incident.get('type', 'Incident'),
                 'imageUrl': incident.get('imageUrl'),
                 'audioUrl': incident.get('audioUrl'),
+                'videoUrl': incident.get('videoUrl'),
             })
 
         table = ui.table(
@@ -929,7 +959,20 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     <span class="cell-location">{{ props.row.location }}</span>
                 </q-td>
                 <q-td key="description" :props="props">
-                    <span class="cell-description">{{ props.row.description }}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="cell-description">{{ props.row.description }}</span>
+                        <div class="flex gap-1" v-if="props.row.imageUrl || props.row.audioUrl || props.row.videoUrl">
+                            <a v-if="props.row.imageUrl" :href="props.row.imageUrl" target="_blank" class="text-blue-400 hover:text-blue-300" title="View Image">
+                                <q-icon name="image" size="16px" />
+                            </a>
+                            <a v-if="props.row.audioUrl" :href="props.row.audioUrl" target="_blank" class="text-green-400 hover:text-green-300" title="Listen to Audio">
+                                <q-icon name="audiotrack" size="16px" />
+                            </a>
+                            <a v-if="props.row.videoUrl" :href="props.row.videoUrl" target="_blank" class="text-purple-400 hover:text-purple-300" title="Watch Video">
+                                <q-icon name="videocam" size="16px" />
+                            </a>
+                        </div>
+                    </div>
                 </q-td>
                 <q-td key="priority" :props="props">
                     <span :class="'priority-badge priority-' + props.row.priority">
@@ -1012,6 +1055,12 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <audio controls class="w-full">
                                     <source :src="props.row.audioUrl" />
                                 </audio>
+                            </div>
+                            <div v-if="props.row.videoUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
+                                <video controls class="max-w-full h-auto rounded" style="max-height: 400px;">
+                                    <source :src="props.row.videoUrl" />
+                                </video>
                             </div>
                         </div>
                     </div>
@@ -1124,7 +1173,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             incident_id = e.args
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.patch(
+                    response = await client.put(
                         f"{API_BASE}/incident/{incident_id}",
                         json={'status': 'closed'}
                     )
@@ -1300,11 +1349,16 @@ async def dashboard():
 
         // Function to add or update a marker
         function addOrUpdateMarker(incident) {{
-            const lat = incident.latitude;
-            const lon = incident.longitude;
-            const incidentId = incident.incidentId || incident.incident_id;
+            console.log('[SIMS] addOrUpdateMarker called with:', incident);
+
+            // Handle different field name formats
+            const lat = incident.latitude || incident.lat;
+            const lon = incident.longitude || incident.lon || incident.lng;
+            const incidentId = incident.incidentId || incident.incident_id || incident.id;
             const priority = incident.priority || 'medium';
             const status = incident.status || 'open';
+
+            console.log('[SIMS] Extracted values - ID:', incidentId, 'Lat:', lat, 'Lon:', lon, 'Status:', status);
 
             // Skip if no coordinates or if closed
             if (!lat || !lon || status === 'closed') {{

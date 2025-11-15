@@ -31,16 +31,17 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
 
   bool _isLoading = false;
   bool _isCameraInitialized = false;
-  bool _showCamera = true;
+  bool _showCamera = false;
   bool _isRecordingVideo = false;
+  bool _hasLoadedHistory = false;
 
   final List<ChatMessage> _messages = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
     _loadChatHistory();
+    // Only initialize camera if toggled on
   }
 
   Future<void> _initializeCamera() async {
@@ -79,12 +80,16 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
         setState(() {
           _messages.clear();
           _messages.addAll(messages);
+          _hasLoadedHistory = true;
         });
 
         _scrollToBottom();
       }
     } catch (e) {
       print('Error loading chat history: $e');
+      setState(() {
+        _hasLoadedHistory = true;
+      });
     }
   }
 
@@ -366,6 +371,9 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
             onPressed: () {
               setState(() {
                 _showCamera = !_showCamera;
+                if (_showCamera && !_isCameraInitialized) {
+                  _initializeCamera();
+                }
               });
             },
           ),
