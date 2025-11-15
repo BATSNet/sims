@@ -294,6 +294,25 @@ async def create_incident(
         except Exception as ws_error:
             logger.error(f"Failed to broadcast incident via WebSocket: {ws_error}")
 
+        # Start automated response sequence (typing indicator + thank you message)
+        try:
+            from services.auto_response_service import get_auto_response_service
+            from db.connection import session as Session
+            auto_response = get_auto_response_service()
+
+            # Schedule as background task
+            import asyncio
+            asyncio.create_task(
+                auto_response.schedule_auto_response(
+                    incident_id,
+                    session_id,
+                    Session
+                )
+            )
+            logger.info(f"Scheduled auto-response for incident {incident_id}")
+        except Exception as ar_error:
+            logger.error(f"Failed to schedule auto-response: {ar_error}")
+
         return response
 
     except Exception as e:
