@@ -271,10 +271,13 @@ async def render_map(incidents: List[Dict]):
                     org_table.add_slot('body-cell-action', '''
                         <q-td :props="props">
                             <q-btn
-                                flat
+                                outline
                                 dense
-                                label="ASSIGN"
-                                color="primary"
+                                size="sm"
+                                label="Assign"
+                                color="white"
+                                no-caps
+                                style="font-size: 13px; padding: 4px 12px"
                                 @click="$parent.$emit('assign', props.row.id)"
                             />
                         </q-td>
@@ -542,10 +545,13 @@ async def render_incident_table(incidents: List[Dict]):
                 org_table.add_slot('body-cell-action', '''
                     <q-td :props="props">
                         <q-btn
-                            flat
+                            outline
                             dense
-                            label="ASSIGN"
-                            color="primary"
+                            size="sm"
+                            label="Assign"
+                            color="white"
+                            no-caps
+                            style="font-size: 13px; padding: 4px 12px"
                             @click="$parent.$emit('assign', props.row.id)"
                         />
                     </q-td>
