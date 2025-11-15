@@ -1,0 +1,17 @@
+name: Auto-Update Main
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  update:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest main
+        run: |
+          cd /opt/sims-demo
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fd
+          echo "Updated to $(git rev-parse HEAD)"
