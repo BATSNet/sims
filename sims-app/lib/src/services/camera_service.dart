@@ -3,11 +3,13 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_video_compress/flutter_video_compress.dart';
 
 class CameraService {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
+  final _videoCompress = FlutterVideoCompress();
 
   bool get isInitialized => _isInitialized;
   CameraController? get controller => _controller;

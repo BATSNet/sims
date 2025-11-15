@@ -9,7 +9,7 @@ import uuid
 from sqlalchemy import Column, String, Float, TIMESTAMP, ARRAY, Text, BigInteger, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from geoalchemy2 import Geometry
 
 from db.connection import Base
@@ -112,13 +112,13 @@ class IncidentUpdate(BaseModel):
 class IncidentResponse(BaseModel):
     """Response model for incident (aligned with Flutter expectations)"""
     id: str
-    incident_id: str
+    incident_id: str = Field(alias='incidentId', serialization_alias='incidentId')
     title: str
     description: str
     priority: str
     status: str
-    created_at: str
-    updated_at: str
+    created_at: str = Field(alias='createdAt', serialization_alias='createdAt')
+    updated_at: str = Field(alias='updatedAt', serialization_alias='updatedAt')
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -128,27 +128,29 @@ class IncidentResponse(BaseModel):
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
-    routed_to: Optional[int] = None
-    routed_to_name: Optional[str] = None
-    user_phone: Optional[str] = None
+    routed_to: Optional[int] = Field(default=None, alias='routedTo', serialization_alias='routedTo')
+    routed_to_name: Optional[str] = Field(default=None, alias='routedToName', serialization_alias='routedToName')
+    user_phone: Optional[str] = Field(default=None, alias='userPhone', serialization_alias='userPhone')
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
-                "incident_id": "INC-2847A9B2",
+                "incidentId": "INC-2847A9B2",
                 "title": "Suspicious Activity",
                 "description": "Unidentified vehicle near checkpoint",
                 "priority": "high",
                 "status": "open",
-                "created_at": "2025-11-14T14:25:33Z",
-                "updated_at": "2025-11-14T14:25:33Z",
+                "createdAt": "2025-11-14T14:25:33Z",
+                "updatedAt": "2025-11-14T14:25:33Z",
                 "latitude": 52.520,
                 "longitude": 13.405,
                 "category": "Security"
             }
         }
+    )
 
     @classmethod
     def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None):
