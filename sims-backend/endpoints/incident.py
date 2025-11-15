@@ -160,10 +160,11 @@ async def create_incident(
                     transcription = audio_media.transcription
                     logger.info(f"Found transcription for incident {incident_id}: {transcription[:100]}...")
 
-            # Classify the incident
+            # Classify the incident (with image analysis if available)
             classification = await classifier.classify_incident(
                 description=incident_data.description,
                 transcription=transcription,
+                image_url=image_url,
                 latitude=incident_data.latitude,
                 longitude=incident_data.longitude,
                 heading=incident_data.heading
@@ -901,4 +902,107 @@ async def get_chat_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get summary: {str(e)}"
+        )
+
+
+@incident_router.post("/api/incident/{incident_id}/chat")
+async def add_chat_message(
+    incident_id: str,
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Add a chat message to an incident and trigger re-classification
+    """
+    try:
+        # Find incident by UUID
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.id == uuid.UUID(incident_id)
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident not found: {incident_id}"
+            )
+
+        # Get session ID
+        session_id = request.get('session_id')
+        message_text = request.get('message')
+
+        if not message_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message text is required"
+            )
+
+        logger.info(f"Adding chat message to incident {incident.incident_id}: {message_text[:100]}")
+
+        # Add message to chat history
+        chat = ChatHistory(db, session_id)
+        chat.add_message("user", message_text)
+
+        # Re-classify incident with updated chat history
+        try:
+            classifier = get_classifier()
+
+            # Get full chat history for context
+            messages = chat.get_messages()
+            full_context = "\n".join([
+                f"{msg['role']}: {msg['content']}"
+                for msg in messages
+            ])
+
+            classification = await classifier.classify_incident(
+                description=full_context,
+                category_hint=incident.category if incident.category != 'Unclassified' else None
+            )
+
+            # Update incident with new classification
+            incident.category = classification.category
+            incident.priority = classification.priority
+            incident.tags = classification.tags
+
+            logger.info(
+                f"Re-classified incident {incident.incident_id} as '{classification.category}' "
+                f"with priority '{classification.priority}' (confidence: {classification.confidence:.2f})"
+            )
+
+            # Re-assign if needed
+            if classification.confidence >= 0.7:
+                assignment_service = get_assignment_service()
+                assignment = await assignment_service.assign_incident(
+                    incident=incident,
+                    classification=classification,
+                    db=db
+                )
+
+                if assignment.organization_id and assignment.organization_id != incident.routed_to:
+                    incident.routed_to = assignment.organization_id
+                    logger.info(
+                        f"Re-assigned incident {incident.incident_id} to {assignment.organization_name}"
+                    )
+
+        except Exception as e:
+            logger.error(f"Error re-classifying incident: {e}", exc_info=True)
+
+        db.commit()
+        db.refresh(incident)
+
+        # Broadcast updated incident
+        response = IncidentResponse.from_orm(incident)
+        await websocket_manager.broadcast_incident(
+            incident_data=response.dict(),
+            event_type='incident_update'
+        )
+
+        return {"status": "ok", "incident_id": incident.incident_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding chat message: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add chat message: {str(e)}"
         )
