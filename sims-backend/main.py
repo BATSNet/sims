@@ -44,11 +44,13 @@ RESOURCES_PATH = Path(__file__).parent.parent / 'resources'
 UPLOAD_PATH = Path(__file__).parent / 'uploads'
 IMAGE_DIR = UPLOAD_PATH / 'images'
 AUDIO_DIR = UPLOAD_PATH / 'audio'
+VIDEO_DIR = UPLOAD_PATH / 'videos'
 
 # Create directories
 UPLOAD_PATH.mkdir(exist_ok=True)
 IMAGE_DIR.mkdir(exist_ok=True)
 AUDIO_DIR.mkdir(exist_ok=True)
+VIDEO_DIR.mkdir(exist_ok=True)
 
 app.add_static_files('/static', str(RESOURCES_PATH))
 app.add_static_files('/static/uploads', str(UPLOAD_PATH))
@@ -200,9 +202,15 @@ async def api_health():
 
 
 @app.post('/api/upload/image')
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(
+    file: UploadFile = File(...),
+    incident_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """Upload an image file"""
     try:
+        from models.media_model import MediaORM, MediaType
+
         allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
         file_ext = Path(file.filename).suffix.lower()
 
@@ -223,9 +231,27 @@ async def upload_image(file: UploadFile = File(...)):
 
         logger.info(f'Image uploaded successfully: {file_id}')
 
+        # Create Media record if incident_id is provided
+        media_uuid = uuid.uuid4()
+        if incident_id:
+            media = MediaORM(
+                id=media_uuid,
+                incident_id=uuid.UUID(incident_id),
+                file_path=str(file_path),
+                file_url=file_url,
+                mime_type=file.content_type or 'image/jpeg',
+                file_size=len(content),
+                media_type=MediaType.IMAGE,
+                meta_data={'original_filename': file.filename}
+            )
+            db.add(media)
+            db.commit()
+            db.refresh(media)
+
         return JSONResponse(
             content={
                 'success': True,
+                'media_id': str(media_uuid) if incident_id else None,
                 'url': file_url,
                 'filename': file_id,
                 'metadata': {
@@ -244,6 +270,7 @@ async def upload_image(file: UploadFile = File(...)):
 @app.post('/api/upload/audio')
 async def upload_audio(
     file: UploadFile = File(...),
+    incident_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Upload an audio file and queue it for transcription"""
@@ -270,11 +297,11 @@ async def upload_audio(
 
         logger.info(f'Audio uploaded successfully: {file_id}')
 
-        # Create orphaned Media record (will be linked to incident later)
+        # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
         media = MediaORM(
             id=media_uuid,
-            incident_id=None,  # Will be set when incident is created
+            incident_id=uuid.UUID(incident_id) if incident_id else None,
             file_path=str(file_path),
             file_url=file_url,
             mime_type=file.content_type or 'audio/m4a',
@@ -318,6 +345,71 @@ async def upload_audio(
 
     except Exception as e:
         logger.error(f'Error uploading audio: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/api/upload/video')
+async def upload_video(
+    file: UploadFile = File(...),
+    incident_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Upload a video file"""
+    try:
+        from models.media_model import MediaORM, MediaType
+
+        allowed_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'}
+        file_ext = Path(file.filename).suffix.lower()
+
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Invalid file type. Allowed: {allowed_extensions}',
+            )
+
+        file_id = f'{uuid.uuid4()}{file_ext}'
+        file_path = VIDEO_DIR / file_id
+        content = await file.read()
+
+        with open(file_path, 'wb') as f:
+            f.write(content)
+
+        file_url = f'/static/uploads/videos/{file_id}'
+
+        logger.info(f'Video uploaded successfully: {file_id}')
+
+        # Create Media record (link to incident if provided)
+        media_uuid = uuid.uuid4()
+        media = MediaORM(
+            id=media_uuid,
+            incident_id=uuid.UUID(incident_id) if incident_id else None,
+            file_path=str(file_path),
+            file_url=file_url,
+            mime_type=file.content_type or 'video/mp4',
+            file_size=len(content),
+            media_type=MediaType.VIDEO,
+            transcription=None,
+            meta_data={'original_filename': file.filename}
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        return JSONResponse(
+            content={
+                'success': True,
+                'media_id': str(media_uuid),
+                'url': file_url,
+                'filename': file_id,
+                'metadata': {
+                    'size': len(content),
+                    'type': file.content_type,
+                    'uploaded_at': datetime.now().isoformat(),
+                },
+            }
+        )
+    except Exception as e:
+        logger.error(f'Error uploading video: {e}', exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
