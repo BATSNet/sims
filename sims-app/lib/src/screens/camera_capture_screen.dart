@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/location_service.dart';
@@ -79,10 +80,13 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   bool _showTextInput = false;
   String? _currentIncidentId;
   bool _isProcessing = false;
+  late final String _sessionId; // Generate immediately on screen creation
 
   @override
   void initState() {
     super.initState();
+    // Generate session ID immediately - don't wait for backend
+    _sessionId = const Uuid().v4();
     _initializeServices();
   }
 
