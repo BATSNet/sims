@@ -108,6 +108,9 @@ class IncidentOverviewScreen extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: _buildReportButton(context),
                 ),
+                SliverToBoxAdapter(
+                  child: _buildEmergencyContactSection(),
+                ),
                 if (recentIncidents.isEmpty)
                   SliverToBoxAdapter(
                     child: _buildWelcomeSection(context),
@@ -137,9 +140,6 @@ class IncidentOverviewScreen extends StatelessWidget {
                     },
                     childCount: recentIncidents.length,
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildEmergencyContactSection(),
                 ),
                 const SliverToBoxAdapter(
                   child: SizedBox(height: 80),
@@ -212,7 +212,7 @@ class IncidentOverviewScreen extends StatelessWidget {
 
   Widget _buildWelcomeSection(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 32, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: SimsColors.navyBlueLight,
@@ -245,48 +245,11 @@ class IncidentOverviewScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Tap the button above to capture your first incident report.',
+            'Tap the "Start Recording" button above to capture your first incident report. Emergency contact numbers are always available for quick reference.',
             style: TextStyle(
               fontSize: 13,
               color: SimsColors.white.withOpacity(0.9),
               height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: SimsColors.navyBlueDark.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.phone,
-                      color: SimsColors.criticalRed,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Emergency Numbers',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: SimsColors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _buildEmergencyNumber('Police', '110'),
-                const SizedBox(height: 6),
-                _buildEmergencyNumber('Fire/Medical', '112'),
-                const SizedBox(height: 6),
-                _buildEmergencyNumber('Command Center', '+49 123 456 789'),
-              ],
             ),
           ),
         ],
