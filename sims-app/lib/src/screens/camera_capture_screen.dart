@@ -1,12 +1,16 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/location_service.dart';
 import '../services/media_upload_service.dart';
+import '../repositories/user_repository.dart';
+import '../config/app_config.dart';
 import '../utils/sims_colors.dart';
 
 export '../services/media_upload_service.dart' show UploadResult;
@@ -73,6 +77,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   FlashMode _flashMode = FlashMode.auto;
   final List<ChatMessage> _messages = [];
   bool _showTextInput = false;
+  String? _currentIncidentId;
 
   @override
   void initState() {
@@ -135,9 +140,54 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
   }
 
+  Future<String?> _createIncident() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      final userRepo = await UserRepository.getInstance();
+      final userPhone = userRepo.getPhoneNumberSync();
+
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/incidents'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'title': 'Incident Report',
+          'description': 'Incident reported from mobile app',
+          'latitude': location?.latitude,
+          'longitude': location?.longitude,
+          'heading': location?.heading,
+          'timestamp': DateTime.now().toIso8601String(),
+          'user_phone': userPhone,
+        }),
+      );
+
+      debugPrint('Create incident response: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        debugPrint('Incident created: ${data['id']}');
+        return data['id'];
+      } else {
+        debugPrint('Failed to create incident: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error creating incident: $e');
+      return null;
+    }
+  }
+
   Future<void> _sendTextMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+
+    // Create incident if not already created
+    if (_currentIncidentId == null) {
+      _currentIncidentId = await _createIncident();
+      if (_currentIncidentId == null) {
+        _showError('Failed to create incident');
+        return;
+      }
+    }
 
     final messageId = DateTime.now().millisecondsSinceEpoch.toString();
     final message = ChatMessage(
@@ -232,6 +282,15 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   }
 
   Future<void> _uploadMedia(File file, MessageType type) async {
+    // Create incident if not already created
+    if (_currentIncidentId == null) {
+      _currentIncidentId = await _createIncident();
+      if (_currentIncidentId == null) {
+        _showError('Failed to create incident');
+        return;
+      }
+    }
+
     final messageId = DateTime.now().millisecondsSinceEpoch.toString();
     final message = ChatMessage(
       id: messageId,
@@ -247,17 +306,17 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     _scrollToBottom();
 
-    // Upload based on type
+    // Upload based on type with incident_id
     final UploadResult result;
     switch (type) {
       case MessageType.image:
-        result = await _uploadService.uploadImage(file);
+        result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
         break;
       case MessageType.audio:
-        result = await _uploadService.uploadAudio(file);
+        result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
         break;
       case MessageType.video:
-        result = await _uploadService.uploadVideo(file);
+        result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
         break;
       default:
         result = UploadResult(success: false, error: 'Unknown message type');

@@ -101,6 +101,11 @@ class IncidentOverviewScreen extends StatelessWidget {
                     ),
                   ),
                 SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.25,
+                  ),
+                ),
+                SliverToBoxAdapter(
                   child: _buildReportButton(context),
                 ),
                 if (recentIncidents.isEmpty)
@@ -204,7 +209,7 @@ class IncidentOverviewScreen extends StatelessWidget {
 
   Widget _buildWelcomeSection(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(16, 32, 16, 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: SimsColors.navyBlueLight,

@@ -32,7 +32,7 @@ class UploadResult {
 class MediaUploadService {
   final String baseUrl = AppConfig.baseUrl;
 
-  Future<UploadResult> uploadImage(File imageFile) async {
+  Future<UploadResult> uploadImage(File imageFile, {String? incidentId}) async {
     try {
       final uri = Uri.parse('$baseUrl/api/upload/image');
       final request = http.MultipartRequest('POST', uri);
@@ -50,7 +50,12 @@ class MediaUploadService {
         ),
       );
 
-      debugPrint('Uploading image to: $uri');
+      // Add incident_id if provided
+      if (incidentId != null) {
+        request.fields['incident_id'] = incidentId;
+      }
+
+      debugPrint('Uploading image to: $uri (incident: $incidentId)');
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
@@ -74,7 +79,7 @@ class MediaUploadService {
     }
   }
 
-  Future<UploadResult> uploadAudio(File audioFile) async {
+  Future<UploadResult> uploadAudio(File audioFile, {String? incidentId}) async {
     try {
       final uri = Uri.parse('$baseUrl/api/upload/audio');
       final request = http.MultipartRequest('POST', uri);
@@ -92,7 +97,12 @@ class MediaUploadService {
         ),
       );
 
-      debugPrint('Uploading audio to: $uri');
+      // Add incident_id if provided
+      if (incidentId != null) {
+        request.fields['incident_id'] = incidentId;
+      }
+
+      debugPrint('Uploading audio to: $uri (incident: $incidentId)');
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
@@ -116,7 +126,7 @@ class MediaUploadService {
     }
   }
 
-  Future<UploadResult> uploadVideo(File videoFile) async {
+  Future<UploadResult> uploadVideo(File videoFile, {String? incidentId}) async {
     try {
       final uri = Uri.parse('$baseUrl/api/upload/video');
       final request = http.MultipartRequest('POST', uri);
@@ -134,7 +144,12 @@ class MediaUploadService {
         ),
       );
 
-      debugPrint('Uploading video to: $uri');
+      // Add incident_id if provided
+      if (incidentId != null) {
+        request.fields['incident_id'] = incidentId;
+      }
+
+      debugPrint('Uploading video to: $uri (incident: $incidentId)');
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
