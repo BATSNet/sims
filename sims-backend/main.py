@@ -231,22 +231,32 @@ async def upload_image(
 
         logger.info(f'Image uploaded successfully: {file_id}')
 
-        # Create Media record if incident_id is provided
+        # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
+        parsed_incident_id = None
         if incident_id:
-            media = MediaORM(
-                id=media_uuid,
-                incident_id=uuid.UUID(incident_id),
-                file_path=str(file_path),
-                file_url=file_url,
-                mime_type=file.content_type or 'image/jpeg',
-                file_size=len(content),
-                media_type=MediaType.IMAGE,
-                meta_data={'original_filename': file.filename}
-            )
-            db.add(media)
-            db.commit()
-            db.refresh(media)
+            try:
+                parsed_incident_id = uuid.UUID(incident_id)
+            except ValueError as e:
+                logger.error(f'Invalid incident_id UUID format: {incident_id}')
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Invalid incident_id format. Expected UUID, got: {incident_id}'
+                )
+
+        media = MediaORM(
+            id=media_uuid,
+            incident_id=parsed_incident_id,
+            file_path=str(file_path),
+            file_url=file_url,
+            mime_type=file.content_type or 'image/jpeg',
+            file_size=len(content),
+            media_type=MediaType.IMAGE,
+            meta_data={'original_filename': file.filename}
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
 
         return JSONResponse(
             content={
@@ -299,9 +309,20 @@ async def upload_audio(
 
         # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
+        parsed_incident_id = None
+        if incident_id:
+            try:
+                parsed_incident_id = uuid.UUID(incident_id)
+            except ValueError as e:
+                logger.error(f'Invalid incident_id UUID format: {incident_id}')
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Invalid incident_id format. Expected UUID, got: {incident_id}'
+                )
+
         media = MediaORM(
             id=media_uuid,
-            incident_id=uuid.UUID(incident_id) if incident_id else None,
+            incident_id=parsed_incident_id,
             file_path=str(file_path),
             file_url=file_url,
             mime_type=file.content_type or 'audio/m4a',
@@ -396,9 +417,20 @@ async def upload_video(
 
         # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
+        parsed_incident_id = None
+        if incident_id:
+            try:
+                parsed_incident_id = uuid.UUID(incident_id)
+            except ValueError as e:
+                logger.error(f'Invalid incident_id UUID format: {incident_id}')
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Invalid incident_id format. Expected UUID, got: {incident_id}'
+                )
+
         media = MediaORM(
             id=media_uuid,
-            incident_id=uuid.UUID(incident_id) if incident_id else None,
+            incident_id=parsed_incident_id,
             file_path=str(file_path),
             file_url=file_url,
             mime_type=file.content_type or 'video/mp4',
