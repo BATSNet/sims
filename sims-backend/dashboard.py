@@ -289,9 +289,18 @@ async def render_map(incidents: List[Dict]):
     '''
     ui.run_javascript(load_script_js)
 
-    # Create leaflet map - responsive height
+    # Create leaflet map - responsive height with maxZoom for MarkerCluster
     # Default to Germany center, will be updated by geolocation
     m = ui.leaflet(center=(51.1657, 10.4515), zoom=11).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
+
+    # Set maxZoom on map for MarkerCluster compatibility
+    ui.run_javascript(f'''
+        (function() {{
+            var map = getElement({m.id}).map;
+            map.options.maxZoom = 19;
+            console.log('[SIMS] Set map maxZoom to 19');
+        }})();
+    ''')
 
     # Get user's current location and center map on it (50km view = zoom 11)
     geolocation_js = f'''
@@ -501,6 +510,15 @@ async def render_map(incidents: List[Dict]):
 
                 console.log('[SIMS] MarkerCluster library loaded, initializing cluster group');
 
+                // Ensure map has maxZoom set before creating cluster group
+                var map = getElement({m.id}).map;
+                if (!map.options.maxZoom) {{
+                    map.options.maxZoom = 19;
+                    console.log('[SIMS] Set map.options.maxZoom to 19 before cluster initialization');
+                }} else {{
+                    console.log('[SIMS] Map maxZoom already set to', map.options.maxZoom);
+                }}
+
                 // Create marker cluster group with custom options
                 var incidentClusterGroup = L.markerClusterGroup({{
                     showCoverageOnHover: true,
@@ -523,8 +541,7 @@ async def render_map(incidents: List[Dict]):
                 // Store reference globally so we can add markers to it
                 window.incidentClusterGroup = incidentClusterGroup;
 
-                // Add cluster group to map
-                var map = getElement({m.id}).map;
+                // Add cluster group to map (map variable already defined above)
                 incidentClusterGroup.addTo(map);
 
                 console.log('[SIMS] Cluster group initialized and added to map');
@@ -1349,6 +1366,12 @@ async def dashboard():
 
         // Function to add or update a marker
         function addOrUpdateMarker(incident) {{
+            // Initialize marker tracking if not exists
+            if (!window.incidentMarkers) {{
+                window.incidentMarkers = {{}};
+                console.log('[SIMS] Initialized window.incidentMarkers');
+            }}
+
             console.log('[SIMS] addOrUpdateMarker called with:', incident);
 
             // Handle different field name formats
@@ -1403,6 +1426,12 @@ async def dashboard():
 
         // Function to remove a marker
         function removeMarker(incidentId) {{
+            // Initialize marker tracking if not exists
+            if (!window.incidentMarkers) {{
+                window.incidentMarkers = {{}};
+                console.log('[SIMS] Initialized window.incidentMarkers in removeMarker');
+            }}
+
             const marker = window.incidentMarkers[incidentId];
             if (marker && window.incidentClusterGroup) {{
                 window.incidentClusterGroup.removeLayer(marker);
@@ -1477,12 +1506,35 @@ async def dashboard():
 
                         console.log('[SIMS WebSocket] Incident event:', message.type);
 
-                        // Update marker dynamically using Leaflet API
-                        if (message.incident) {{
-                            addOrUpdateMarker(message.incident);
-                        }}
+                        // Fetch fresh incident data and update map
+                        fetch('{API_BASE}/incident/?limit=100')
+                            .then(response => response.json())
+                            .then(incidents => {{
+                                console.log('[SIMS] Fetched', incidents.length, 'incidents, updating map');
 
-                        // Refresh table only (not map)
+                                // Clear all existing incident markers
+                                if (window.incidentClusterGroup) {{
+                                    window.incidentClusterGroup.clearLayers();
+                                    console.log('[SIMS] Cleared all incident markers');
+                                }}
+
+                                // Re-add markers for non-closed incidents
+                                let addedCount = 0;
+                                incidents.forEach(incident => {{
+                                    const status = incident.status || 'open';
+                                    if (status !== 'closed') {{
+                                        addOrUpdateMarker(incident);
+                                        addedCount++;
+                                    }}
+                                }});
+
+                                console.log('[SIMS] Re-added', addedCount, 'incident markers');
+                            }})
+                            .catch(error => {{
+                                console.error('[SIMS] Error fetching incidents:', error);
+                            }});
+
+                        // Refresh table
                         getElement({refresh_button.id}).click();
                     }}
                 }} catch (error) {{
