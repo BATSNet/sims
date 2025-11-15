@@ -13,8 +13,8 @@ API_BASE = "http://localhost:8000/api"
 
 def format_incident_for_dashboard(incident: Dict) -> Dict:
     """Transform API incident format to dashboard format"""
-    # Parse created_at timestamp
-    created_at = incident.get('created_at', datetime.now().isoformat())
+    # Parse createdAt timestamp (camelCase from API)
+    created_at = incident.get('createdAt', datetime.now().isoformat())
     if 'T' in created_at:
         timestamp = created_at.replace('T', ' ').split('.')[0]
     else:
@@ -30,24 +30,24 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
 
     # Get category and capitalize/format it
     category = incident.get('category', 'unclassified')
-    category_formatted = category.replace('_', ' ').title()
+    category_formatted = category.replace('_', ' ').title() if category else 'Unclassified'
 
-    # Get assigned organization info
+    # Get assigned organization info (camelCase from API)
     assigned_org = None
     is_auto_assigned = False
-    if incident.get('routed_to'):
+    if incident.get('routedTo'):
         assigned_org = {
-            'id': incident.get('routed_to'),
-            'name': incident.get('routed_to_name', 'Unknown')
+            'id': incident.get('routedTo'),
+            'name': incident.get('routedToName', 'Unknown')
         }
         # Check if it was auto-assigned
-        meta_data = incident.get('meta_data', {})
-        assignment_history = meta_data.get('assignment_history', [])
+        metadata = incident.get('metadata', {})
+        assignment_history = metadata.get('assignment_history', [])
         if assignment_history and assignment_history[-1].get('auto_assigned'):
             is_auto_assigned = True
 
     return {
-        'id': incident.get('incident_id', 'UNKNOWN'),
+        'id': incident.get('incidentId', 'UNKNOWN'),  # camelCase from API
         'timestamp': timestamp,
         'location': {
             'lat': lat,
@@ -60,7 +60,7 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'type': incident.get('category', 'general'),
         'category': category_formatted,
         'category_raw': category,
-        'reporter': incident.get('user_phone', 'Unknown'),
+        'reporter': incident.get('userPhone', 'Unknown'),  # camelCase from API
         'title': incident.get('title', 'Incident'),
         'assigned_org': assigned_org,
         'is_auto_assigned': is_auto_assigned

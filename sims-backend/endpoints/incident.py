@@ -50,9 +50,16 @@ async def create_incident(
     - Optional media links
     """
     try:
-        # Generate IDs
-        incident_uuid = uuid.uuid4()
-        incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
+        # Use app-generated ID if provided, otherwise generate
+        if incident_data.id:
+            incident_uuid = uuid.UUID(incident_data.id)
+            logger.info(f"Using app-generated incident ID: {incident_uuid}")
+        else:
+            incident_uuid = uuid.uuid4()
+            logger.info(f"Generated backend incident ID: {incident_uuid}")
+
+        # Generate formatted incident ID
+        incident_id = f"INC-{str(incident_uuid).replace('-', '')[:8].upper()}"
 
         logger.info(f"Creating incident {incident_id}")
 
@@ -86,12 +93,24 @@ async def create_incident(
         db.add(db_incident)
         db.flush()  # Get incident ID without committing
 
-        # Create chat session
-        session_id = create_chat_session(
-            db,
-            str(incident_uuid),
-            incident_data.user_phone
-        )
+        # Create chat session - use app-provided session_id if available
+        if incident_data.session_id:
+            session_id = incident_data.session_id
+            logger.info(f"Using app-generated session ID: {session_id}")
+            # Create session with app-provided ID
+            session_id = create_chat_session(
+                db,
+                str(incident_uuid),
+                incident_data.user_phone,
+                session_id=session_id
+            )
+        else:
+            logger.info(f"Generating backend session ID")
+            session_id = create_chat_session(
+                db,
+                str(incident_uuid),
+                incident_data.user_phone
+            )
 
         # Add initial message to chat history
         chat = ChatHistory(db, session_id)
@@ -531,11 +550,30 @@ async def list_incidents(
         if priority_filter:
             query = query.filter(IncidentORM.priority == priority_filter)
 
+        # Eager load media relationships
+        query = query.options(joinedload(IncidentORM.media))
+
         incidents = query.order_by(
             IncidentORM.created_at.desc()
         ).offset(skip).limit(limit).all()
 
-        return [IncidentResponse.from_orm(inc) for inc in incidents]
+        # Build response with media URLs
+        result = []
+        for inc in incidents:
+            image_url = None
+            audio_url = None
+
+            # Use eager-loaded media relationship
+            if hasattr(inc, 'media') and inc.media:
+                for media in inc.media:
+                    if media.media_type == 'image' and not image_url:
+                        image_url = media.file_url
+                    elif media.media_type == 'audio' and not audio_url:
+                        audio_url = media.file_url
+
+            result.append(IncidentResponse.from_orm(inc, image_url, audio_url))
+
+        return result
 
     except Exception as e:
         logger.error(f"Error listing incidents: {e}", exc_info=True)

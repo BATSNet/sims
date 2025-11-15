@@ -78,8 +78,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   FlashMode _flashMode = FlashMode.auto;
   final List<ChatMessage> _messages = [];
   bool _showTextInput = false;
-  String? _currentIncidentId;
+  String? _currentIncidentId; // Formatted ID (INC-xxx) for display
+  String? _currentIncidentUuid; // Database UUID for API calls
   bool _isProcessing = false;
+  bool _creatingIncident = false; // Flag to prevent concurrent incident creation
   late final String _sessionId; // Generate immediately on screen creation
 
   @override
@@ -146,7 +148,35 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   }
 
   Future<String?> _createIncident({String? description}) async {
+    // Prevent concurrent incident creation
+    if (_creatingIncident) {
+      debugPrint('Incident creation already in progress, waiting...');
+      // Wait for the current creation to complete
+      int attempts = 0;
+      while (_creatingIncident && attempts < 50) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+      // Return the existing incident ID if it was created
+      if (_currentIncidentUuid != null) {
+        debugPrint('Using existing incident: $_currentIncidentId (UUID: $_currentIncidentUuid)');
+        return _currentIncidentUuid;
+      }
+    }
+
+    // If incident already exists, return it
+    if (_currentIncidentUuid != null) {
+      debugPrint('Incident already exists: $_currentIncidentId (UUID: $_currentIncidentUuid)');
+      return _currentIncidentUuid;
+    }
+
     try {
+      _creatingIncident = true;
+
+      // APP generates the incident ID, not the backend!
+      _currentIncidentUuid = const Uuid().v4();
+      debugPrint('Creating new incident with app-generated ID: $_currentIncidentUuid');
+
       final location = await _locationService.getCurrentLocation();
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
@@ -170,6 +200,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         Uri.parse('${AppConfig.baseUrl}/api/incidents'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
+          'id': _currentIncidentUuid, // Send app-generated ID to backend
+          'session_id': _sessionId, // Session ID for the entire chat
           'title': DateTime.now().toString().substring(0, 16),
           'description': incidentDescription,
           'latitude': location?.latitude,
@@ -181,18 +213,30 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       );
 
       debugPrint('Create incident response: ${response.statusCode}');
+      debugPrint('Create incident response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        debugPrint('Incident created: ${data['id']}');
-        return data['id'];
+        debugPrint('Incident data: $data');
+
+        // Backend should echo back our ID and the formatted ID
+        _currentIncidentId = data['incidentId'] ?? _currentIncidentUuid;
+
+        debugPrint('Incident created successfully: $_currentIncidentId (UUID: $_currentIncidentUuid, Session: $_sessionId)');
+
+        // Return the UUID for internal use
+        return _currentIncidentUuid;
       } else {
         debugPrint('Failed to create incident: ${response.body}');
+        _currentIncidentUuid = null; // Reset on failure
         return null;
       }
     } catch (e) {
       debugPrint('Error creating incident: $e');
+      _currentIncidentUuid = null; // Reset on failure
       return null;
+    } finally {
+      _creatingIncident = false;
     }
   }
 
@@ -209,9 +253,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       }
     }
 
-    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+    // Use session ID for all chat messages, not a new UUID per message
     final message = ChatMessage(
-      id: messageId,
+      id: _sessionId,
       type: MessageType.text,
       text: text,
       timestamp: DateTime.now(),
@@ -311,9 +355,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       }
     }
 
-    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+    // Use session ID for all chat messages, not a new UUID per message
     final message = ChatMessage(
-      id: messageId,
+      id: _sessionId,
       type: type,
       localFile: file,
       timestamp: DateTime.now(),
@@ -328,22 +372,22 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     _scrollToBottom();
 
     // Upload in background (non-blocking)
-    _uploadMediaInBackground(file, type, messageId);
+    _uploadMediaInBackground(file, type, _sessionId);
   }
 
   Future<void> _uploadMediaInBackground(File file, MessageType type, String messageId) async {
     try {
-      // Upload based on type with incident_id
+      // Upload based on type with incident UUID (not formatted ID)
       final UploadResult result;
       switch (type) {
         case MessageType.image:
-          result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
+          result = await _uploadService.uploadImage(file, incidentId: _currentIncidentUuid);
           break;
         case MessageType.audio:
-          result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
+          result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentUuid);
           break;
         case MessageType.video:
-          result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
+          result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentUuid);
           break;
         default:
           result = UploadResult(success: false, error: 'Unknown message type');
