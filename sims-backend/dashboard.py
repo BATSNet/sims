@@ -220,6 +220,13 @@ def format_coordinates(lat: float, lon: float) -> str:
 
 async def render_map(incidents: List[Dict]):
     """Render the incident map with markers"""
+    # Add MarkerCluster CSS and JS
+    ui.add_head_html('''
+        <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+        <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    ''')
+
     # Create leaflet map - responsive height
     m = ui.leaflet(center=(51.1657, 10.4515), zoom=6).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
 
@@ -234,13 +241,136 @@ async def render_map(incidents: List[Dict]):
         }
     )
 
-    # Priority colors
+    # Organization type icons (all gray)
+    org_icons = {
+        'military': {'icon': '&#9733;', 'color': '#808080', 'name': 'Military'},
+        'police': {'icon': '&#128110;', 'color': '#808080', 'name': 'Police'},
+        'fire': {'icon': '&#128293;', 'color': '#808080', 'name': 'Fire'},
+        'medical': {'icon': '&#10010;', 'color': '#808080', 'name': 'Medical'},
+        'civil_defense': {'icon': '&#9888;', 'color': '#808080', 'name': 'Civil Defense'},
+        'government': {'icon': '&#127970;', 'color': '#808080', 'name': 'Government'},
+        'other': {'icon': '&#9679;', 'color': '#808080', 'name': 'Other'}
+    }
+
+    # Priority colors for incidents
     colors = {
         'critical': '#FF4444',
         'high': '#ffa600',
         'medium': '#63ABFF',
         'low': 'rgba(255, 255, 255, 0.4)'
     }
+
+    # Load and add organization markers first (so they appear under incidents)
+    organizations = await load_organizations()
+    for org in organizations:
+        lat = org.get('latitude')
+        lon = org.get('longitude')
+
+        # Skip organizations without location
+        if lat is None or lon is None:
+            continue
+
+        org_type = org.get('type', 'other')
+        icon_config = org_icons.get(org_type, org_icons['other'])
+
+        # Escape strings for JavaScript
+        org_name = org.get('name', 'Unknown').replace("'", "\\'")
+        org_short = org.get('short_name', '').replace("'", "\\'")
+        org_type_display = icon_config['name']
+        org_phone = org.get('phone', 'N/A').replace("'", "\\'")
+        org_emergency = org.get('emergency_phone', 'N/A').replace("'", "\\'")
+        org_contact = org.get('contact_person', 'N/A').replace("'", "\\'")
+        org_city = org.get('city', 'N/A').replace("'", "\\'")
+        org_address = org.get('address', 'N/A').replace("'", "\\'")
+        org_capabilities = ', '.join(org.get('capabilities', [])) if org.get('capabilities') else 'None specified'
+        org_capabilities = org_capabilities.replace("'", "\\'")
+        org_response_area = org.get('response_area', 'Not specified').replace("'", "\\'")
+
+        # Create organization marker with icon
+        js_code = f'''
+            (function() {{
+                var icon = L.divIcon({{
+                    html: '<div style="background: {icon_config["color"]}; width: 16px; height: 16px; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; box-shadow: 0 0 8px {icon_config["color"]}; cursor: pointer;">{icon_config["icon"]}</div>',
+                    className: 'custom-org-marker',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                }});
+
+                var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
+
+                var popupContent = `
+                    <div style="min-width: 250px; padding: 4px;">
+                        <div style="font-size: 14px; font-weight: 600; color: white; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 6px;">
+                            {org_name}
+                        </div>
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 11px;">
+                            <div style="color: #9CA3AF; font-weight: 500;">Type:</div>
+                            <div style="color: white;">{org_type_display}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">City:</div>
+                            <div style="color: white;">{org_city}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Contact:</div>
+                            <div style="color: white;">{org_contact}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Phone:</div>
+                            <div style="color: white;">{org_phone}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Emergency:</div>
+                            <div style="color: white;">{org_emergency}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Address:</div>
+                            <div style="color: white;">{org_address}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Capabilities:</div>
+                            <div style="color: white;">{org_capabilities}</div>
+
+                            <div style="color: #9CA3AF; font-weight: 500;">Response Area:</div>
+                            <div style="color: white;">{org_response_area}</div>
+                        </div>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent, {{
+                    className: 'custom-org-popup',
+                    maxWidth: 350
+                }});
+                marker.addTo(getElement({m.id}).map);
+            }})();
+        '''
+
+        ui.run_javascript(js_code)
+
+    # Create marker cluster group for incidents with custom styling
+    cluster_init_js = f'''
+        (function() {{
+            // Create marker cluster group with custom options
+            var incidentClusterGroup = L.markerClusterGroup({{
+                showCoverageOnHover: true,
+                zoomToBoundsOnClick: true,
+                spiderfyOnMaxZoom: true,
+                removeOutsideVisibleBounds: true,
+                maxClusterRadius: 60,
+                iconCreateFunction: function(cluster) {{
+                    var count = cluster.getChildCount();
+                    var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
+
+                    return L.divIcon({{
+                        html: '<div style="background: rgba(255, 68, 68, 0.8); width: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; height: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; border: 3px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ' + (size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px') + '; color: white; font-weight: bold; box-shadow: 0 0 10px rgba(255, 68, 68, 0.6); cursor: pointer;"><span>' + count + '</span></div>',
+                        className: 'custom-cluster-icon',
+                        iconSize: L.point(size === 'small' ? 30 : size === 'medium' ? 40 : 50, size === 'small' ? 30 : size === 'medium' ? 40 : 50)
+                    }});
+                }}
+            }});
+
+            // Store reference globally so we can add markers to it
+            window.incidentClusterGroup = incidentClusterGroup;
+
+            // Add cluster group to map
+            incidentClusterGroup.addTo(getElement({m.id}).map);
+        }})();
+    '''
+    ui.run_javascript(cluster_init_js)
 
     # Add custom square markers for each incident using JavaScript
     for incident in incidents:
@@ -340,6 +470,7 @@ async def render_map(incidents: List[Dict]):
         marker_button_id = marker_button.id
 
         # Create marker with custom icon and popup with clickable button using JavaScript
+        # Add to cluster group instead of directly to map
         js_code = f'''
             (function() {{
                 var markerColor = "{color}";
@@ -368,7 +499,14 @@ async def render_map(incidents: List[Dict]):
                 marker.bindPopup(popupContent, {{
                     className: 'custom-popup-{priority}'
                 }});
-                marker.addTo(getElement({m.id}).map);
+
+                // Add marker to cluster group instead of directly to map
+                if (window.incidentClusterGroup) {{
+                    window.incidentClusterGroup.addLayer(marker);
+                }} else {{
+                    // Fallback to adding directly to map if cluster group not available
+                    marker.addTo(getElement({m.id}).map);
+                }}
             }})();
         '''
 
