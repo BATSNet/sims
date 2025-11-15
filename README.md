@@ -116,8 +116,8 @@ flutter build apk
 sims-bw/
 ├── sims-backend/       # Python backend (FastAPI, NiceGUI)
 ├── sims-app/          # Flutter mobile application
-├── research/          # API documentation and research notes
-├── docker/            # Docker configuration files
+├── documents/         # Implementation guides and specifications
+├── postgis/           # Database initialization scripts
 ├── docker-compose.yml # Multi-container orchestration
 ├── CLAUDE.md          # Development guidelines for Claude Code
 └── README.md          # This file
@@ -156,9 +156,28 @@ JSON schema standardized against SEDAP.Express format for BMS compatibility.
 
 ## External Integrations
 
-- **SEDAP.Express**: CSV over REST API for BMS integration
+### SEDAP.Express (BMS Integration)
+
+Automatically forwards classified incidents to Battle Management Systems via SEDAP-Express REST API.
+
+**Configuration (.env):**
+```bash
+SEDAP_API_URL=http://<BMS_IP>:<PORT>/SEDAPEXPRESS
+SEDAP_SENDER_ID=SIMS
+SEDAP_CLASSIFICATION=U  # P=public, U=unclassified, R=restricted, C=confidential, S=secret, T=top secret
+```
+
+Organizations with `api_enabled=true` and `api_type='SEDAP'` will receive forwarded incidents as CONTACT and TEXT messages.
+
+See `documents/SEDAP_DEMO_GUIDE.md` for detailed setup and testing instructions.
+
+### AI Services
+
 - **FeatherAI**: Text summarization, classification, object description
 - **DeepInfra**: Automatic speech recognition
+
+### Future Integrations
+
 - **Katwarn**: To be evaluated
 
 ## Security Considerations

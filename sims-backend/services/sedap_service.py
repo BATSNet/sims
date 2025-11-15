@@ -47,16 +47,18 @@ class SEDAPService:
         classification: str
     ) -> str:
         """
-        Format incident as SEDAP CONTACT message.
+        Format incident as SEDAP CONTACT message per ICD v1.0 specification.
 
         CONTACT message format (CSV with semicolons):
-        CONTACT;<counter>;<timestamp>;<msg_id>;<classification>;<ack>;<mac>;<persistent>;
-        <latitude>;<longitude>;<altitude>;<speed>;<course>;<name>;<source>;<sidc>;
-        <image>;<comment>
+        CONTACT;<Number>;<Time>;<Sender>;<Classification>;<Acknowledgement>;<MAC>;
+        <ContactID>;<DeleteFlag>;<Latitude>;<Longitude>;<Altitude>;
+        <relX>;<relY>;<relZ>;<Speed>;<Course>;
+        <Heading>;<Roll>;<Pitch>;<Width>;<Length>;<Height>;
+        <Name>;<Source>;<SIDC>;<MMSI>;<ICAO>;<Image>;<Comment>
         """
         counter = SEDAPService._get_next_counter("CONTACT")
         timestamp = SEDAPService._get_timestamp()
-        msg_id = format(hash(incident.get('incident_id', '')) & 0xFFFF, 'X')
+        contact_id = format(hash(incident.get('incident_id', '')) & 0xFFFF, 'X')
 
         # Extract location data
         lat = incident.get('latitude', 0.0)
@@ -66,39 +68,39 @@ class SEDAPService:
         # Contact metadata
         name = incident.get('title', 'Unknown Incident')
         comment = incident.get('description', '')
-        category = incident.get('category', 'Unclassified')
 
-        # Build CONTACT message
+        # Build CONTACT message per spec
         parts = [
             "CONTACT",
-            counter,
-            timestamp,
-            msg_id,
-            classification,
-            "FALSE",  # acknowledgement
-            "",       # MAC
-            "100",    # persistent (seconds)
-            "FALSE",  # static
-            str(lat),
-            str(lon),
-            "0",      # altitude
-            "",       # speed
-            str(heading),
-            "",       # heading rate
-            "",       # climb
-            "",       # location error
-            "",       # altitude error
-            "",       # roll
-            "",       # pitch
-            "",       # yaw
-            name,
-            sender_id,
-            "",       # SIDC code
-            "",       # base64 image
-            "",       # affiliation
-            "",       # uniqueDesignation
-            "",       # additionalInformation
-            comment
+            counter,              # Number (7-bit counter)
+            timestamp,            # Time (64-bit Unix timestamp in hex)
+            sender_id,            # Sender ID
+            classification,       # Classification (U, R, C, S, T)
+            "FALSE",              # Acknowledgement
+            "",                   # MAC (Message Authentication Code)
+            contact_id,           # ContactID (mandatory)
+            "FALSE",              # DeleteFlag (FALSE=current, TRUE=remove)
+            str(lat),             # Latitude in decimal degrees
+            str(lon),             # Longitude in decimal degrees
+            "0",                  # Altitude in meters
+            "",                   # Relative X-Distance (empty = using absolute coords)
+            "",                   # Relative Y-Distance
+            "",                   # Relative Z-Distance
+            "",                   # Speed over ground in m/s
+            "",                   # Course over ground in degrees
+            str(heading) if heading else "",  # Heading in degrees
+            "",                   # Roll in degrees
+            "",                   # Pitch in degrees
+            "",                   # Width in meters
+            "",                   # Length in meters
+            "",                   # Height in meters
+            name,                 # Name of contact
+            "M",                  # Source (M=Manual, R=Radar, O=Optical, etc.)
+            "",                   # SIDC code
+            "",                   # MMSI (Maritime Mobile Service Identity)
+            "",                   # ICAO (aviation identifier)
+            "",                   # Image (BASE64 encoded JPG/PNG)
+            comment               # Comment (free text)
         ]
 
         return ";".join(parts)
@@ -111,29 +113,27 @@ class SEDAPService:
         alert_type: str = "01"  # 01=Alert, 02=Warning, 03=Notice, 04=Chat
     ) -> str:
         """
-        Format text as SEDAP TEXT message.
+        Format text as SEDAP TEXT message per ICD v1.0 specification.
 
         TEXT message format:
-        TEXT;<counter>;<timestamp>;<msg_id>;<classification>;<ack>;<mac>;<persistent>;
-        <alertType>;<sender>;<text>;<timeToLive>
+        TEXT;<Number>;<Time>;<Sender>;<Classification>;<Acknowledgement>;<MAC>;
+        <Recipient>;<Type>;<Encoding>;<Text>
         """
         counter = SEDAPService._get_next_counter("TEXT")
         timestamp = SEDAPService._get_timestamp()
-        msg_id = format(int(time.time()) & 0xFFFF, 'X')
 
         parts = [
             "TEXT",
-            counter,
-            timestamp,
-            msg_id,
-            classification,
-            "TRUE",      # acknowledgement
-            "",          # MAC
-            "",          # persistent
-            alert_type,
-            "NONE",      # sender (NONE = use message sender)
-            f'"{message}"',  # quoted message text
-            "1000"       # time to live (seconds)
+            counter,              # Number (7-bit counter)
+            timestamp,            # Time (64-bit Unix timestamp in hex)
+            sender_id,            # Sender ID
+            classification,       # Classification (U, R, C, S, T)
+            "FALSE",              # Acknowledgement
+            "",                   # MAC (Message Authentication Code)
+            "",                   # Recipient (empty = broadcast)
+            alert_type,           # Type (01=Alert, 02=Warning, 03=Notice, 04=Chat)
+            "NONE",               # Encoding (NONE=not encoded, BASE64=encoded)
+            f'"{message}"'        # Text (quoted if contains special chars)
         ]
 
         return ";".join(parts)
