@@ -146,8 +146,7 @@ async def organizations_page():
                     location_map = ui.leaflet(center=(default_lat, default_lon), zoom=12).classes('h-64 w-full')
 
                     # Add marker at current position
-                    marker = location_map.marker(latlng=(default_lat, default_lon))
-                    marker.draggable = True
+                    marker = location_map.marker(latlng=(default_lat, default_lon), draggable=True)
 
                     # Update inputs when marker is dragged
                     def on_marker_move(e):

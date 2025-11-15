@@ -37,7 +37,7 @@ class IncidentORM(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id = Column(String(50), unique=True, nullable=False)
-    user_phone = Column(String(13))
+    user_phone = Column(String(20))
 
     # Location data
     location = Column(Geometry('POINT', srid=4326))
