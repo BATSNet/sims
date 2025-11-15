@@ -114,19 +114,18 @@ class ChatHistory:
             additional_kwargs: Optional metadata
         """
         try:
+            from models.chat_model import ChatMessageORM
             message = ChatMessage(role, content, additional_kwargs)
-            message_json = json.dumps(message.to_dict())
+            message_dict = message.to_dict()
 
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                INSERT INTO chat_message (session_id, message)
-                VALUES (%s, %s::jsonb)
-                """,
-                (self.session_id, message_json)
+            # Create ORM object
+            chat_message = ChatMessageORM(
+                session_id=self.session_id,
+                message=message_dict
             )
+
+            self.db.add(chat_message)
             self.db.commit()
-            cursor.close()
 
             logger.info(f"Added {role} message to session {self.session_id}")
 

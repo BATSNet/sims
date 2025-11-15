@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from geoalchemy2.elements import WKTElement
 
 from db.connection import get_db
@@ -23,8 +23,11 @@ from models.incident_model import (
 from models.chat_model import ChatSessionORM
 from models.media_model import MediaORM
 from services.chat_history import ChatHistory, create_chat_session, get_session_by_incident
+from services.classification_service import get_classifier
+from services.assignment_service import get_assignment_service
 from websocket import websocket_manager
 from pydantic import BaseModel
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +123,98 @@ async def create_incident(
             )
             db.add(media)
             audio_url = incident_data.audioUrl
+
+        # Auto-classify incident using LLM
+        try:
+            logger.info(f"Classifying incident {incident_id}")
+            classifier = get_classifier()
+
+            # Get transcription from audio media if available
+            transcription = None
+            if incident_data.audioUrl:
+                audio_media = db.query(MediaORM).filter(
+                    MediaORM.incident_id == incident_uuid,
+                    MediaORM.media_type == 'audio'
+                ).first()
+                if audio_media and hasattr(audio_media, 'transcription'):
+                    transcription = audio_media.transcription
+
+            # Classify the incident
+            classification = await classifier.classify_incident(
+                description=incident_data.description,
+                transcription=transcription,
+                latitude=incident_data.latitude,
+                longitude=incident_data.longitude,
+                heading=incident_data.heading
+            )
+
+            # Update incident with classification results
+            db_incident.category = classification.category
+            db_incident.priority = classification.priority
+            db_incident.tags = classification.tags
+
+            # Store classification details in metadata
+            if not db_incident.meta_data:
+                db_incident.meta_data = {}
+            db_incident.meta_data['classification'] = classification.to_dict()
+            db_incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
+
+            logger.info(
+                f"Incident {incident_id} classified as '{classification.category}' "
+                f"with priority '{classification.priority}' (confidence: {classification.confidence:.2f})"
+            )
+
+            # Auto-assign to organization if confidence is high enough
+            if Config.AUTO_ASSIGN_ENABLED and classification.confidence >= Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:
+                logger.info(f"Auto-assigning incident {incident_id} (confidence threshold met)")
+                assignment_service = get_assignment_service()
+
+                assignment = await assignment_service.assign_incident(
+                    incident=db_incident,
+                    classification=classification,
+                    db=db
+                )
+
+                if assignment.organization_id:
+                    # Assign incident to organization
+                    db_incident.routed_to = assignment.organization_id
+                    db_incident.status = 'in_progress'
+
+                    # Store assignment details in metadata
+                    if 'assignment_history' not in db_incident.meta_data:
+                        db_incident.meta_data['assignment_history'] = []
+
+                    db_incident.meta_data['assignment_history'].append({
+                        'organization_id': assignment.organization_id,
+                        'organization_name': assignment.organization_name,
+                        'assigned_at': datetime.utcnow().isoformat(),
+                        'assigned_by': 'auto_assignment',
+                        'auto_assigned': True,
+                        'confidence': assignment.confidence,
+                        'reasoning': assignment.reasoning
+                    })
+
+                    logger.info(
+                        f"Incident {incident_id} auto-assigned to {assignment.organization_name} "
+                        f"(confidence: {assignment.confidence:.2f})"
+                    )
+                else:
+                    logger.warning(
+                        f"Could not auto-assign incident {incident_id}: {assignment.reasoning}"
+                    )
+            else:
+                if not Config.AUTO_ASSIGN_ENABLED:
+                    logger.info(f"Auto-assignment disabled, skipping for incident {incident_id}")
+                else:
+                    logger.info(
+                        f"Incident {incident_id} confidence {classification.confidence:.2f} "
+                        f"below threshold {Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:.2f}, skipping auto-assignment"
+                    )
+
+        except Exception as classify_error:
+            logger.error(f"Classification/assignment failed for {incident_id}: {classify_error}", exc_info=True)
+            # Continue with incident creation even if classification fails
+            db_incident.meta_data['classification_error'] = str(classify_error)
 
         db.commit()
 
@@ -346,7 +441,9 @@ async def list_incidents(
 ):
     """List all incidents with optional filtering"""
     try:
-        query = db.query(IncidentORM)
+        query = db.query(IncidentORM).options(
+            joinedload(IncidentORM.organization)
+        )
 
         if status_filter:
             query = query.filter(IncidentORM.status == status_filter)
@@ -450,4 +547,76 @@ async def assign_incident(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign incident: {str(e)}"
+        )
+
+
+@incident_router.delete("/{incident_id}/assignment", response_model=IncidentResponse)
+async def unassign_incident(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """Remove organization assignment from an incident"""
+    try:
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Store unassignment in history
+        if incident.routed_to:
+            from models.organization_model import OrganizationORM
+            org = db.query(OrganizationORM).filter(
+                OrganizationORM.id == incident.routed_to
+            ).first()
+
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'assignment_history' not in incident.meta_data:
+                incident.meta_data['assignment_history'] = []
+
+            incident.meta_data['assignment_history'].append({
+                'organization_id': incident.routed_to,
+                'organization_name': org.name if org else 'Unknown',
+                'unassigned_at': datetime.utcnow().isoformat(),
+                'action': 'unassigned'
+            })
+
+        # Remove assignment
+        incident.routed_to = None
+        incident.status = 'open'
+        incident.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(incident)
+
+        logger.info(f"Unassigned organization from incident {incident_id}")
+
+        # Prepare response
+        response = IncidentResponse.from_orm(incident)
+
+        # Broadcast unassignment via WebSocket
+        try:
+            await websocket_manager.broadcast_incident(
+                incident_data=response.dict(),
+                event_type='incident_unassigned'
+            )
+            logger.info(f"Broadcasted incident unassignment {incident_id} via WebSocket")
+        except Exception as ws_error:
+            logger.error(f"Failed to broadcast incident unassignment via WebSocket: {ws_error}")
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error unassigning incident: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unassign incident: {str(e)}"
         )

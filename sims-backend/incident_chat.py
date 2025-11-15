@@ -105,9 +105,9 @@ class SimpleIncidentChat:
         if not self.session_id:
             # Show welcome message
             with self.chat_container:
-                with ui.row().classes('w-full justify-center mb-4'):
-                    with ui.card().classes('bg-gray-800 text-center'):
-                        ui.label('Describe what happened').classes('text-sm text-gray-300')
+                with ui.row().classes('w-full justify-center mb-3 sm:mb-4'):
+                    with ui.card().classes('bg-gray-800 text-center p-3 sm:p-4'):
+                        ui.label('Describe what happened').classes('text-xs sm:text-sm text-gray-300')
             return
 
         # Load all messages from database
@@ -121,13 +121,13 @@ class SimpleIncidentChat:
                     content = msg.get('content', '')
 
                     if role == 'user':
-                        with ui.row().classes('w-full justify-end mb-3'):
-                            with ui.card().classes('bg-blue-500 text-white'):
-                                ui.label(content).classes('text-sm')
+                        with ui.row().classes('w-full justify-end mb-2 sm:mb-3 px-2 sm:px-0'):
+                            with ui.card().classes('bg-blue-500 text-white max-w-[85%] sm:max-w-[75%] p-2 sm:p-3'):
+                                ui.label(content).classes('text-xs sm:text-sm break-words')
                     else:
-                        with ui.row().classes('w-full justify-start mb-3'):
-                            with ui.card().classes('bg-gray-700 text-white'):
-                                ui.label(content).classes('text-sm')
+                        with ui.row().classes('w-full justify-start mb-2 sm:mb-3 px-2 sm:px-0'):
+                            with ui.card().classes('bg-gray-700 text-white max-w-[85%] sm:max-w-[75%] p-2 sm:p-3'):
+                                ui.label(content).classes('text-xs sm:text-sm break-words')
         except Exception as e:
             print(f"Error refreshing chat: {e}")
 
@@ -194,21 +194,21 @@ async def render_simple_chat(db: Session):
 
     # Main container
     with ui.column().classes('w-full h-screen bg-gray-900'):
-        # Header
-        with ui.row().classes('w-full p-4 bg-gray-800 border-b border-gray-700'):
-            ui.label('Incident Report').classes('text-lg font-bold text-white')
+        # Header - responsive padding and text
+        with ui.row().classes('w-full p-3 sm:p-4 bg-gray-800 border-b border-gray-700 items-center'):
+            ui.label('Incident Report').classes('text-base sm:text-lg font-bold text-white')
             if location:
-                ui.label(f'📍 {location["lat"]:.4f}, {location["lon"]:.4f}').classes('text-xs text-gray-400 ml-auto')
+                ui.label(f'📍 {location["lat"]:.4f}, {location["lon"]:.4f}').classes('text-xs text-gray-400 ml-auto hidden sm:block')
 
-        # Messages container
-        chat_container = ui.column().classes('w-full flex-1 overflow-y-auto p-4 chat-container')
+        # Messages container - responsive padding
+        chat_container = ui.column().classes('w-full flex-1 overflow-y-auto p-2 sm:p-4 chat-container')
 
-        # Input area
-        with ui.row().classes('w-full p-4 bg-gray-800 border-t border-gray-700 gap-2'):
+        # Input area - responsive layout
+        with ui.row().classes('w-full p-2 sm:p-4 bg-gray-800 border-t border-gray-700 gap-2'):
             user_input = ui.input(placeholder='Type your message...').classes(
-                'flex-1 bg-gray-700 text-white border-gray-600'
+                'flex-1 bg-gray-700 text-white border-gray-600 text-sm sm:text-base'
             )
-            send_btn = ui.button('Send').classes('bg-blue-600 text-white')
+            send_btn = ui.button('Send').classes('bg-blue-600 text-white text-xs sm:text-sm px-3 sm:px-4')
 
             # Create chat instance
             chat_instance = SimpleIncidentChat(chat_container, user_input, db)
