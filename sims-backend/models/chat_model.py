@@ -7,10 +7,9 @@ import uuid
 
 from sqlalchemy import Column, BigInteger, TIMESTAMP, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class ChatSessionORM(Base):
@@ -20,7 +19,7 @@ class ChatSessionORM(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     session_id = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
     incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=False)
-    user_phone = Column(String(13))
+    user_phone = Column(String(20))
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     last_modified = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     summary = Column(String, nullable=True)

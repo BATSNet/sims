@@ -306,43 +306,73 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     _scrollToBottom();
 
-    // Upload based on type with incident_id
-    final UploadResult result;
-    switch (type) {
-      case MessageType.image:
-        result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
-        break;
-      case MessageType.audio:
-        result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
-        break;
-      case MessageType.video:
-        result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
-        break;
-      default:
-        result = UploadResult(success: false, error: 'Unknown message type');
-    }
+    // Upload in background (non-blocking)
+    _uploadMediaInBackground(file, type, messageId);
+  }
 
-    if (result.success && mounted) {
-      final index = _messages.indexWhere((m) => m.id == messageId);
-      if (index != -1) {
-        setState(() {
-          _messages[index] = message.copyWith(
-            isUploading: false,
-            mediaUrl: result.url,
-          );
-        });
+  Future<void> _uploadMediaInBackground(File file, MessageType type, String messageId) async {
+    try {
+      // Upload based on type with incident_id
+      final UploadResult result;
+      switch (type) {
+        case MessageType.image:
+          result = await _uploadService.uploadImage(file, incidentId: _currentIncidentId);
+          break;
+        case MessageType.audio:
+          result = await _uploadService.uploadAudio(file, incidentId: _currentIncidentId);
+          break;
+        case MessageType.video:
+          result = await _uploadService.uploadVideo(file, incidentId: _currentIncidentId);
+          break;
+        default:
+          result = UploadResult(success: false, error: 'Unknown message type');
       }
-    } else if (mounted) {
-      final index = _messages.indexWhere((m) => m.id == messageId);
-      if (index != -1) {
-        setState(() {
-          _messages[index] = message.copyWith(
-            isUploading: false,
-            failed: true,
-          );
-        });
+
+      if (result.success && mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              mediaUrl: result.url,
+            );
+          });
+
+          // Delete local file after successful upload to save storage
+          try {
+            if (_messages[index].localFile != null && await _messages[index].localFile!.exists()) {
+              await _messages[index].localFile!.delete();
+              debugPrint('Deleted local file after upload: ${_messages[index].localFile!.path}');
+            }
+          } catch (e) {
+            debugPrint('Error deleting local file: $e');
+          }
+        }
+      } else if (mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              failed: true,
+            );
+          });
+        }
+        _showError('Failed to upload ${type.name}');
       }
-      _showError('Failed to upload ${type.name}');
+    } catch (e) {
+      debugPrint('Error uploading media: $e');
+      if (mounted) {
+        final index = _messages.indexWhere((m) => m.id == messageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              isUploading: false,
+              failed: true,
+            );
+          });
+        }
+      }
     }
   }
 
