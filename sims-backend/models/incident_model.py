@@ -8,12 +8,11 @@ import uuid
 
 from sqlalchemy import Column, String, Float, TIMESTAMP, ARRAY, Text, BigInteger, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel, Field
 from geoalchemy2 import Geometry
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class IncidentStatus(str, Enum):
@@ -66,9 +65,8 @@ class IncidentORM(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    chat_sessions = relationship("ChatSessionORM", back_populates="incident", cascade="all, delete-orphan")
-    media_files = relationship("MediaORM", back_populates="incident", cascade="all, delete-orphan")
+    # Relationships will be configured after all models are loaded
+    # See models/__init__.py for relationship configuration
 
 
 # Pydantic models for API
@@ -130,6 +128,9 @@ class IncidentResponse(BaseModel):
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
+    routed_to: Optional[int] = None
+    routed_to_name: Optional[str] = None
+    user_phone: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -152,6 +153,15 @@ class IncidentResponse(BaseModel):
     @classmethod
     def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None):
         """Create response from ORM model"""
+        # Get organization name if assigned
+        routed_to_name = None
+        if incident.routed_to and hasattr(incident, 'organization'):
+            try:
+                if incident.organization:
+                    routed_to_name = incident.organization.short_name or incident.organization.name
+            except Exception:
+                pass  # Organization relationship not loaded
+
         return cls(
             id=str(incident.id),
             incident_id=incident.incident_id,
@@ -168,5 +178,8 @@ class IncidentResponse(BaseModel):
             audioUrl=audio_url,
             category=incident.category,
             tags=incident.tags or [],
-            metadata=incident.meta_data or {}
+            metadata=incident.meta_data or {},
+            routed_to=incident.routed_to,
+            routed_to_name=routed_to_name,
+            user_phone=incident.user_phone
         )

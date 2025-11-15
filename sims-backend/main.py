@@ -16,11 +16,20 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from dashboard import dashboard
 from incident_chat import incident_page
+from organizations import organizations_page
 from transcription_service import TranscriptionService
 from endpoints.incident import incident_router
+from endpoints.organization import organization_router
 from db.connection import get_db
+# Import all models to ensure SQLAlchemy relationships are resolved
+import models
 from models.incident_model import IncidentCreate
 from websocket import websocket_manager
+from services.schedule_summarization import (
+    start_summarization_service,
+    stop_summarization_service,
+    get_summarization_service
+)
 import theme
 
 # Configure logging
@@ -47,8 +56,32 @@ app.add_static_files('/static/uploads', str(UPLOAD_PATH))
 # Initialize transcription service
 transcription_service = TranscriptionService()
 
-# Register incident router
+# Register routers
 app.include_router(incident_router)
+app.include_router(organization_router)
+
+
+# Startup and shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup"""
+    try:
+        logger.info("Starting summarization service...")
+        await start_summarization_service()
+        logger.info("Summarization service started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start summarization service: {e}", exc_info=True)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup services on application shutdown"""
+    try:
+        logger.info("Stopping summarization service...")
+        await stop_summarization_service()
+        logger.info("Summarization service stopped successfully")
+    except Exception as e:
+        logger.error(f"Error stopping summarization service: {e}", exc_info=True)
 
 
 @app.websocket("/ws/incidents")
@@ -147,6 +180,13 @@ async def incident():
     await incident_page()
 
 
+@ui.page('/organizations')
+async def organizations():
+    """Organization management page"""
+    async with theme.frame('Organizations'):
+        await organizations_page()
+
+
 @ui.page('/health')
 def health():
     """Health check endpoint"""
@@ -202,9 +242,14 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 @app.post('/api/upload/audio')
-async def upload_audio(file: UploadFile = File(...)):
-    """Upload an audio file and optionally transcribe it"""
+async def upload_audio(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload an audio file and queue it for transcription"""
     try:
+        from models.media_model import MediaORM, MediaType
+
         allowed_extensions = {'.m4a', '.mp3', '.wav', '.ogg', '.aac'}
         file_ext = Path(file.filename).suffix.lower()
 
@@ -216,35 +261,57 @@ async def upload_audio(file: UploadFile = File(...)):
 
         file_id = f'{uuid.uuid4()}{file_ext}'
         file_path = AUDIO_DIR / file_id
+        content = await file.read()
 
         with open(file_path, 'wb') as f:
-            content = await file.read()
             f.write(content)
 
         file_url = f'/static/uploads/audio/{file_id}'
 
         logger.info(f'Audio uploaded successfully: {file_id}')
 
-        transcription_text = None
+        # Create orphaned Media record (will be linked to incident later)
+        media_uuid = uuid.uuid4()
+        media = MediaORM(
+            id=media_uuid,
+            incident_id=None,  # Will be set when incident is created
+            file_path=str(file_path),
+            file_url=file_url,
+            mime_type=file.content_type or 'audio/m4a',
+            file_size=len(content),
+            media_type=MediaType.AUDIO,
+            transcription=None,  # Will be filled by batch processor
+            meta_data={'original_filename': file.filename}
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        # Queue for batch transcription
         try:
-            transcription_text = await transcription_service.transcribe_and_get_text(
-                str(file_path)
+            summarization_service = get_summarization_service()
+            await summarization_service.queue_audio_transcription(
+                media_id=str(media_uuid),
+                file_path=str(file_path),
+                db_session=db
             )
-            if transcription_text:
-                logger.info(f'Transcription completed: {transcription_text[:100]}...')
+            logger.info(f'Audio {file_id} queued for transcription')
+            transcription_status = 'pending'
         except Exception as e:
-            logger.error(f'Transcription failed: {e}')
+            logger.error(f'Failed to queue transcription: {e}')
+            transcription_status = 'failed'
 
         return JSONResponse(
             content={
                 'success': True,
+                'media_id': str(media_uuid),
                 'url': file_url,
                 'filename': file_id,
                 'metadata': {
                     'size': len(content),
                     'type': file.content_type,
                     'uploaded_at': datetime.now().isoformat(),
-                    'transcription': transcription_text,
+                    'transcription_status': transcription_status,
                 },
             }
         )
