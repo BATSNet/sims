@@ -25,7 +25,7 @@ class MediaORM(Base):
     __tablename__ = "media"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=False)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=True)
     chat_message_id = Column(BigInteger, ForeignKey('chat_message.id', ondelete='SET NULL'))
 
     # File information

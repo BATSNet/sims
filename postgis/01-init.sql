@@ -140,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_message_created_at ON chat_message(created_a
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS media (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
+    incident_id UUID REFERENCES incident(id) ON DELETE CASCADE,
     chat_message_id BIGINT REFERENCES chat_message(id) ON DELETE SET NULL,
 
     -- File information
