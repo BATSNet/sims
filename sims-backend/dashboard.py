@@ -230,24 +230,118 @@ async def render_map(incidents: List[Dict]):
     if valid_incidents:
         logger.info(f"Sample incident: {valid_incidents[0]}")
 
-    # Add MarkerCluster CSS and JS
+    # Add MarkerCluster CSS and JS with proper loading
     ui.add_head_html('''
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-        <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     ''')
 
-    # Create leaflet map - responsive height
-    m = ui.leaflet(center=(51.1657, 10.4515), zoom=6).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
+    # Load MarkerCluster script and wait for it to load
+    load_script_js = '''
+        (function() {
+            if (window.markerClusterLoaded) {
+                console.log('[SIMS] MarkerCluster already loaded');
+                return;
+            }
 
-    # Clear default layers and add dark tiles
+            console.log('[SIMS] Loading MarkerCluster library...');
+            var script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js';
+            script.onload = function() {
+                window.markerClusterLoaded = true;
+                console.log('[SIMS] MarkerCluster library loaded successfully');
+            };
+            script.onerror = function() {
+                console.error('[SIMS] Failed to load MarkerCluster library');
+            };
+            document.head.appendChild(script);
+        })();
+    '''
+    ui.run_javascript(load_script_js)
+
+    # Create leaflet map - responsive height
+    # Default to Germany center, will be updated by geolocation
+    m = ui.leaflet(center=(51.1657, 10.4515), zoom=11).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
+
+    # Get user's current location and center map on it (50km view = zoom 11)
+    geolocation_js = f'''
+        (function() {{
+            if (navigator.geolocation) {{
+                console.log('[SIMS] Requesting geolocation...');
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {{
+                        var lat = position.coords.latitude;
+                        var lon = position.coords.longitude;
+                        console.log('[SIMS] Geolocation obtained:', lat, lon);
+
+                        // Center map on user's location with zoom 11 (approximately 50km view)
+                        var map = getElement({m.id}).map;
+                        map.setView([lat, lon], 11);
+
+                        // Add a marker for user's current location
+                        var userIcon = L.divIcon({{
+                            html: '<div style="background: #00FF00; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 10px #00FF00; cursor: pointer;"></div>',
+                            className: 'user-location-marker',
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7]
+                        }});
+
+                        L.marker([lat, lon], {{ icon: userIcon }})
+                            .bindPopup('Your Location')
+                            .addTo(map);
+
+                        // Force tile redraw after geolocation
+                        setTimeout(function() {{
+                            console.log('[SIMS] Redrawing tiles after geolocation');
+                            map.eachLayer(function(layer) {{
+                                if (layer instanceof L.TileLayer) {{
+                                    layer.redraw();
+                                }}
+                            }});
+                        }}, 200);
+
+                        // After centering on user location, zoom to show all incidents
+                        console.log('[SIMS] User location set, now zooming to show all incidents');
+                        if (window.autoZoomToIncidents) {{
+                            window.autoZoomToIncidents();
+                        }}
+                    }},
+                    function(error) {{
+                        console.warn('[SIMS] Geolocation error:', error.message);
+                        console.log('[SIMS] Geolocation failed, auto-zooming to incidents');
+
+                        // Trigger auto-zoom to incidents if geolocation fails
+                        if (window.autoZoomToIncidents) {{
+                            window.autoZoomToIncidents();
+                        }}
+                    }},
+                    {{
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0
+                    }}
+                );
+            }} else {{
+                console.warn('[SIMS] Geolocation not supported by browser');
+            }}
+        }})();
+    '''
+    ui.run_javascript(geolocation_js)
+
+    # Clear default layers and add dark tiles with cache busting
     m.clear_layers()
+
+    # Add timestamp for cache busting to ensure fresh tiles
+    import time
+    cache_buster = int(time.time())
+
     m.tile_layer(
-        url_template='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        url_template=f'https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?v={cache_buster}',
         options={
             'maxZoom': 19,
             'subdomains': 'abcd',
-            'attribution': ''
+            'attribution': '',
+            'noCache': True  # Prevent browser caching
         }
     )
 
@@ -355,10 +449,22 @@ async def render_map(incidents: List[Dict]):
     # Wait for MarkerCluster library to load before initializing
     cluster_init_js = f'''
         (function() {{
+            var attempts = 0;
+            var maxAttempts = 100; // 10 seconds max
+
             function initializeClusterGroup() {{
+                attempts++;
+
                 // Check if MarkerCluster library is loaded
-                if (typeof L === 'undefined' || typeof L.markerClusterGroup === 'undefined') {{
-                    console.log('[SIMS] Waiting for MarkerCluster library to load...');
+                if (!window.markerClusterLoaded || typeof L === 'undefined' || typeof L.markerClusterGroup === 'undefined') {{
+                    if (attempts >= maxAttempts) {{
+                        console.error('[SIMS] Timeout waiting for MarkerCluster library after ' + (maxAttempts * 100) + 'ms');
+                        console.error('[SIMS] L defined:', typeof L !== 'undefined');
+                        console.error('[SIMS] L.markerClusterGroup defined:', typeof L !== 'undefined' && typeof L.markerClusterGroup !== 'undefined');
+                        console.error('[SIMS] markerClusterLoaded flag:', window.markerClusterLoaded);
+                        return;
+                    }}
+                    console.log('[SIMS] Waiting for MarkerCluster library... (attempt ' + attempts + '/' + maxAttempts + ')');
                     setTimeout(initializeClusterGroup, 100);
                     return;
                 }}
@@ -388,9 +494,11 @@ async def render_map(incidents: List[Dict]):
                 window.incidentClusterGroup = incidentClusterGroup;
 
                 // Add cluster group to map
-                incidentClusterGroup.addTo(getElement({m.id}).map);
+                var map = getElement({m.id}).map;
+                incidentClusterGroup.addTo(map);
 
                 console.log('[SIMS] Cluster group initialized and added to map');
+                console.log('[SIMS] Map has', map.getLayers().length, 'layers total');
             }}
 
             // Start initialization
@@ -400,6 +508,7 @@ async def render_map(incidents: List[Dict]):
     ui.run_javascript(cluster_init_js)
 
     # Add custom square markers for each incident using JavaScript
+    valid_marker_count = 0
     for incident in incidents:
         lat = incident['location']['lat']
         lon = incident['location']['lon']
@@ -412,6 +521,9 @@ async def render_map(incidents: List[Dict]):
         priority = incident['priority']
         color = colors.get(priority, '#63ABFF')
         inc_id = incident['id']
+        valid_marker_count += 1
+
+        logger.info(f"Creating marker for incident {inc_id} at ({lat}, {lon}) with priority {priority}")
 
         # Escape strings for JavaScript
         inc_id_escaped = inc_id.replace("'", "\\'")
@@ -507,10 +619,22 @@ async def render_map(incidents: List[Dict]):
         # Wait for cluster group to be ready before adding marker
         js_code = f'''
             (function() {{
+                var attempts = 0;
+                var maxAttempts = 150; // 15 seconds max
+
                 function addMarkerToCluster() {{
+                    attempts++;
+
                     // Wait for cluster group to be ready
                     if (!window.incidentClusterGroup) {{
-                        console.log('[SIMS] Waiting for cluster group to be ready...');
+                        if (attempts >= maxAttempts) {{
+                            console.error('[SIMS] Timeout waiting for cluster group for marker {inc_id}');
+                            console.error('[SIMS] Cluster group exists:', !!window.incidentClusterGroup);
+                            return;
+                        }}
+                        if (attempts % 20 === 0) {{
+                            console.log('[SIMS] Still waiting for cluster group... (attempt ' + attempts + ')');
+                        }}
                         setTimeout(addMarkerToCluster, 100);
                         return;
                     }}
@@ -544,6 +668,7 @@ async def render_map(incidents: List[Dict]):
 
                     // Add marker to cluster group
                     window.incidentClusterGroup.addLayer(marker);
+                    console.log('[SIMS] Marker added for incident {inc_id} at ({lat}, {lon})');
                 }}
 
                 // Start adding marker
@@ -552,6 +677,54 @@ async def render_map(incidents: List[Dict]):
         '''
 
         ui.run_javascript(js_code)
+
+    logger.info(f"Created {valid_marker_count} incident markers")
+
+    # Auto-zoom to fit all incidents only if geolocation is unavailable
+    # Store auto-zoom function globally so it can be called if geolocation fails
+    if any(inc['location']['lat'] is not None and inc['location']['lon'] is not None for inc in incidents):
+        auto_zoom_js = f'''
+            (function() {{
+                // Store auto-zoom function globally
+                window.autoZoomToIncidents = function() {{
+                    // Wait for cluster group to be ready
+                    if (!window.incidentClusterGroup) {{
+                        console.log('[SIMS] Waiting for cluster group before auto-zoom...');
+                        setTimeout(window.autoZoomToIncidents, 200);
+                        return;
+                    }}
+
+                    // Wait a bit more for all markers to be added (async)
+                    setTimeout(function() {{
+                        var bounds = window.incidentClusterGroup.getBounds();
+                        if (bounds.isValid()) {{
+                            console.log('[SIMS] Auto-zooming to fit all incidents (geolocation unavailable)');
+                            var map = getElement({m.id}).map;
+                            map.fitBounds(bounds, {{
+                                padding: [50, 50],
+                                maxZoom: 15
+                            }});
+
+                            // Force tile layer redraw after zoom to prevent stale tiles
+                            setTimeout(function() {{
+                                console.log('[SIMS] Redrawing tiles after zoom');
+                                map.eachLayer(function(layer) {{
+                                    if (layer instanceof L.TileLayer) {{
+                                        layer.redraw();
+                                    }}
+                                }});
+                            }}, 300);
+                        }} else {{
+                            console.log('[SIMS] No valid bounds for auto-zoom');
+                        }}
+                    }}, 500);
+                }};
+
+                console.log('[SIMS] Auto-zoom function ready (will trigger if geolocation fails)');
+            }})();
+        '''
+        ui.run_javascript(auto_zoom_js)
+        logger.info("Auto-zoom function prepared")
 
 
 async def render_stats(incidents: List[Dict]):
@@ -771,16 +944,28 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     <span v-else style="color: #718096; font-size: 12px;">Unassigned</span>
                 </q-td>
                 <q-td key="action" :props="props" @click.stop>
-                    <q-btn
-                        outline
-                        dense
-                        size="sm"
-                        label="Forward"
-                        color="white"
-                        no-caps
-                        style="font-size: 13px; padding: 4px 12px"
-                        @click="$parent.$emit('forward', props.row.id)"
-                    />
+                    <div class="flex gap-2">
+                        <q-btn
+                            outline
+                            dense
+                            size="sm"
+                            label="Forward"
+                            color="white"
+                            no-caps
+                            style="font-size: 13px; padding: 4px 12px"
+                            @click="$parent.$emit('forward', props.row.id)"
+                        />
+                        <q-btn
+                            outline
+                            dense
+                            size="sm"
+                            label="Close"
+                            color="red"
+                            no-caps
+                            style="font-size: 13px; padding: 4px 12px"
+                            @click="$parent.$emit('close', props.row.id)"
+                        />
+                    </div>
                 </q-td>
             </q-tr>
             <q-tr v-show="props.expand" :props="props">
@@ -927,8 +1112,29 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 logger.error(f"Error removing assignment: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
 
+        # Handle close incident action
+        async def handle_close_incident(e):
+            incident_id = e.args
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.patch(
+                        f"{API_BASE}/incident/{incident_id}",
+                        json={'status': 'closed'}
+                    )
+                    if response.status_code == 200:
+                        ui.notify(f'Incident {incident_id} closed', type='positive')
+                        # Refresh the page to remove closed incident from table
+                        ui.navigate.reload()
+                    else:
+                        logger.error(f"Failed to close incident: {response.status_code}")
+                        ui.notify('Failed to close incident', type='negative')
+            except Exception as error:
+                logger.error(f"Error closing incident: {error}", exc_info=True)
+                ui.notify(f'Error: {str(error)}', type='negative')
+
         table.on('forward', handle_forward)
         table.on('remove_assignment', handle_remove_assignment)
+        table.on('close', handle_close_incident)
 
     # Store references for filter updates
     filter_refs = {
@@ -1016,7 +1222,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 async def dashboard():
     """Main dashboard page"""
     # Load initial incidents from API
-    incidents = await load_incidents()
+    all_incidents = await load_incidents()
+
+    # Filter out closed incidents
+    incidents = [inc for inc in all_incidents if inc.get('status', 'open') != 'closed']
+    logger.info(f"Filtered {len(all_incidents) - len(incidents)} closed incidents from display")
 
     # Use mock data as fallback if API fails
     is_mock_data = False
@@ -1041,9 +1251,11 @@ async def dashboard():
         logger.info("Refreshing dashboard due to WebSocket update")
 
         # Reload incidents from API
-        new_incidents = await load_incidents()
-        if new_incidents:
-            incidents = new_incidents
+        all_new_incidents = await load_incidents()
+        if all_new_incidents:
+            # Filter out closed incidents
+            incidents = [inc for inc in all_new_incidents if inc.get('status', 'open') != 'closed']
+            logger.info(f"Filtered {len(all_new_incidents) - len(incidents)} closed incidents from refresh")
             is_mock_data = False
         else:
             # Still no incidents, keep using mock data

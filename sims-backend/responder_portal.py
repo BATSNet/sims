@@ -146,7 +146,7 @@ async def responder_incidents_list():
             return
 
         # Display incidents in a table
-        with ui.element('div').classes('content-container p-6'):
+        with ui.element('div').classes('w-full max-w-6xl mx-auto p-6'):
             if not incidents:
                 with ui.column().classes('w-full items-center justify-center p-12'):
                     ui.label('No incidents assigned').classes('text-xl text-gray-400')
@@ -154,7 +154,7 @@ async def responder_incidents_list():
                         'text-sm text-gray-500 mt-2'
                     )
             else:
-                ui.label(f'{len(incidents)} Assigned Incidents').classes('text-2xl font-bold mb-6 title-font')
+                ui.label(f'{len(incidents)} Assigned Incidents').classes('text-2xl font-bold mb-6 title-font').style('color: #fff;')
 
                 # Create table data
                 columns = [
@@ -168,13 +168,15 @@ async def responder_incidents_list():
 
                 rows = []
                 for inc in incidents:
+                    # API returns camelCase keys
+                    created_at_str = inc.get('createdAt', inc.get('created_at', datetime.now().isoformat()))
                     rows.append({
-                        'id': inc['id'],
-                        'incident_id': inc['incident_id'],
-                        'title': inc['title'] or 'Untitled',
-                        'priority': inc['priority'],
-                        'status': inc['status'],
-                        'created_at': datetime.fromisoformat(inc['created_at']).strftime('%Y-%m-%d %H:%M'),
+                        'id': inc.get('id'),
+                        'incident_id': inc.get('incidentId', inc.get('incident_id', 'UNKNOWN')),
+                        'title': inc.get('title', 'Untitled') or 'Untitled',
+                        'priority': inc.get('priority', 'medium'),
+                        'status': inc.get('status', 'open'),
+                        'created_at': datetime.fromisoformat(created_at_str).strftime('%Y-%m-%d %H:%M'),
                     })
 
                 table = ui.table(
@@ -263,202 +265,214 @@ async def responder_incident_chat(incident_id: str):
             ui.label('Error loading incident').classes('text-xl text-red-500')
         return
 
-    async with responder_frame(f'Incident {incident["incident_id"]}'):
+    # Handle both camelCase and snake_case keys from API
+    incident_id_str = incident.get('incidentId', incident.get('incident_id', 'UNKNOWN'))
+    status = incident.get('status', 'open')
+    priority = incident.get('priority', 'medium')
+    title = incident.get('title') or 'Untitled Incident'
+    created_at_str = incident.get('createdAt', incident.get('created_at', datetime.now().isoformat()))
+
+    async with responder_frame(f'Incident {incident_id_str}'):
         # Chat container layout
-        with ui.element('div').classes('chat-container'):
-            # Main chat area
-            with ui.element('div').classes('chat-main'):
-                # Incident header
-                with ui.element('div').classes('incident-header'):
-                    ui.label(incident['incident_id']).classes('incident-header-id')
-                    ui.label(incident['title'] or 'Untitled Incident').classes('incident-header-title')
-                    with ui.row().classes('gap-4'):
-                        ui.label(f"Status: {incident['status']}").classes('incident-header-meta')
-                        ui.label(f"Priority: {incident['priority']}").classes('incident-header-meta')
-                        ui.label(f"Created: {datetime.fromisoformat(incident['created_at']).strftime('%Y-%m-%d %H:%M')}").classes('incident-header-meta')
+        with ui.element('div').classes('w-full max-w-6xl mx-auto'):
+            with ui.element('div').classes('chat-container'):
+                # Main chat area
+                with ui.element('div').classes('chat-main'):
+                    # Incident header
+                    with ui.element('div').classes('incident-header'):
+                        ui.label(incident_id_str).classes('incident-header-id')
+                        ui.label(title).classes('incident-header-title')
+                        with ui.row().classes('gap-4'):
+                            ui.label(f"Status: {status}").classes('incident-header-meta')
+                            ui.label(f"Priority: {priority}").classes('incident-header-meta')
+                            ui.label(f"Created: {datetime.fromisoformat(created_at_str).strftime('%Y-%m-%d %H:%M')}").classes('incident-header-meta')
 
-                # Chat messages
-                chat_container = ui.column().classes('chat-messages')
+                    # Chat messages
+                    chat_container = ui.column().classes('chat-messages')
 
-                with chat_container:
-                    if not messages:
-                        with ui.column().classes('w-full items-center justify-center p-12'):
-                            ui.label('No messages yet').classes('text-gray-400')
-                    else:
-                        for msg in messages:
-                            role = msg['role']
-                            content = msg['content']
-                            timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%H:%M')
+                    with chat_container:
+                        if not messages:
+                            with ui.column().classes('w-full items-center justify-center p-12'):
+                                ui.label('No messages yet').classes('text-gray-400')
+                        else:
+                            for msg in messages:
+                                role = msg['role']
+                                content = msg['content']
+                                timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%H:%M')
 
-                            msg_class = 'message-user' if role == 'user' else 'message-assistant'
+                                msg_class = 'message-user' if role == 'user' else 'message-assistant'
 
-                            with ui.element('div').classes(f'message-bubble {msg_class}'):
-                                ui.label(content).classes('break-words')
-                                ui.label(timestamp).classes('message-timestamp')
+                                with ui.element('div').classes(f'message-bubble {msg_class}'):
+                                    ui.label(content).classes('break-words')
+                                    ui.label(timestamp).classes('message-timestamp')
 
-                # Chat input area
-                with ui.element('div').classes('chat-input-area'):
-                    with ui.row().classes('w-full gap-2'):
-                        message_input = ui.input(
-                            placeholder='Type your message...'
-                        ).props('dark filled').classes('flex-1')
+                    # Chat input area
+                    with ui.element('div').classes('chat-input-area'):
+                        with ui.row().classes('w-full gap-2'):
+                            message_input = ui.input(
+                                placeholder='Type your message...'
+                            ).props('dark filled').classes('flex-1')
 
-                        async def send_message():
-                            content = message_input.value.strip()
-                            if not content:
+                            async def send_message():
+                                content = message_input.value.strip()
+                                if not content:
+                                    return
+
+                                try:
+                                    async with httpx.AsyncClient() as client:
+                                        response = await client.post(
+                                            f'http://localhost:8000/api/responder/incidents/{incident_id}/chat?token={token}',
+                                            json={'content': content, 'role': 'assistant'},
+                                            timeout=10.0
+                                        )
+
+                                        if response.status_code == 201:
+                                            message_input.value = ''
+                                            ui.navigate.reload()
+                                        else:
+                                            ui.notify('Failed to send message', color='red')
+
+                                except Exception as e:
+                                    logger.error(f"Error sending message: {e}")
+                                    ui.notify('Error sending message', color='red')
+
+                            ui.button(icon='send', on_click=send_message).props('color=teal flat')
+
+                # Sidebar with actions and notes
+                with ui.element('div').classes('chat-sidebar'):
+                    # Status update
+                    with ui.element('div').classes('action-panel'):
+                        ui.label('Change Status').classes('action-panel-title')
+
+                        async def update_status(new_status: str):
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.put(
+                                        f'http://localhost:8000/api/responder/incidents/{incident_id}/status?token={token}',
+                                        json={'status': new_status},
+                                        timeout=10.0
+                                    )
+
+                                    if response.status_code == 200:
+                                        ui.notify(f'Status updated to {new_status}', color='teal')
+                                        ui.navigate.reload()
+                                    else:
+                                        ui.notify('Failed to update status', color='red')
+
+                            except Exception as e:
+                                logger.error(f"Error updating status: {e}")
+                                ui.notify('Error updating status', color='red')
+
+                        ui.select(
+                            ['open', 'in_progress', 'resolved', 'closed'],
+                            value=status,
+                            on_change=lambda e: update_status(e.value)
+                        ).props('dark filled').classes('w-full')
+
+                    # Priority update
+                    with ui.element('div').classes('action-panel'):
+                        ui.label('Change Priority').classes('action-panel-title')
+
+                        async def update_priority(new_priority: str):
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.put(
+                                        f'http://localhost:8000/api/responder/incidents/{incident_id}/priority?token={token}',
+                                        json={'priority': new_priority},
+                                        timeout=10.0
+                                    )
+
+                                    if response.status_code == 200:
+                                        ui.notify(f'Priority updated to {new_priority}', color='teal')
+                                        ui.navigate.reload()
+                                    else:
+                                        ui.notify('Failed to update priority', color='red')
+
+                            except Exception as e:
+                                logger.error(f"Error updating priority: {e}")
+                                ui.notify('Error updating priority', color='red')
+
+                        ui.select(
+                            ['critical', 'high', 'medium', 'low'],
+                            value=priority,
+                            on_change=lambda e: update_priority(e.value)
+                        ).props('dark filled').classes('w-full')
+
+                    # Add internal note
+                    with ui.element('div').classes('action-panel'):
+                        ui.label('Internal Notes').classes('action-panel-title')
+
+                        note_input = ui.textarea(
+                            placeholder='Add an internal note (not visible to reporter)...'
+                        ).props('dark filled').classes('w-full')
+
+                        async def add_note():
+                            note_text = note_input.value.strip()
+                            if not note_text:
                                 return
 
                             try:
                                 async with httpx.AsyncClient() as client:
                                     response = await client.post(
-                                        f'http://localhost:8000/api/responder/incidents/{incident_id}/chat?token={token}',
-                                        json={'content': content, 'role': 'assistant'},
+                                        f'http://localhost:8000/api/responder/incidents/{incident_id}/notes?token={token}',
+                                        json={
+                                            'incident_id': incident_id,
+                                            'organization_id': 0,  # Will be set by backend
+                                            'note_text': note_text,
+                                            'created_by': 'responder'
+                                        },
                                         timeout=10.0
                                     )
 
                                     if response.status_code == 201:
-                                        message_input.value = ''
+                                        note_input.value = ''
+                                        ui.notify('Note added', color='teal')
                                         ui.navigate.reload()
                                     else:
-                                        ui.notify('Failed to send message', color='red')
+                                        ui.notify('Failed to add note', color='red')
 
                             except Exception as e:
-                                logger.error(f"Error sending message: {e}")
-                                ui.notify('Error sending message', color='red')
+                                logger.error(f"Error adding note: {e}")
+                                ui.notify('Error adding note', color='red')
 
-                        ui.button(icon='send', on_click=send_message).props('color=teal flat')
+                        ui.button('Add Note', on_click=add_note).props('color=teal outline').classes('w-full mt-2')
 
-            # Sidebar with actions and notes
-            with ui.element('div').classes('chat-sidebar'):
-                # Status update
-                with ui.element('div').classes('action-panel'):
-                    ui.label('Change Status').classes('action-panel-title')
+                    # Display existing notes
+                    with ui.element('div').classes('notes-section'):
+                        if notes:
+                            for note in notes:
+                                with ui.element('div').classes('note-item'):
+                                    ui.label(note['note_text']).classes('break-words')
+                                    ui.label(
+                                        f"{datetime.fromisoformat(note['created_at']).strftime('%Y-%m-%d %H:%M')} - {note.get('created_by', 'Unknown')}"
+                                    ).classes('note-meta')
+                        else:
+                            ui.label('No internal notes yet').classes('text-sm text-gray-400 text-center')
 
-                    async def update_status(new_status: str):
-                        try:
-                            async with httpx.AsyncClient() as client:
-                                response = await client.put(
-                                    f'http://localhost:8000/api/responder/incidents/{incident_id}/status?token={token}',
-                                    json={'status': new_status},
-                                    timeout=10.0
-                                )
+                    # Map with incident location (if available)
+                    lat = incident.get('latitude')
+                    lon = incident.get('longitude')
+                    if lat and lon:
+                        with ui.element('div').classes('action-panel'):
+                            ui.label('Location').classes('action-panel-title')
 
-                                if response.status_code == 200:
-                                    ui.notify(f'Status updated to {new_status}', color='teal')
-                                    ui.navigate.reload()
-                                else:
-                                    ui.notify('Failed to update status', color='red')
+                            # Create unique map ID
+                            map_id = f'map-{incident_id}'
 
-                        except Exception as e:
-                            logger.error(f"Error updating status: {e}")
-                            ui.notify('Error updating status', color='red')
+                            # Add map container
+                            ui.html(f'<div id="{map_id}" style="height: 200px; width: 100%;"></div>')
 
-                    ui.select(
-                        ['open', 'in_progress', 'resolved', 'closed'],
-                        value=incident['status'],
-                        on_change=lambda e: update_status(e.value)
-                    ).props('dark filled').classes('w-full')
+                            # Add map initialization script
+                            ui.run_javascript(f'''
+                                var map = L.map('{map_id}').setView([{lat}, {lon}], 18);
+                                L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+                                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                                    maxZoom: 20
+                                }}).addTo(map);
 
-                # Priority update
-                with ui.element('div').classes('action-panel'):
-                    ui.label('Change Priority').classes('action-panel-title')
-
-                    async def update_priority(new_priority: str):
-                        try:
-                            async with httpx.AsyncClient() as client:
-                                response = await client.put(
-                                    f'http://localhost:8000/api/responder/incidents/{incident_id}/priority?token={token}',
-                                    json={'priority': new_priority},
-                                    timeout=10.0
-                                )
-
-                                if response.status_code == 200:
-                                    ui.notify(f'Priority updated to {new_priority}', color='teal')
-                                    ui.navigate.reload()
-                                else:
-                                    ui.notify('Failed to update priority', color='red')
-
-                        except Exception as e:
-                            logger.error(f"Error updating priority: {e}")
-                            ui.notify('Error updating priority', color='red')
-
-                    ui.select(
-                        ['critical', 'high', 'medium', 'low'],
-                        value=incident['priority'],
-                        on_change=lambda e: update_priority(e.value)
-                    ).props('dark filled').classes('w-full')
-
-                # Add internal note
-                with ui.element('div').classes('action-panel'):
-                    ui.label('Internal Notes').classes('action-panel-title')
-
-                    note_input = ui.textarea(
-                        placeholder='Add an internal note (not visible to reporter)...'
-                    ).props('dark filled').classes('w-full')
-
-                    async def add_note():
-                        note_text = note_input.value.strip()
-                        if not note_text:
-                            return
-
-                        try:
-                            async with httpx.AsyncClient() as client:
-                                response = await client.post(
-                                    f'http://localhost:8000/api/responder/incidents/{incident_id}/notes?token={token}',
-                                    json={
-                                        'incident_id': incident_id,
-                                        'organization_id': 0,  # Will be set by backend
-                                        'note_text': note_text,
-                                        'created_by': 'responder'
-                                    },
-                                    timeout=10.0
-                                )
-
-                                if response.status_code == 201:
-                                    note_input.value = ''
-                                    ui.notify('Note added', color='teal')
-                                    ui.navigate.reload()
-                                else:
-                                    ui.notify('Failed to add note', color='red')
-
-                        except Exception as e:
-                            logger.error(f"Error adding note: {e}")
-                            ui.notify('Error adding note', color='red')
-
-                    ui.button('Add Note', on_click=add_note).props('color=teal outline').classes('w-full mt-2')
-
-                # Display existing notes
-                with ui.element('div').classes('notes-section'):
-                    if notes:
-                        for note in notes:
-                            with ui.element('div').classes('note-item'):
-                                ui.label(note['note_text']).classes('break-words')
-                                ui.label(
-                                    f"{datetime.fromisoformat(note['created_at']).strftime('%Y-%m-%d %H:%M')} - {note.get('created_by', 'Unknown')}"
-                                ).classes('note-meta')
-                    else:
-                        ui.label('No internal notes yet').classes('text-sm text-gray-400 text-center')
-
-                # Map with incident location (if available)
-                if incident.get('latitude') and incident.get('longitude'):
-                    with ui.element('div').classes('action-panel'):
-                        ui.label('Location').classes('action-panel-title')
-
-                        html_content = f'''
-                        <div id="map-{incident_id}" style="height: 200px; width: 100%;"></div>
-                        <script>
-                            var map = L.map('map-{incident_id}').setView([{incident['latitude']}, {incident['longitude']}], 18);
-                            L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
-                                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-                                maxZoom: 20
-                            }}).addTo(map);
-
-                            var marker = L.marker([{incident['latitude']}, {incident['longitude']}]).addTo(map);
-                            marker.bindPopup('<b>Incident Location</b><br>Lat: {incident['latitude']:.6f}<br>Lon: {incident['longitude']:.6f}').openPopup();
-                        </script>
-                        '''
-
-                        ui.html(html_content)
+                                var marker = L.marker([{lat}, {lon}]).addTo(map);
+                                marker.bindPopup('<b>Incident Location</b><br>Lat: {lat:.6f}<br>Lon: {lon:.6f}').openPopup();
+                            ''')
 
 
 def init_responder_portal():
