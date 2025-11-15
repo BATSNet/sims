@@ -21,9 +21,12 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         timestamp = created_at
 
     # Format location
-    lat = incident.get('latitude', 0)
-    lon = incident.get('longitude', 0)
-    location_label = f"{lat:.3f}, {lon:.3f}"
+    lat = incident.get('latitude')
+    lon = incident.get('longitude')
+    if lat is not None and lon is not None:
+        location_label = f"{lat:.3f}, {lon:.3f}"
+    else:
+        location_label = "No location"
 
     # Get category and capitalize/format it
     category = incident.get('category', 'unclassified')
