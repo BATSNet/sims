@@ -1,0 +1,44 @@
+version: '3.8'
+
+# Production Docker Compose override for Hetzner deployment
+# This file extends docker-compose.yml with production-specific settings
+# Use: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  db:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5433:5432"  # Only expose to localhost
+
+  backend:
+    restart: unless-stopped
+    expose:
+      - "8000"  # Expose to other containers (Caddy)
+    volumes:
+      # In production, don't mount source code
+      - ./uploads:/app/uploads
+      - ./resources:/resources
+    environment:
+      - ENVIRONMENT=production
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: sims-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${CADDY_DOMAIN:-91.99.179.35}
+      - CADDY_EMAIL=${CADDY_EMAIL:-admin@example.com}
+    depends_on:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

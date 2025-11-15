@@ -1,0 +1,15 @@
+# SIMS Deployment Configuration Template
+# Copy this file to deploy.config and fill in your values
+# IMPORTANT: deploy.config is gitignored - never commit it!
+
+# Remote server configuration
+REMOTE_HOST=
+REMOTE_USER=root
+REMOTE_PATH=/opt/sims
+
+# Local environment file to copy to server
+# Leave empty if .env already exists on remote server
+LOCAL_ENV_FILE=.env.production
+
+# Optional: SSH key path (if not using default)
+# SSH_KEY_PATH=~/.ssh/id_rsa

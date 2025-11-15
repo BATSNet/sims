@@ -32,8 +32,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -101,6 +101,10 @@ sims-app/ios/**/GeneratedPluginRegistrant.*
 # Docker
 docker-compose.override.yml
 
+# Deployment configuration
+deploy.config
+.env.production
+
 # Logs
 logs/
 *.log
@@ -127,3 +131,4 @@ media/
 # Backups
 *.bak
 *.backup
+backups/*.sql
