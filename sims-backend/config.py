@@ -11,6 +11,9 @@ class Config:
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/sims")
 
+    # Server Configuration
+    PUBLIC_SERVER_URL: Optional[str] = os.getenv("PUBLIC_SERVER_URL", "http://localhost:8000")
+
     # API Keys
     FEATHERLESS_API_KEY: Optional[str] = os.getenv("FEATHERLESS_API_KEY")
     DEEPINFRA_API_KEY: Optional[str] = os.getenv("DEEPINFRA_API_KEY")
