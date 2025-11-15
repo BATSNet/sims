@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Pull latest main
         run: |
-          cd /opt/sims-demo
+          cd /opt/sims
           git fetch origin
           git reset --hard origin/main
           git clean -fd
