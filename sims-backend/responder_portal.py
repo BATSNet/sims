@@ -460,7 +460,7 @@ async def responder_incident_chat(incident_id: str):
                             map_id = f'map-{incident_id}'
 
                             # Add map container
-                            ui.html(f'<div id="{map_id}" style="height: 200px; width: 100%;"></div>')
+                            ui.html(f'<div id="{map_id}" style="height: 200px; width: 100%;"></div>', sanitize=False)
 
                             # Add map initialization script
                             ui.run_javascript(f'''
