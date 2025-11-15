@@ -287,6 +287,41 @@ async def responder_incident_chat(incident_id: str):
                             ui.label(f"Priority: {priority}").classes('incident-header-meta')
                             ui.label(f"Created: {datetime.fromisoformat(created_at_str).strftime('%Y-%m-%d %H:%M')}").classes('incident-header-meta')
 
+                    # Media files section
+                    media_files = incident.get('mediaFiles', [])
+                    image_url = incident.get('imageUrl') or incident.get('image_url')
+                    audio_url = incident.get('audioUrl') or incident.get('audio_url')
+                    video_url = incident.get('videoUrl') or incident.get('video_url')
+
+                    # Extract from media_files if available
+                    if media_files:
+                        for media in media_files:
+                            media_type = media.get('type', '').lower()
+                            file_url = media.get('url') or media.get('fileUrl')
+                            if media_type in ['image', 'photo'] and not image_url:
+                                image_url = file_url
+                            elif media_type in ['audio', 'voice'] and not audio_url:
+                                audio_url = file_url
+                            elif media_type in ['video'] and not video_url:
+                                video_url = file_url
+
+                    if image_url or audio_url or video_url:
+                        with ui.element('div').classes('p-4').style('background: rgba(0, 0, 0, 0.3); border-radius: 8px; margin-bottom: 16px;'):
+                            ui.label('Attached Media').classes('text-sm text-gray-400 mb-2')
+                            with ui.row().classes('gap-4'):
+                                if image_url:
+                                    with ui.column().classes('gap-2'):
+                                        ui.label('Image').classes('text-xs text-gray-400')
+                                        ui.image(image_url).style('max-width: 300px; max-height: 200px; border-radius: 4px;')
+                                if audio_url:
+                                    with ui.column().classes('gap-2'):
+                                        ui.label('Audio').classes('text-xs text-gray-400')
+                                        ui.html(f'<audio controls style="max-width: 300px;"><source src="{audio_url}" /></audio>', sanitize=False)
+                                if video_url:
+                                    with ui.column().classes('gap-2'):
+                                        ui.label('Video').classes('text-xs text-gray-400')
+                                        ui.html(f'<video controls style="max-width: 300px; max-height: 200px; border-radius: 4px;"><source src="{video_url}" /></video>', sanitize=False)
+
                     # Chat messages
                     chat_container = ui.column().classes('chat-messages')
 
