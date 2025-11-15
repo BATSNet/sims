@@ -620,3 +620,116 @@ async def unassign_incident(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to unassign incident: {str(e)}"
         )
+
+
+@incident_router.post("/{incident_id}/summarize")
+async def summarize_chat(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger chat summarization for an incident.
+    Queues the chat session for summarization by the batch processor.
+    """
+    try:
+        from services.schedule_summarization import get_summarization_service
+
+        # Validate incident exists
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Get chat session
+        session = get_session_by_incident(db, str(incident.id))
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No chat session found for incident {incident_id}"
+            )
+
+        # Queue for summarization
+        summarization_service = get_summarization_service()
+        await summarization_service.queue_chat_summarization(
+            session_id=session,
+            incident_id=str(incident.id),
+            db_session=db
+        )
+
+        logger.info(f"Queued chat summarization for incident {incident_id}")
+
+        return {
+            "success": True,
+            "message": f"Chat summarization queued for incident {incident_id}",
+            "incident_id": incident_id,
+            "session_id": session
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error queuing summarization: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to queue summarization: {str(e)}"
+        )
+
+
+@incident_router.get("/{incident_id}/summary")
+async def get_chat_summary(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the current chat summary for an incident.
+    Returns summary metadata from the incident's meta_data field.
+    """
+    try:
+        # Get incident
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Extract summary from metadata
+        meta_data = incident.meta_data or {}
+        summary = meta_data.get('chat_summary')
+        last_summarized_at = meta_data.get('last_summarized_at')
+        message_count = meta_data.get('message_count', 0)
+
+        # Get current message count
+        session_id = get_session_by_incident(db, str(incident.id))
+        current_message_count = 0
+        if session_id:
+            current_message_count = db.query(ChatSessionORM).filter(
+                ChatSessionORM.session_id == session_id
+            ).join(ChatMessageORM).count()
+
+        return {
+            "incident_id": incident_id,
+            "summary": summary,
+            "last_summarized_at": last_summarized_at,
+            "messages_at_summary": message_count,
+            "current_message_count": current_message_count,
+            "summary_available": summary is not None,
+            "summary_outdated": current_message_count > message_count if summary else False
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get summary: {str(e)}"
+        )

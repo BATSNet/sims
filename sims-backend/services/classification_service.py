@@ -194,7 +194,7 @@ Respond with ONLY the JSON object, no additional text."""
             "max_tokens": self.max_tokens
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=90.0) as client:
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
 

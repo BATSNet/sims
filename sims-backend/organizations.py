@@ -95,7 +95,15 @@ async def organizations_page():
         """Show dialog for creating/editing organization"""
         is_edit = org is not None
 
-        with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl p-4 sm:p-6'):
+        # Get existing coordinates if editing
+        existing_lat = org.get('latitude') if org else None
+        existing_lon = org.get('longitude') if org else None
+
+        # Default to Berlin, Germany
+        default_lat = existing_lat if existing_lat else 52.52
+        default_lon = existing_lon if existing_lon else 13.405
+
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-4 sm:p-6'):
             ui.label(f"{'Edit' if is_edit else 'Add'} Organization").classes('text-base sm:text-lg font-bold title-font mb-3 sm:mb-4')
 
             with ui.grid(columns='1 sm:2').classes('w-full gap-3 sm:gap-4'):
@@ -117,6 +125,63 @@ async def organizations_page():
                 city_input = ui.input('City', value=org.get('city') if org else '').classes('col-span-1')
                 country_input = ui.input('Country', value=org.get('country', 'Germany') if org else 'Germany').classes('col-span-1')
 
+                # Location section
+                ui.label('Location').classes('col-span-1 sm:col-span-2 font-semibold mt-2')
+
+                lat_input = ui.input(
+                    'Latitude',
+                    value=str(default_lat),
+                    placeholder='e.g., 52.520008'
+                ).classes('col-span-1')
+
+                lon_input = ui.input(
+                    'Longitude',
+                    value=str(default_lon),
+                    placeholder='e.g., 13.404954'
+                ).classes('col-span-1')
+
+                # Map for visual location selection
+                with ui.element('div').classes('col-span-1 sm:col-span-2'):
+                    ui.label('Click on map to set location').classes('text-sm mb-2')
+                    location_map = ui.leaflet(center=(default_lat, default_lon), zoom=12).classes('h-64 w-full')
+
+                    # Add marker at current position
+                    marker = location_map.marker(latlng=(default_lat, default_lon))
+                    marker.draggable = True
+
+                    # Update inputs when marker is dragged
+                    def on_marker_move(e):
+                        new_lat = e.args['lat']
+                        new_lon = e.args['lng']
+                        lat_input.value = f"{new_lat:.6f}"
+                        lon_input.value = f"{new_lon:.6f}"
+
+                    marker.on('dragend', lambda e: on_marker_move(e))
+
+                    # Update marker when clicking on map
+                    def on_map_click(e):
+                        new_lat = e.args['latlng']['lat']
+                        new_lon = e.args['latlng']['lng']
+                        lat_input.value = f"{new_lat:.6f}"
+                        lon_input.value = f"{new_lon:.6f}"
+                        marker.move(new_lat, new_lon)
+
+                    location_map.on('click', lambda e: on_map_click(e))
+
+                    # Update marker when inputs change
+                    def update_map_from_inputs():
+                        try:
+                            new_lat = float(lat_input.value)
+                            new_lon = float(lon_input.value)
+                            if -90 <= new_lat <= 90 and -180 <= new_lon <= 180:
+                                marker.move(new_lat, new_lon)
+                                location_map.set_center((new_lat, new_lon))
+                        except (ValueError, TypeError):
+                            pass
+
+                    lat_input.on('blur', lambda: update_map_from_inputs())
+                    lon_input.on('blur', lambda: update_map_from_inputs())
+
                 response_area_input = ui.textarea('Response Area', value=org.get('response_area') if org else '').classes('col-span-1 sm:col-span-2')
                 notes_input = ui.textarea('Notes', value=org.get('notes') if org else '').classes('col-span-1 sm:col-span-2')
 
@@ -133,6 +198,23 @@ async def organizations_page():
                         ui.notify('Name and Type are required', type='warning')
                         return
 
+                    # Parse latitude and longitude
+                    try:
+                        latitude = float(lat_input.value) if lat_input.value else None
+                        longitude = float(lon_input.value) if lon_input.value else None
+
+                        # Validate coordinate ranges
+                        if latitude is not None and not (-90 <= latitude <= 90):
+                            ui.notify('Latitude must be between -90 and 90', type='warning')
+                            return
+                        if longitude is not None and not (-180 <= longitude <= 180):
+                            ui.notify('Longitude must be between -180 and 180', type='warning')
+                            return
+
+                    except ValueError:
+                        ui.notify('Invalid latitude or longitude format', type='warning')
+                        return
+
                     org_data = {
                         'name': name_input.value,
                         'short_name': short_name_input.value or None,
@@ -144,6 +226,8 @@ async def organizations_page():
                         'address': address_input.value or None,
                         'city': city_input.value or None,
                         'country': country_input.value or 'Germany',
+                        'latitude': latitude,
+                        'longitude': longitude,
                         'response_area': response_area_input.value or None,
                         'notes': notes_input.value or None,
                         'active': active_switch.value,
