@@ -73,6 +73,8 @@ class IncidentORM(Base):
 
 class IncidentCreate(BaseModel):
     """Request model for creating an incident"""
+    id: Optional[str] = None  # App-generated incident UUID
+    session_id: Optional[str] = None  # Session ID for the entire chat
     title: str
     description: str
     imageUrl: Optional[str] = None
@@ -87,6 +89,8 @@ class IncidentCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_id": "sess-123e4567-e89b-12d3-a456-426614174001",
                 "title": "Suspicious Activity",
                 "description": "Unidentified vehicle near checkpoint",
                 "latitude": 52.520,

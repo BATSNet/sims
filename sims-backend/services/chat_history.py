@@ -228,7 +228,7 @@ class ChatHistory:
             raise
 
 
-def create_chat_session(db_connection, incident_id: str, user_phone: Optional[str] = None) -> str:
+def create_chat_session(db_connection, incident_id: str, user_phone: Optional[str] = None, session_id: Optional[str] = None) -> str:
     """
     Create a new chat session for an incident.
 
@@ -236,15 +236,21 @@ def create_chat_session(db_connection, incident_id: str, user_phone: Optional[st
         db_connection: SQLAlchemy Session
         incident_id: UUID of the incident
         user_phone: Optional phone number of the user
+        session_id: Optional app-generated session ID (UUID string)
 
     Returns:
         session_id (UUID string)
     """
     try:
         from models.chat_model import ChatSessionORM
+        import uuid as uuid_module
+
+        # Use app-provided session_id if available
+        session_uuid = uuid_module.UUID(session_id) if session_id else uuid_module.uuid4()
 
         # Create chat session ORM object
         chat_session = ChatSessionORM(
+            session_id=session_uuid,
             incident_id=incident_id,
             user_phone=user_phone
         )
