@@ -20,6 +20,7 @@ from organizations import organizations_page
 from transcription_service import TranscriptionService
 from endpoints.incident import incident_router
 from endpoints.organization import organization_router
+from endpoints.responder import responder_router
 from db.connection import get_db
 # Import all models to ensure SQLAlchemy relationships are resolved
 import models
@@ -61,6 +62,11 @@ transcription_service = TranscriptionService()
 # Register routers
 app.include_router(incident_router)
 app.include_router(organization_router)
+app.include_router(responder_router)
+
+# Import responder portal to register NiceGUI routes
+import responder_portal
+responder_portal.init_responder_portal()
 
 
 # Startup and shutdown events
@@ -73,6 +79,57 @@ async def startup_event():
         logger.info("Summarization service started successfully")
     except Exception as e:
         logger.error(f"Failed to start summarization service: {e}", exc_info=True)
+
+    # Generate test responder token for development
+    try:
+        import secrets
+        from auth.responder_auth import hash_token
+        from models.organization_model import OrganizationORM
+        from models.organization_token_model import OrganizationTokenORM
+
+        db = next(get_db())
+
+        # Get first organization or create a test one
+        org = db.query(OrganizationORM).first()
+
+        if org:
+            # Check if test token already exists
+            existing_token = db.query(OrganizationTokenORM).filter(
+                OrganizationTokenORM.organization_id == org.id,
+                OrganizationTokenORM.created_by == 'system_startup'
+            ).first()
+
+            if not existing_token:
+                # Generate test token
+                plain_token = secrets.token_urlsafe(32)
+                token_hash = hash_token(plain_token)
+
+                test_token = OrganizationTokenORM(
+                    organization_id=org.id,
+                    token=token_hash,
+                    created_by='system_startup',
+                    created_at=datetime.utcnow(),
+                    active=True
+                )
+
+                db.add(test_token)
+                db.commit()
+
+                logger.info("=" * 80)
+                logger.info("TEST RESPONDER TOKEN GENERATED")
+                logger.info(f"Organization: {org.name} (ID: {org.id})")
+                logger.info(f"Token: {plain_token}")
+                logger.info(f"Access URL: http://localhost:8000/responder?token={plain_token}")
+                logger.info("=" * 80)
+            else:
+                logger.info(f"Test token already exists for organization: {org.name}")
+        else:
+            logger.warning("No organizations found. Create an organization first to generate a test token.")
+
+        db.close()
+
+    except Exception as e:
+        logger.error(f"Failed to generate test token: {e}", exc_info=True)
 
 
 @app.on_event("shutdown")

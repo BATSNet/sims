@@ -12,6 +12,7 @@ class ChatMessage {
   final String? imageUrl;
   final String? audioUrl;
   final bool isThinking;
+  final bool isSending;
 
   ChatMessage({
     required this.id,
@@ -21,6 +22,7 @@ class ChatMessage {
     this.imageUrl,
     this.audioUrl,
     this.isThinking = false,
+    this.isSending = false,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class ChatMessage {
       imageUrl: json['imageUrl'] as String?,
       audioUrl: json['audioUrl'] as String?,
       isThinking: json['isThinking'] as bool? ?? false,
+      isSending: json['isSending'] as bool? ?? false,
     );
   }
 
@@ -47,6 +50,7 @@ class ChatMessage {
       'imageUrl': imageUrl,
       'audioUrl': audioUrl,
       'isThinking': isThinking,
+      'isSending': isSending,
     };
   }
 
@@ -58,6 +62,7 @@ class ChatMessage {
     String? imageUrl,
     String? audioUrl,
     bool? isThinking,
+    bool? isSending,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -67,6 +72,7 @@ class ChatMessage {
       imageUrl: imageUrl ?? this.imageUrl,
       audioUrl: audioUrl ?? this.audioUrl,
       isThinking: isThinking ?? this.isThinking,
+      isSending: isSending ?? this.isSending,
     );
   }
 }

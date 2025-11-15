@@ -112,6 +112,11 @@ class WebSocketService {
           _stats = Map<String, dynamic>.from(decodedMessage['data']);
           break;
 
+        case 'chat_message':
+          debugPrint('Received chat message for incident: ${decodedMessage['incident_id']}');
+          // Will be handled by listeners
+          break;
+
         case 'pong':
           debugPrint('Received pong from server');
           break;

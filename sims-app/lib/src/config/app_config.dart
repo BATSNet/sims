@@ -1,6 +1,6 @@
 class AppConfig {
   // Change this to switch between dev and production
-  static const bool isDevelopment = false;
+  static const bool isDevelopment = true;
 
   // Development settings
   static const String devBaseUrl = 'http://10.0.2.2:8000'; // Host machine IP for emulator

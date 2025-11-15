@@ -46,6 +46,33 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         if assignment_history and assignment_history[-1].get('auto_assigned'):
             is_auto_assigned = True
 
+    # Extract media file URLs
+    image_url = None
+    audio_url = None
+    video_url = None
+
+    # Check for media files in the incident data
+    media_files = incident.get('mediaFiles', [])
+    if media_files:
+        for media in media_files:
+            media_type = media.get('type', '').lower()
+            file_url = media.get('url') or media.get('fileUrl')
+
+            if media_type in ['image', 'photo'] and not image_url:
+                image_url = file_url
+            elif media_type in ['audio', 'voice'] and not audio_url:
+                audio_url = file_url
+            elif media_type in ['video'] and not video_url:
+                video_url = file_url
+
+    # Also check for direct URL fields (camelCase from API)
+    if not image_url:
+        image_url = incident.get('imageUrl') or incident.get('image_url')
+    if not audio_url:
+        audio_url = incident.get('audioUrl') or incident.get('audio_url')
+    if not video_url:
+        video_url = incident.get('videoUrl') or incident.get('video_url')
+
     return {
         'id': incident.get('incidentId', 'UNKNOWN'),  # camelCase from API
         'timestamp': timestamp,
@@ -63,7 +90,10 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'reporter': incident.get('userPhone', 'Unknown'),  # camelCase from API
         'title': incident.get('title', 'Incident'),
         'assigned_org': assigned_org,
-        'is_auto_assigned': is_auto_assigned
+        'is_auto_assigned': is_auto_assigned,
+        'imageUrl': image_url,
+        'audioUrl': audio_url,
+        'videoUrl': video_url,
     }
 
 
@@ -223,24 +253,125 @@ def format_coordinates(lat: float, lon: float) -> str:
 
 async def render_map(incidents: List[Dict]):
     """Render the incident map with markers"""
-    # Add MarkerCluster CSS and JS
+    # Debug logging
+    logger.info(f"render_map called with {len(incidents)} incidents")
+    valid_incidents = [inc for inc in incidents if inc['location']['lat'] is not None and inc['location']['lon'] is not None]
+    logger.info(f"Found {len(valid_incidents)} incidents with valid coordinates")
+    if valid_incidents:
+        logger.info(f"Sample incident: {valid_incidents[0]}")
+
+    # Add MarkerCluster CSS and JS with proper loading
     ui.add_head_html('''
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-        <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     ''')
 
-    # Create leaflet map - responsive height
-    m = ui.leaflet(center=(51.1657, 10.4515), zoom=6).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
+    # Load MarkerCluster script and wait for it to load
+    load_script_js = '''
+        (function() {
+            if (window.markerClusterLoaded) {
+                console.log('[SIMS] MarkerCluster already loaded');
+                return;
+            }
 
-    # Clear default layers and add dark tiles
+            console.log('[SIMS] Loading MarkerCluster library...');
+            var script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js';
+            script.onload = function() {
+                window.markerClusterLoaded = true;
+                console.log('[SIMS] MarkerCluster library loaded successfully');
+            };
+            script.onerror = function() {
+                console.error('[SIMS] Failed to load MarkerCluster library');
+            };
+            document.head.appendChild(script);
+        })();
+    '''
+    ui.run_javascript(load_script_js)
+
+    # Create leaflet map - responsive height
+    # Default to Germany center, will be updated by geolocation
+    m = ui.leaflet(center=(51.1657, 10.4515), zoom=11).classes('w-full h-[500px] sm:h-[450px] md:h-[400px] lg:h-[500px]')
+
+    # Get user's current location and center map on it (50km view = zoom 11)
+    geolocation_js = f'''
+        (function() {{
+            if (navigator.geolocation) {{
+                console.log('[SIMS] Requesting geolocation...');
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {{
+                        var lat = position.coords.latitude;
+                        var lon = position.coords.longitude;
+                        console.log('[SIMS] Geolocation obtained:', lat, lon);
+
+                        // Center map on user's location with zoom 11 (approximately 50km view)
+                        var map = getElement({m.id}).map;
+                        map.setView([lat, lon], 11);
+
+                        // Add a marker for user's current location
+                        var userIcon = L.divIcon({{
+                            html: '<div style="background: #00FF00; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 10px #00FF00; cursor: pointer;"></div>',
+                            className: 'user-location-marker',
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7]
+                        }});
+
+                        L.marker([lat, lon], {{ icon: userIcon }})
+                            .bindPopup('Your Location')
+                            .addTo(map);
+
+                        // Force tile redraw after geolocation
+                        setTimeout(function() {{
+                            console.log('[SIMS] Redrawing tiles after geolocation');
+                            map.eachLayer(function(layer) {{
+                                if (layer instanceof L.TileLayer) {{
+                                    layer.redraw();
+                                }}
+                            }});
+                        }}, 200);
+
+                        // After centering on user location, zoom to show all incidents
+                        console.log('[SIMS] User location set, now zooming to show all incidents');
+                        if (window.autoZoomToIncidents) {{
+                            window.autoZoomToIncidents();
+                        }}
+                    }},
+                    function(error) {{
+                        console.warn('[SIMS] Geolocation error:', error.message);
+                        console.log('[SIMS] Geolocation failed, auto-zooming to incidents');
+
+                        // Trigger auto-zoom to incidents if geolocation fails
+                        if (window.autoZoomToIncidents) {{
+                            window.autoZoomToIncidents();
+                        }}
+                    }},
+                    {{
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0
+                    }}
+                );
+            }} else {{
+                console.warn('[SIMS] Geolocation not supported by browser');
+            }}
+        }})();
+    '''
+    ui.run_javascript(geolocation_js)
+
+    # Clear default layers and add dark tiles with cache busting
     m.clear_layers()
+
+    # Add timestamp for cache busting to ensure fresh tiles
+    import time
+    cache_buster = int(time.time())
+
     m.tile_layer(
-        url_template='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        url_template=f'https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?v={cache_buster}',
         options={
             'maxZoom': 19,
             'subdomains': 'abcd',
-            'attribution': ''
+            'attribution': '',
+            'noCache': True  # Prevent browser caching
         }
     )
 
@@ -345,43 +476,83 @@ async def render_map(incidents: List[Dict]):
         ui.run_javascript(js_code)
 
     # Create marker cluster group for incidents with custom styling
+    # Wait for MarkerCluster library to load before initializing
     cluster_init_js = f'''
         (function() {{
-            // Create marker cluster group with custom options
-            var incidentClusterGroup = L.markerClusterGroup({{
-                showCoverageOnHover: true,
-                zoomToBoundsOnClick: true,
-                spiderfyOnMaxZoom: true,
-                removeOutsideVisibleBounds: true,
-                maxClusterRadius: 60,
-                iconCreateFunction: function(cluster) {{
-                    var count = cluster.getChildCount();
-                    var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
+            var attempts = 0;
+            var maxAttempts = 100; // 10 seconds max
 
-                    return L.divIcon({{
-                        html: '<div style="background: rgba(255, 68, 68, 0.8); width: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; height: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; border: 3px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ' + (size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px') + '; color: white; font-weight: bold; box-shadow: 0 0 10px rgba(255, 68, 68, 0.6); cursor: pointer;"><span>' + count + '</span></div>',
-                        className: 'custom-cluster-icon',
-                        iconSize: L.point(size === 'small' ? 30 : size === 'medium' ? 40 : 50, size === 'small' ? 30 : size === 'medium' ? 40 : 50)
-                    }});
+            function initializeClusterGroup() {{
+                attempts++;
+
+                // Check if MarkerCluster library is loaded
+                if (!window.markerClusterLoaded || typeof L === 'undefined' || typeof L.markerClusterGroup === 'undefined') {{
+                    if (attempts >= maxAttempts) {{
+                        console.error('[SIMS] Timeout waiting for MarkerCluster library after ' + (maxAttempts * 100) + 'ms');
+                        console.error('[SIMS] L defined:', typeof L !== 'undefined');
+                        console.error('[SIMS] L.markerClusterGroup defined:', typeof L !== 'undefined' && typeof L.markerClusterGroup !== 'undefined');
+                        console.error('[SIMS] markerClusterLoaded flag:', window.markerClusterLoaded);
+                        return;
+                    }}
+                    console.log('[SIMS] Waiting for MarkerCluster library... (attempt ' + attempts + '/' + maxAttempts + ')');
+                    setTimeout(initializeClusterGroup, 100);
+                    return;
                 }}
-            }});
 
-            // Store reference globally so we can add markers to it
-            window.incidentClusterGroup = incidentClusterGroup;
+                console.log('[SIMS] MarkerCluster library loaded, initializing cluster group');
 
-            // Add cluster group to map
-            incidentClusterGroup.addTo(getElement({m.id}).map);
+                // Create marker cluster group with custom options
+                var incidentClusterGroup = L.markerClusterGroup({{
+                    showCoverageOnHover: true,
+                    zoomToBoundsOnClick: true,
+                    spiderfyOnMaxZoom: true,
+                    removeOutsideVisibleBounds: true,
+                    maxClusterRadius: 60,
+                    iconCreateFunction: function(cluster) {{
+                        var count = cluster.getChildCount();
+                        var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
+
+                        return L.divIcon({{
+                            html: '<div style="background: rgba(255, 68, 68, 0.8); width: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; height: ' + (size === 'small' ? '30px' : size === 'medium' ? '40px' : '50px') + '; border: 3px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ' + (size === 'small' ? '12px' : size === 'medium' ? '14px' : '16px') + '; color: white; font-weight: bold; box-shadow: 0 0 10px rgba(255, 68, 68, 0.6); cursor: pointer;"><span>' + count + '</span></div>',
+                            className: 'custom-cluster-icon',
+                            iconSize: L.point(size === 'small' ? 30 : size === 'medium' ? 40 : 50, size === 'small' ? 30 : size === 'medium' ? 40 : 50)
+                        }});
+                    }}
+                }});
+
+                // Store reference globally so we can add markers to it
+                window.incidentClusterGroup = incidentClusterGroup;
+
+                // Add cluster group to map
+                var map = getElement({m.id}).map;
+                incidentClusterGroup.addTo(map);
+
+                console.log('[SIMS] Cluster group initialized and added to map');
+            }}
+
+            // Start initialization
+            initializeClusterGroup();
         }})();
     '''
     ui.run_javascript(cluster_init_js)
 
     # Add custom square markers for each incident using JavaScript
+    valid_marker_count = 0
     for incident in incidents:
         lat = incident['location']['lat']
         lon = incident['location']['lon']
+
+        # Skip incidents without valid coordinates
+        if lat is None or lon is None:
+            logger.warning(f"Skipping incident {incident['id']} - no valid coordinates")
+            continue
+
         priority = incident['priority']
         color = colors.get(priority, '#63ABFF')
         inc_id = incident['id']
+        valid_marker_count += 1
+
+        logger.info(f"Creating marker for incident {inc_id} at ({lat}, {lon}) with priority {priority}")
 
         # Escape strings for JavaScript
         inc_id_escaped = inc_id.replace("'", "\\'")
@@ -474,46 +645,122 @@ async def render_map(incidents: List[Dict]):
 
         # Create marker with custom icon and popup with clickable button using JavaScript
         # Add to cluster group instead of directly to map
+        # Wait for cluster group to be ready before adding marker
         js_code = f'''
             (function() {{
-                var markerColor = "{color}";
-                var icon = L.divIcon({{
-                    html: '<div style="background: ' + markerColor + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + markerColor + '; cursor: pointer;"></div>',
-                    className: 'custom-marker',
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8]
-                }});
+                var attempts = 0;
+                var maxAttempts = 150; // 15 seconds max
 
-                var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
+                function addMarkerToCluster() {{
+                    attempts++;
 
-                var popupContent = '<div class="popup-title">{inc_id_escaped}</div>' +
-                                 '<div class="popup-description">{inc_desc}</div>' +
-                                 '<div class="popup-priority priority-{priority}">{priority.upper()}</div>' +
-                                 '<div style="margin-top: 12px;">' +
-                                 '<button onclick="getElement({marker_button_id}).click()" ' +
-                                 'style="background: transparent; color: white; border: 1px solid white; ' +
-                                 'padding: 6px 14px; font-size: 10px; ' +
-                                 'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
-                                 'transition: all 0.2s ease;" ' +
-                                 'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
-                                 'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">Forward</button>' +
-                                 '</div>';
+                    // Wait for cluster group to be ready
+                    if (!window.incidentClusterGroup) {{
+                        if (attempts >= maxAttempts) {{
+                            console.error('[SIMS] Timeout waiting for cluster group for marker {inc_id}');
+                            console.error('[SIMS] Cluster group exists:', !!window.incidentClusterGroup);
+                            return;
+                        }}
+                        if (attempts % 20 === 0) {{
+                            console.log('[SIMS] Still waiting for cluster group... (attempt ' + attempts + ')');
+                        }}
+                        setTimeout(addMarkerToCluster, 100);
+                        return;
+                    }}
 
-                marker.bindPopup(popupContent, {{
-                    className: 'custom-popup-{priority}'
-                }});
+                    var markerColor = "{color}";
+                    var icon = L.divIcon({{
+                        html: '<div style="background: ' + markerColor + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + markerColor + '; cursor: pointer;"></div>',
+                        className: 'custom-marker',
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    }});
 
-                // Add marker to cluster group instead of directly to map
-                if (window.incidentClusterGroup) {{
+                    var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
+
+                    var popupContent = '<div class="popup-title">{inc_id_escaped}</div>' +
+                                     '<div class="popup-description">{inc_desc}</div>' +
+                                     '<div class="popup-priority priority-{priority}">{priority.upper()}</div>' +
+                                     '<div style="margin-top: 12px;">' +
+                                     '<button onclick="getElement({marker_button_id}).click()" ' +
+                                     'style="background: transparent; color: white; border: 1px solid white; ' +
+                                     'padding: 6px 14px; font-size: 10px; ' +
+                                     'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
+                                     'transition: all 0.2s ease;" ' +
+                                     'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
+                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">Forward</button>' +
+                                     '</div>';
+
+                    marker.bindPopup(popupContent, {{
+                        className: 'custom-popup-{priority}'
+                    }});
+
+                    // Add marker to cluster group
                     window.incidentClusterGroup.addLayer(marker);
-                }} else {{
-                    // Fallback to adding directly to map if cluster group not available
-                    marker.addTo(getElement({m.id}).map);
+
+                    // Store marker reference for dynamic updates
+                    if (!window.incidentMarkers) {{
+                        window.incidentMarkers = {{}};
+                    }}
+                    window.incidentMarkers['{inc_id}'] = marker;
+
+                    console.log('[SIMS] Marker added for incident {inc_id} at ({lat}, {lon})');
                 }}
+
+                // Start adding marker
+                addMarkerToCluster();
             }})();
         '''
 
         ui.run_javascript(js_code)
+
+    logger.info(f"Created {valid_marker_count} incident markers")
+
+    # Auto-zoom to fit all incidents only if geolocation is unavailable
+    # Store auto-zoom function globally so it can be called if geolocation fails
+    if any(inc['location']['lat'] is not None and inc['location']['lon'] is not None for inc in incidents):
+        auto_zoom_js = f'''
+            (function() {{
+                // Store auto-zoom function globally
+                window.autoZoomToIncidents = function() {{
+                    // Wait for cluster group to be ready
+                    if (!window.incidentClusterGroup) {{
+                        console.log('[SIMS] Waiting for cluster group before auto-zoom...');
+                        setTimeout(window.autoZoomToIncidents, 200);
+                        return;
+                    }}
+
+                    // Wait a bit more for all markers to be added (async)
+                    setTimeout(function() {{
+                        var bounds = window.incidentClusterGroup.getBounds();
+                        if (bounds.isValid()) {{
+                            console.log('[SIMS] Auto-zooming to fit all incidents (geolocation unavailable)');
+                            var map = getElement({m.id}).map;
+                            map.fitBounds(bounds, {{
+                                padding: [50, 50],
+                                maxZoom: 15
+                            }});
+
+                            // Force tile layer redraw after zoom to prevent stale tiles
+                            setTimeout(function() {{
+                                console.log('[SIMS] Redrawing tiles after zoom');
+                                map.eachLayer(function(layer) {{
+                                    if (layer instanceof L.TileLayer) {{
+                                        layer.redraw();
+                                    }}
+                                }});
+                            }}, 300);
+                        }} else {{
+                            console.log('[SIMS] No valid bounds for auto-zoom');
+                        }}
+                    }}, 500);
+                }};
+
+                console.log('[SIMS] Auto-zoom function ready (will trigger if geolocation fails)');
+            }})();
+        '''
+        ui.run_javascript(auto_zoom_js)
+        logger.info("Auto-zoom function prepared")
 
 
 async def render_stats(incidents: List[Dict]):
@@ -664,6 +911,12 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 'priority': incident['priority'],
                 'assigned_org': assigned_org_display,
                 'action': incident['id'],
+                'reporter': incident.get('reporter', 'Unknown'),
+                'status': incident.get('status', 'active'),
+                'type': incident.get('type', 'Incident'),
+                'imageUrl': incident.get('imageUrl'),
+                'audioUrl': incident.get('audioUrl'),
+                'videoUrl': incident.get('videoUrl'),
             })
 
         table = ui.table(
@@ -706,7 +959,20 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     <span class="cell-location">{{ props.row.location }}</span>
                 </q-td>
                 <q-td key="description" :props="props">
-                    <span class="cell-description">{{ props.row.description }}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="cell-description">{{ props.row.description }}</span>
+                        <div class="flex gap-1" v-if="props.row.imageUrl || props.row.audioUrl || props.row.videoUrl">
+                            <a v-if="props.row.imageUrl" :href="props.row.imageUrl" target="_blank" class="text-blue-400 hover:text-blue-300" title="View Image">
+                                <q-icon name="image" size="16px" />
+                            </a>
+                            <a v-if="props.row.audioUrl" :href="props.row.audioUrl" target="_blank" class="text-green-400 hover:text-green-300" title="Listen to Audio">
+                                <q-icon name="audiotrack" size="16px" />
+                            </a>
+                            <a v-if="props.row.videoUrl" :href="props.row.videoUrl" target="_blank" class="text-purple-400 hover:text-purple-300" title="Watch Video">
+                                <q-icon name="videocam" size="16px" />
+                            </a>
+                        </div>
+                    </div>
                 </q-td>
                 <q-td key="priority" :props="props">
                     <span :class="'priority-badge priority-' + props.row.priority">
@@ -728,16 +994,28 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     <span v-else style="color: #718096; font-size: 12px;">Unassigned</span>
                 </q-td>
                 <q-td key="action" :props="props" @click.stop>
-                    <q-btn
-                        outline
-                        dense
-                        size="sm"
-                        label="Forward"
-                        color="white"
-                        no-caps
-                        style="font-size: 13px; padding: 4px 12px"
-                        @click="$parent.$emit('forward', props.row.id)"
-                    />
+                    <div class="flex gap-2">
+                        <q-btn
+                            outline
+                            dense
+                            size="sm"
+                            label="Forward"
+                            color="white"
+                            no-caps
+                            style="font-size: 13px; padding: 4px 12px"
+                            @click="$parent.$emit('forward', props.row.id)"
+                        />
+                        <q-btn
+                            outline
+                            dense
+                            size="sm"
+                            label="Close"
+                            color="red"
+                            no-caps
+                            style="font-size: 13px; padding: 4px 12px"
+                            @click="$parent.$emit('close', props.row.id)"
+                        />
+                    </div>
                 </q-td>
             </q-tr>
             <q-tr v-show="props.expand" :props="props">
@@ -767,6 +1045,22 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             <div class="col-span-1 sm:col-span-2">
                                 <div class="text-xs text-gray-400 uppercase mb-1">Reporter</div>
                                 <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
+                            </div>
+                            <div v-if="props.row.imageUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Image</div>
+                                <img :src="props.row.imageUrl" class="max-w-full h-auto rounded" style="max-height: 400px;" />
+                            </div>
+                            <div v-if="props.row.audioUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Audio</div>
+                                <audio controls class="w-full">
+                                    <source :src="props.row.audioUrl" />
+                                </audio>
+                            </div>
+                            <div v-if="props.row.videoUrl" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
+                                <video controls class="max-w-full h-auto rounded" style="max-height: 400px;">
+                                    <source :src="props.row.videoUrl" />
+                                </video>
                             </div>
                         </div>
                     </div>
@@ -874,8 +1168,29 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 logger.error(f"Error removing assignment: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
 
+        # Handle close incident action
+        async def handle_close_incident(e):
+            incident_id = e.args
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.put(
+                        f"{API_BASE}/incident/{incident_id}",
+                        json={'status': 'closed'}
+                    )
+                    if response.status_code == 200:
+                        ui.notify(f'Incident {incident_id} closed', type='positive')
+                        # Refresh the page to remove closed incident from table
+                        ui.navigate.reload()
+                    else:
+                        logger.error(f"Failed to close incident: {response.status_code}")
+                        ui.notify('Failed to close incident', type='negative')
+            except Exception as error:
+                logger.error(f"Error closing incident: {error}", exc_info=True)
+                ui.notify(f'Error: {str(error)}', type='negative')
+
         table.on('forward', handle_forward)
         table.on('remove_assignment', handle_remove_assignment)
+        table.on('close', handle_close_incident)
 
     # Store references for filter updates
     filter_refs = {
@@ -963,7 +1278,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 async def dashboard():
     """Main dashboard page"""
     # Load initial incidents from API
-    incidents = await load_incidents()
+    all_incidents = await load_incidents()
+
+    # Filter out closed incidents
+    incidents = [inc for inc in all_incidents if inc.get('status', 'open') != 'closed']
+    logger.info(f"Filtered {len(all_incidents) - len(incidents)} closed incidents from display")
 
     # Use mock data as fallback if API fails
     is_mock_data = False
@@ -981,28 +1300,26 @@ async def dashboard():
         # Set overview container reference for filter updates
         filter_refs['overview_container'] = overview_container
 
-    # Define refresh function
+    # Define refresh function that only updates table, not map
     async def refresh_dashboard():
-        """Reload incidents and refresh the dashboard"""
+        """Reload incidents and refresh the table only"""
         nonlocal incidents, is_mock_data, filter_refs
-        logger.info("Refreshing dashboard due to WebSocket update")
+        logger.info("Refreshing dashboard table (not map)")
 
         # Reload incidents from API
-        new_incidents = await load_incidents()
-        if new_incidents:
-            incidents = new_incidents
+        all_new_incidents = await load_incidents()
+        if all_new_incidents:
+            # Filter out closed incidents
+            incidents = [inc for inc in all_new_incidents if inc.get('status', 'open') != 'closed']
+            logger.info(f"Filtered {len(all_new_incidents) - len(incidents)} closed incidents from refresh")
             is_mock_data = False
         else:
             # Still no incidents, keep using mock data
             incidents = MOCK_INCIDENTS
             is_mock_data = True
 
-        # Clear and re-render
-        overview_container.clear()
+        # Only re-render the table, NOT the map
         table_container.clear()
-
-        with overview_container:
-            await render_overview(incidents)
 
         with table_container:
             new_filter_refs = await render_incident_table(incidents, is_mock_data=is_mock_data)
@@ -1012,7 +1329,7 @@ async def dashboard():
     # Create a button that can be triggered from JavaScript (hidden)
     refresh_button = ui.button('', on_click=refresh_dashboard).classes('hidden')
 
-    # WebSocket client JavaScript code
+    # WebSocket client JavaScript code with dynamic marker handling
     ws_code = f'''
     (function() {{
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1021,6 +1338,78 @@ async def dashboard():
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 10;
         let heartbeatInterval = null;
+
+        // Colors for different priorities
+        const priorityColors = {{
+            'critical': '#FF4444',
+            'high': '#ffa600',
+            'medium': '#63ABFF',
+            'low': 'rgba(255, 255, 255, 0.4)'
+        }};
+
+        // Function to add or update a marker
+        function addOrUpdateMarker(incident) {{
+            console.log('[SIMS] addOrUpdateMarker called with:', incident);
+
+            // Handle different field name formats
+            const lat = incident.latitude || incident.lat;
+            const lon = incident.longitude || incident.lon || incident.lng;
+            const incidentId = incident.incidentId || incident.incident_id || incident.id;
+            const priority = incident.priority || 'medium';
+            const status = incident.status || 'open';
+
+            console.log('[SIMS] Extracted values - ID:', incidentId, 'Lat:', lat, 'Lon:', lon, 'Status:', status);
+
+            // Skip if no coordinates or if closed
+            if (!lat || !lon || status === 'closed') {{
+                // Remove marker if it exists
+                if (window.incidentMarkers[incidentId]) {{
+                    removeMarker(incidentId);
+                }}
+                return;
+            }}
+
+            // Remove existing marker if updating
+            if (window.incidentMarkers[incidentId]) {{
+                removeMarker(incidentId);
+            }}
+
+            const color = priorityColors[priority] || '#63ABFF';
+            const icon = L.divIcon({{
+                html: '<div style="background: ' + color + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + color + '; cursor: pointer;"></div>',
+                className: 'custom-marker',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }});
+
+            const marker = L.marker([lat, lon], {{ icon: icon }});
+
+            const description = incident.description || 'No description';
+            const popupContent = '<div class="popup-title">' + incidentId + '</div>' +
+                               '<div class="popup-description">' + description + '</div>' +
+                               '<div class="popup-priority priority-' + priority + '">' + priority.toUpperCase() + '</div>';
+
+            marker.bindPopup(popupContent, {{
+                className: 'custom-popup-' + priority
+            }});
+
+            // Add to cluster group
+            if (window.incidentClusterGroup) {{
+                window.incidentClusterGroup.addLayer(marker);
+                window.incidentMarkers[incidentId] = marker;
+                console.log('[SIMS] Added/updated marker for incident', incidentId);
+            }}
+        }}
+
+        // Function to remove a marker
+        function removeMarker(incidentId) {{
+            const marker = window.incidentMarkers[incidentId];
+            if (marker && window.incidentClusterGroup) {{
+                window.incidentClusterGroup.removeLayer(marker);
+                delete window.incidentMarkers[incidentId];
+                console.log('[SIMS] Removed marker for incident', incidentId);
+            }}
+        }}
 
         function updateSystemStatus(message, isConnected) {{
             const statusText = document.getElementById('system-status-text');
@@ -1086,9 +1475,14 @@ async def dashboard():
                         message.type === 'incident_update' ||
                         message.type === 'incident_assigned') {{
 
-                        console.log('[SIMS WebSocket] Incident update detected, refreshing dashboard');
+                        console.log('[SIMS WebSocket] Incident event:', message.type);
 
-                        // Trigger dashboard refresh by clicking hidden button
+                        // Update marker dynamically using Leaflet API
+                        if (message.incident) {{
+                            addOrUpdateMarker(message.incident);
+                        }}
+
+                        // Refresh table only (not map)
                         getElement({refresh_button.id}).click();
                     }}
                 }} catch (error) {{
