@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from geoalchemy2.elements import WKTElement
 
 from db.connection import get_db
@@ -23,8 +23,12 @@ from models.incident_model import (
 from models.chat_model import ChatSessionORM
 from models.media_model import MediaORM
 from services.chat_history import ChatHistory, create_chat_session, get_session_by_incident
+from services.classification_service import get_classifier
+from services.assignment_service import get_assignment_service
+from services.sedap_service import SEDAPService
 from websocket import websocket_manager
 from pydantic import BaseModel
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +124,158 @@ async def create_incident(
             )
             db.add(media)
             audio_url = incident_data.audioUrl
+
+        # Auto-classify incident using LLM
+        try:
+            logger.info(f"Classifying incident {incident_id} with description: {incident_data.description[:100]}...")
+            classifier = get_classifier()
+
+            # Get transcription from audio media if available
+            transcription = None
+            if incident_data.audioUrl:
+                audio_media = db.query(MediaORM).filter(
+                    MediaORM.incident_id == incident_uuid,
+                    MediaORM.media_type == 'audio'
+                ).first()
+                if audio_media and hasattr(audio_media, 'transcription'):
+                    transcription = audio_media.transcription
+                    logger.info(f"Found transcription for incident {incident_id}: {transcription[:100]}...")
+
+            # Classify the incident
+            classification = await classifier.classify_incident(
+                description=incident_data.description,
+                transcription=transcription,
+                latitude=incident_data.latitude,
+                longitude=incident_data.longitude,
+                heading=incident_data.heading
+            )
+
+            # Update incident with classification results
+            db_incident.category = classification.category
+            db_incident.priority = classification.priority
+            db_incident.tags = classification.tags
+
+            logger.info(
+                f"Classification result for {incident_id}: "
+                f"category={classification.category}, "
+                f"priority={classification.priority}, "
+                f"tags={classification.tags}, "
+                f"confidence={classification.confidence:.2f}"
+            )
+
+            # Store classification details in metadata
+            if not db_incident.meta_data:
+                db_incident.meta_data = {}
+            db_incident.meta_data['classification'] = classification.to_dict()
+            db_incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
+
+            logger.info(
+                f"Incident {incident_id} classified as '{classification.category}' "
+                f"with priority '{classification.priority}' (confidence: {classification.confidence:.2f})"
+            )
+
+            # Auto-assign to organization if confidence is high enough
+            if Config.AUTO_ASSIGN_ENABLED and classification.confidence >= Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:
+                logger.info(f"Auto-assigning incident {incident_id} (confidence threshold met)")
+                assignment_service = get_assignment_service()
+
+                assignment = await assignment_service.assign_incident(
+                    incident=db_incident,
+                    classification=classification,
+                    db=db
+                )
+
+                if assignment.organization_id:
+                    # Assign incident to organization
+                    db_incident.routed_to = assignment.organization_id
+                    db_incident.status = 'in_progress'
+
+                    # Store assignment details in metadata
+                    if 'assignment_history' not in db_incident.meta_data:
+                        db_incident.meta_data['assignment_history'] = []
+
+                    db_incident.meta_data['assignment_history'].append({
+                        'organization_id': assignment.organization_id,
+                        'organization_name': assignment.organization_name,
+                        'assigned_at': datetime.utcnow().isoformat(),
+                        'assigned_by': 'auto_assignment',
+                        'auto_assigned': True,
+                        'confidence': assignment.confidence,
+                        'reasoning': assignment.reasoning
+                    })
+
+                    logger.info(
+                        f"Incident {incident_id} auto-assigned to {assignment.organization_name} "
+                        f"(confidence: {assignment.confidence:.2f})"
+                    )
+
+                    # Forward to external API if organization has it enabled
+                    from models.organization_model import OrganizationORM
+                    org = db.query(OrganizationORM).filter(
+                        OrganizationORM.id == assignment.organization_id
+                    ).first()
+
+                    if org and org.api_enabled and org.api_type:
+                        logger.info(f"Forwarding incident {incident_id} to {org.api_type} API")
+
+                        # Prepare incident data for forwarding
+                        incident_dict = {
+                            'incident_id': incident_id,
+                            'title': db_incident.title or 'Untitled',
+                            'description': db_incident.description or '',
+                            'latitude': db_incident.latitude,
+                            'longitude': db_incident.longitude,
+                            'heading': db_incident.heading,
+                            'category': db_incident.category,
+                            'priority': db_incident.priority
+                        }
+
+                        org_dict = {
+                            'id': org.id,
+                            'name': org.name,
+                            'api_type': org.api_type
+                        }
+
+                        # Forward incident
+                        success, error_msg = await SEDAPService.forward_incident(incident_dict, org_dict)
+
+                        # Store forwarding status in metadata
+                        if 'api_forwards' not in db_incident.meta_data:
+                            db_incident.meta_data['api_forwards'] = []
+
+                        db_incident.meta_data['api_forwards'].append({
+                            'organization_id': org.id,
+                            'organization_name': org.name,
+                            'api_type': org.api_type,
+                            'forwarded_at': datetime.utcnow().isoformat(),
+                            'status': 'success' if success else 'failed',
+                            'error_message': error_msg
+                        })
+
+                        # Add chat message confirming forwarding
+                        if success:
+                            confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
+                            chat.add_message("system", confirmation_msg)
+                            logger.info(f"Successfully forwarded incident {incident_id} to {org.name}")
+                        else:
+                            logger.error(f"Failed to forward incident {incident_id} to {org.api_type}: {error_msg}")
+                else:
+                    logger.warning(
+                        f"Could not auto-assign incident {incident_id}: {assignment.reasoning}"
+                    )
+            else:
+                if not Config.AUTO_ASSIGN_ENABLED:
+                    logger.info(f"Auto-assignment disabled, skipping for incident {incident_id}")
+                else:
+                    logger.info(
+                        f"Incident {incident_id} confidence {classification.confidence:.2f} "
+                        f"below threshold {Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:.2f}, skipping auto-assignment"
+                    )
+
+        except Exception as classify_error:
+            logger.error(f"Classification/assignment failed for {incident_id}: {classify_error}", exc_info=True)
+            # Continue with incident creation even if classification fails
+            db_incident.meta_data['classification_error'] = str(classify_error)
 
         db.commit()
 
@@ -346,7 +502,9 @@ async def list_incidents(
 ):
     """List all incidents with optional filtering"""
     try:
-        query = db.query(IncidentORM)
+        query = db.query(IncidentORM).options(
+            joinedload(IncidentORM.organization)
+        )
 
         if status_filter:
             query = query.filter(IncidentORM.status == status_filter)
@@ -365,4 +523,325 @@ async def list_incidents(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list incidents: {str(e)}"
+        )
+
+
+class AssignRequest(BaseModel):
+    """Request model for assigning incident to organization"""
+    organization_id: int
+    notes: Optional[str] = None
+
+
+@incident_router.post("/{incident_id}/assign", response_model=IncidentResponse)
+async def assign_incident(
+    incident_id: str,
+    assign_data: AssignRequest,
+    db: Session = Depends(get_db)
+):
+    """Assign/forward an incident to an organization"""
+    try:
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Check if organization exists
+        from models.organization_model import OrganizationORM
+        org = db.query(OrganizationORM).filter(
+            OrganizationORM.id == assign_data.organization_id
+        ).first()
+
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization {assign_data.organization_id} not found"
+            )
+
+        # Assign the incident
+        incident.routed_to = assign_data.organization_id
+        incident.status = 'in_progress'
+        incident.updated_at = datetime.utcnow()
+
+        # Add notes to metadata if provided
+        if assign_data.notes:
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'assignment_history' not in incident.meta_data:
+                incident.meta_data['assignment_history'] = []
+            incident.meta_data['assignment_history'].append({
+                'organization_id': assign_data.organization_id,
+                'organization_name': org.name,
+                'assigned_at': datetime.utcnow().isoformat(),
+                'notes': assign_data.notes
+            })
+
+        # Forward to external API if organization has it enabled
+        if org.api_enabled and org.api_type:
+            logger.info(f"Forwarding incident {incident_id} to {org.api_type} API")
+
+            # Prepare incident data for forwarding
+            incident_dict = {
+                'incident_id': incident.incident_id,
+                'title': incident.title or 'Untitled',
+                'description': incident.description or '',
+                'latitude': incident.latitude,
+                'longitude': incident.longitude,
+                'heading': incident.heading,
+                'category': incident.category,
+                'priority': incident.priority
+            }
+
+            org_dict = {
+                'id': org.id,
+                'name': org.name,
+                'api_type': org.api_type
+            }
+
+            # Forward incident
+            success, error_msg = await SEDAPService.forward_incident(incident_dict, org_dict)
+
+            # Store forwarding status in metadata
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'api_forwards' not in incident.meta_data:
+                incident.meta_data['api_forwards'] = []
+
+            incident.meta_data['api_forwards'].append({
+                'organization_id': org.id,
+                'organization_name': org.name,
+                'api_type': org.api_type,
+                'forwarded_at': datetime.utcnow().isoformat(),
+                'status': 'success' if success else 'failed',
+                'error_message': error_msg
+            })
+
+            # Add chat message confirming forwarding
+            if success:
+                session = get_session_by_incident(db, incident.id)
+                if session:
+                    chat = ChatHistory(db, session.session_id)
+                    confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
+                    chat.add_message("system", confirmation_msg)
+                    logger.info(f"Successfully forwarded incident {incident_id} to {org.name}")
+            else:
+                logger.error(f"Failed to forward incident {incident_id} to {org.api_type}: {error_msg}")
+
+        db.commit()
+        db.refresh(incident)
+
+        logger.info(f"Assigned incident {incident_id} to organization {org.name}")
+
+        # Prepare response
+        response = IncidentResponse.from_orm(incident)
+
+        # Broadcast assignment via WebSocket
+        try:
+            await websocket_manager.broadcast_incident(
+                incident_data=response.dict(),
+                event_type='incident_assigned'
+            )
+            logger.info(f"Broadcasted incident assignment {incident_id} via WebSocket")
+        except Exception as ws_error:
+            logger.error(f"Failed to broadcast incident assignment via WebSocket: {ws_error}")
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error assigning incident: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign incident: {str(e)}"
+        )
+
+
+@incident_router.delete("/{incident_id}/assignment", response_model=IncidentResponse)
+async def unassign_incident(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """Remove organization assignment from an incident"""
+    try:
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Store unassignment in history
+        if incident.routed_to:
+            from models.organization_model import OrganizationORM
+            org = db.query(OrganizationORM).filter(
+                OrganizationORM.id == incident.routed_to
+            ).first()
+
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'assignment_history' not in incident.meta_data:
+                incident.meta_data['assignment_history'] = []
+
+            incident.meta_data['assignment_history'].append({
+                'organization_id': incident.routed_to,
+                'organization_name': org.name if org else 'Unknown',
+                'unassigned_at': datetime.utcnow().isoformat(),
+                'action': 'unassigned'
+            })
+
+        # Remove assignment
+        incident.routed_to = None
+        incident.status = 'open'
+        incident.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(incident)
+
+        logger.info(f"Unassigned organization from incident {incident_id}")
+
+        # Prepare response
+        response = IncidentResponse.from_orm(incident)
+
+        # Broadcast unassignment via WebSocket
+        try:
+            await websocket_manager.broadcast_incident(
+                incident_data=response.dict(),
+                event_type='incident_unassigned'
+            )
+            logger.info(f"Broadcasted incident unassignment {incident_id} via WebSocket")
+        except Exception as ws_error:
+            logger.error(f"Failed to broadcast incident unassignment via WebSocket: {ws_error}")
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error unassigning incident: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unassign incident: {str(e)}"
+        )
+
+
+@incident_router.post("/{incident_id}/summarize")
+async def summarize_chat(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger chat summarization for an incident.
+    Queues the chat session for summarization by the batch processor.
+    """
+    try:
+        from services.schedule_summarization import get_summarization_service
+
+        # Validate incident exists
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Get chat session
+        session = get_session_by_incident(db, str(incident.id))
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No chat session found for incident {incident_id}"
+            )
+
+        # Queue for summarization
+        summarization_service = get_summarization_service()
+        await summarization_service.queue_chat_summarization(
+            session_id=session,
+            incident_id=str(incident.id),
+            db_session=db
+        )
+
+        logger.info(f"Queued chat summarization for incident {incident_id}")
+
+        return {
+            "success": True,
+            "message": f"Chat summarization queued for incident {incident_id}",
+            "incident_id": incident_id,
+            "session_id": session
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error queuing summarization: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to queue summarization: {str(e)}"
+        )
+
+
+@incident_router.get("/{incident_id}/summary")
+async def get_chat_summary(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the current chat summary for an incident.
+    Returns summary metadata from the incident's meta_data field.
+    """
+    try:
+        # Get incident
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Extract summary from metadata
+        meta_data = incident.meta_data or {}
+        summary = meta_data.get('chat_summary')
+        last_summarized_at = meta_data.get('last_summarized_at')
+        message_count = meta_data.get('message_count', 0)
+
+        # Get current message count
+        session_id = get_session_by_incident(db, str(incident.id))
+        current_message_count = 0
+        if session_id:
+            current_message_count = db.query(ChatSessionORM).filter(
+                ChatSessionORM.session_id == session_id
+            ).join(ChatMessageORM).count()
+
+        return {
+            "incident_id": incident_id,
+            "summary": summary,
+            "last_summarized_at": last_summarized_at,
+            "messages_at_summary": message_count,
+            "current_message_count": current_message_count,
+            "summary_available": summary is not None,
+            "summary_outdated": current_message_count > message_count if summary else False
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get summary: {str(e)}"
         )

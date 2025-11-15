@@ -8,10 +8,9 @@ import uuid
 
 from sqlalchemy import Column, String, BigInteger, TIMESTAMP, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class MediaType(str, Enum):
@@ -43,6 +42,4 @@ class MediaORM(Base):
     meta_data = Column('metadata', JSONB, default={})
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
 
-    # Relationships
-    incident = relationship("IncidentORM", back_populates="media_files")
-    chat_message = relationship("ChatMessageORM", back_populates="media_files")
+    # Relationships configured in models/__init__.py
