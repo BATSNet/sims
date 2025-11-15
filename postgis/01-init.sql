@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS organization (
     -- Additional contact info as JSONB for flexibility
     additional_contacts JSONB DEFAULT '[]'::jsonb,
 
+    -- External API Integration (SEDAP, KATWARN, etc.)
+    -- Actual endpoint configs are stored in config files
+    api_enabled BOOLEAN DEFAULT false,
+    api_type VARCHAR(50),
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

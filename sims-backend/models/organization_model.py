@@ -4,7 +4,7 @@ Organization Model - Organizations for routing incidents
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-from sqlalchemy import Column, BigInteger, String, TIMESTAMP, Boolean, Float, Text, ARRAY
+from sqlalchemy import Column, BigInteger, String, TIMESTAMP, Boolean, Float, Text, ARRAY, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from pydantic import BaseModel
 from geoalchemy2 import Geometry
@@ -44,6 +44,11 @@ class OrganizationORM(Base):
     # Additional contacts
     additional_contacts = Column(JSONB, default=[])
 
+    # External API Integration (SEDAP, KATWARN, etc.)
+    # Actual endpoint configs are stored in config files
+    api_enabled = Column(Boolean, default=False)
+    api_type = Column(String(50))
+
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
 
@@ -66,6 +71,8 @@ class OrganizationCreate(BaseModel):
     response_area: Optional[str] = None
     active: Optional[bool] = True
     notes: Optional[str] = None
+    api_enabled: Optional[bool] = False
+    api_type: Optional[str] = None
 
 
 class OrganizationUpdate(BaseModel):
@@ -86,6 +93,8 @@ class OrganizationUpdate(BaseModel):
     response_area: Optional[str] = None
     active: Optional[bool] = None
     notes: Optional[str] = None
+    api_enabled: Optional[bool] = None
+    api_type: Optional[str] = None
 
 
 class OrganizationResponse(BaseModel):
@@ -107,6 +116,8 @@ class OrganizationResponse(BaseModel):
     response_area: Optional[str]
     active: bool
     notes: Optional[str]
+    api_enabled: Optional[bool] = False
+    api_type: Optional[str] = None
     created_at: str
     updated_at: str
 

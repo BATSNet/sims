@@ -25,6 +25,7 @@ from models.media_model import MediaORM
 from services.chat_history import ChatHistory, create_chat_session, get_session_by_incident
 from services.classification_service import get_classifier
 from services.assignment_service import get_assignment_service
+from services.sedap_service import SEDAPService
 from websocket import websocket_manager
 from pydantic import BaseModel
 from config import Config
@@ -126,7 +127,7 @@ async def create_incident(
 
         # Auto-classify incident using LLM
         try:
-            logger.info(f"Classifying incident {incident_id}")
+            logger.info(f"Classifying incident {incident_id} with description: {incident_data.description[:100]}...")
             classifier = get_classifier()
 
             # Get transcription from audio media if available
@@ -138,6 +139,7 @@ async def create_incident(
                 ).first()
                 if audio_media and hasattr(audio_media, 'transcription'):
                     transcription = audio_media.transcription
+                    logger.info(f"Found transcription for incident {incident_id}: {transcription[:100]}...")
 
             # Classify the incident
             classification = await classifier.classify_incident(
@@ -152,6 +154,14 @@ async def create_incident(
             db_incident.category = classification.category
             db_incident.priority = classification.priority
             db_incident.tags = classification.tags
+
+            logger.info(
+                f"Classification result for {incident_id}: "
+                f"category={classification.category}, "
+                f"priority={classification.priority}, "
+                f"tags={classification.tags}, "
+                f"confidence={classification.confidence:.2f}"
+            )
 
             # Store classification details in metadata
             if not db_incident.meta_data:
@@ -198,6 +208,57 @@ async def create_incident(
                         f"Incident {incident_id} auto-assigned to {assignment.organization_name} "
                         f"(confidence: {assignment.confidence:.2f})"
                     )
+
+                    # Forward to external API if organization has it enabled
+                    from models.organization_model import OrganizationORM
+                    org = db.query(OrganizationORM).filter(
+                        OrganizationORM.id == assignment.organization_id
+                    ).first()
+
+                    if org and org.api_enabled and org.api_type:
+                        logger.info(f"Forwarding incident {incident_id} to {org.api_type} API")
+
+                        # Prepare incident data for forwarding
+                        incident_dict = {
+                            'incident_id': incident_id,
+                            'title': db_incident.title or 'Untitled',
+                            'description': db_incident.description or '',
+                            'latitude': db_incident.latitude,
+                            'longitude': db_incident.longitude,
+                            'heading': db_incident.heading,
+                            'category': db_incident.category,
+                            'priority': db_incident.priority
+                        }
+
+                        org_dict = {
+                            'id': org.id,
+                            'name': org.name,
+                            'api_type': org.api_type
+                        }
+
+                        # Forward incident
+                        success, error_msg = await SEDAPService.forward_incident(incident_dict, org_dict)
+
+                        # Store forwarding status in metadata
+                        if 'api_forwards' not in db_incident.meta_data:
+                            db_incident.meta_data['api_forwards'] = []
+
+                        db_incident.meta_data['api_forwards'].append({
+                            'organization_id': org.id,
+                            'organization_name': org.name,
+                            'api_type': org.api_type,
+                            'forwarded_at': datetime.utcnow().isoformat(),
+                            'status': 'success' if success else 'failed',
+                            'error_message': error_msg
+                        })
+
+                        # Add chat message confirming forwarding
+                        if success:
+                            confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
+                            chat.add_message("system", confirmation_msg)
+                            logger.info(f"Successfully forwarded incident {incident_id} to {org.name}")
+                        else:
+                            logger.error(f"Failed to forward incident {incident_id} to {org.api_type}: {error_msg}")
                 else:
                     logger.warning(
                         f"Could not auto-assign incident {incident_id}: {assignment.reasoning}"
@@ -518,6 +579,57 @@ async def assign_incident(
                 'assigned_at': datetime.utcnow().isoformat(),
                 'notes': assign_data.notes
             })
+
+        # Forward to external API if organization has it enabled
+        if org.api_enabled and org.api_type:
+            logger.info(f"Forwarding incident {incident_id} to {org.api_type} API")
+
+            # Prepare incident data for forwarding
+            incident_dict = {
+                'incident_id': incident.incident_id,
+                'title': incident.title or 'Untitled',
+                'description': incident.description or '',
+                'latitude': incident.latitude,
+                'longitude': incident.longitude,
+                'heading': incident.heading,
+                'category': incident.category,
+                'priority': incident.priority
+            }
+
+            org_dict = {
+                'id': org.id,
+                'name': org.name,
+                'api_type': org.api_type
+            }
+
+            # Forward incident
+            success, error_msg = await SEDAPService.forward_incident(incident_dict, org_dict)
+
+            # Store forwarding status in metadata
+            if not incident.meta_data:
+                incident.meta_data = {}
+            if 'api_forwards' not in incident.meta_data:
+                incident.meta_data['api_forwards'] = []
+
+            incident.meta_data['api_forwards'].append({
+                'organization_id': org.id,
+                'organization_name': org.name,
+                'api_type': org.api_type,
+                'forwarded_at': datetime.utcnow().isoformat(),
+                'status': 'success' if success else 'failed',
+                'error_message': error_msg
+            })
+
+            # Add chat message confirming forwarding
+            if success:
+                session = get_session_by_incident(db, incident.id)
+                if session:
+                    chat = ChatHistory(db, session.session_id)
+                    confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
+                    chat.add_message("system", confirmation_msg)
+                    logger.info(f"Successfully forwarded incident {incident_id} to {org.name}")
+            else:
+                logger.error(f"Failed to forward incident {incident_id} to {org.api_type}: {error_msg}")
 
         db.commit()
         db.refresh(incident)
