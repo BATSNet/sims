@@ -31,16 +31,17 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
 
   bool _isLoading = false;
   bool _isCameraInitialized = false;
-  bool _showCamera = true;
+  bool _showCamera = false;
   bool _isRecordingVideo = false;
+  bool _hasLoadedHistory = false;
 
   final List<ChatMessage> _messages = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
     _loadChatHistory();
+    // Only initialize camera if toggled on
   }
 
   Future<void> _initializeCamera() async {
@@ -79,12 +80,16 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
         setState(() {
           _messages.clear();
           _messages.addAll(messages);
+          _hasLoadedHistory = true;
         });
 
         _scrollToBottom();
       }
     } catch (e) {
       print('Error loading chat history: $e');
+      setState(() {
+        _hasLoadedHistory = true;
+      });
     }
   }
 
@@ -94,11 +99,13 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
     final message = _messageController.text;
     _messageController.clear();
 
+    final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();
     final userMessage = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: userMessageId,
       content: message,
       sender: MessageSender.user,
       timestamp: DateTime.now(),
+      isSending: true,
     );
 
     setState(() {
@@ -129,7 +136,12 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
         body: json.encode({'message': message}),
       );
 
+      // Mark message as sent
       setState(() {
+        final index = _messages.indexWhere((m) => m.id == userMessageId);
+        if (index != -1) {
+          _messages[index] = _messages[index].copyWith(isSending: false);
+        }
         _messages.removeWhere((m) => m.isThinking);
       });
 
@@ -151,6 +163,10 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
     } catch (e) {
       print('Error sending message: $e');
       setState(() {
+        final index = _messages.indexWhere((m) => m.id == userMessageId);
+        if (index != -1) {
+          _messages[index] = _messages[index].copyWith(isSending: false);
+        }
         _messages.removeWhere((m) => m.isThinking);
       });
 
@@ -237,24 +253,41 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
   }
 
   Future<void> _uploadAndSendImage(File imageFile) async {
+    final imageMessageId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Add placeholder message immediately
+    final placeholderMessage = ChatMessage(
+      id: imageMessageId,
+      content: 'Uploading image...',
+      sender: MessageSender.user,
+      timestamp: DateTime.now(),
+      isSending: true,
+    );
+
     setState(() {
+      _messages.add(placeholderMessage);
       _isLoading = true;
     });
+
+    _scrollToBottom();
 
     try {
       final result = await _uploadService.uploadImage(imageFile);
 
       if (result.success && result.url != null) {
-        final imageMessage = ChatMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: 'Sent an image',
-          sender: MessageSender.user,
-          timestamp: DateTime.now(),
-          imageUrl: result.url,
-        );
-
+        // Update message with actual image
         setState(() {
-          _messages.add(imageMessage);
+          final index = _messages.indexWhere((m) => m.id == imageMessageId);
+          if (index != -1) {
+            _messages[index] = ChatMessage(
+              id: imageMessageId,
+              content: 'Sent an image',
+              sender: MessageSender.user,
+              timestamp: DateTime.now(),
+              imageUrl: result.url,
+              isSending: false,
+            );
+          }
         });
 
         _scrollToBottom();
@@ -266,6 +299,11 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
           ),
         );
       } else {
+        // Remove placeholder on failure
+        setState(() {
+          _messages.removeWhere((m) => m.id == imageMessageId);
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.error ?? 'Failed to upload image'),
@@ -275,6 +313,12 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
       }
     } catch (e) {
       print('Error uploading image: $e');
+
+      // Remove placeholder on error
+      setState(() {
+        _messages.removeWhere((m) => m.id == imageMessageId);
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Failed to upload image'),
@@ -327,6 +371,9 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
             onPressed: () {
               setState(() {
                 _showCamera = !_showCamera;
+                if (_showCamera && !_isCameraInitialized) {
+                  _initializeCamera();
+                }
               });
             },
           ),
@@ -571,6 +618,31 @@ class _IncidentChatScreenState extends State<IncidentChatScreen> {
                             color: SimsColors.white.withOpacity(0.8),
                             fontSize: 14,
                             fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (message.isSending)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            message.content,
+                            style: const TextStyle(
+                              color: SimsColors.white,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            color: SimsColors.white.withOpacity(0.7),
+                            strokeWidth: 2,
                           ),
                         ),
                       ],

@@ -39,7 +39,7 @@ class AutoResponseService:
         """
         try:
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {
@@ -52,7 +52,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
             logger.info(f"Sent typing indicator for incident {incident_id}")
         except Exception as e:
             logger.error(f"Error sending typing indicator: {e}", exc_info=True)
@@ -86,7 +87,7 @@ class AutoResponseService:
                 db = db_session_factory()
                 try:
                     incident = db.query(IncidentORM).filter(
-                        IncidentORM.incident_id == incident_id
+                        IncidentORM.id == UUID(incident_id)
                     ).first()
 
                     if incident and incident.routed_to:
@@ -117,7 +118,7 @@ class AutoResponseService:
             db = db_session_factory()
             try:
                 incident = db.query(IncidentORM).filter(
-                    IncidentORM.incident_id == incident_id
+                    IncidentORM.id == UUID(incident_id)
                 ).first()
 
                 if incident and incident.routed_to:
@@ -169,7 +170,7 @@ class AutoResponseService:
 
             # Broadcast via WebSocket
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {
@@ -181,7 +182,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
 
         except Exception as e:
             logger.error(f"Error sending thank you message: {e}", exc_info=True)
@@ -216,7 +218,7 @@ class AutoResponseService:
 
             # Broadcast via WebSocket
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {
@@ -228,7 +230,8 @@ class AutoResponseService:
                 'timestamp': datetime.utcnow().isoformat()
             }
 
-            await websocket_manager.broadcast_to_all(message, topic='chat')
+            # Broadcast to incidents channel where mobile app is subscribed
+            await websocket_manager.broadcast_to_all(message, topic='incidents')
 
         except Exception as e:
             logger.error(f"Error sending fallback message: {e}", exc_info=True)

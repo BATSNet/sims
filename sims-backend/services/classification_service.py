@@ -57,19 +57,23 @@ class IncidentClassifier:
         self,
         description: str,
         transcription: Optional[str] = None,
+        image_url: Optional[str] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
-        heading: Optional[float] = None
+        heading: Optional[float] = None,
+        category_hint: Optional[str] = None
     ) -> ClassificationResult:
         """
-        Classify an incident using LLM.
+        Classify an incident using LLM with optional image analysis.
 
         Args:
             description: Text description of the incident
             transcription: Voice transcription (if available)
+            image_url: URL to incident image for visual analysis
             latitude: Location latitude
             longitude: Location longitude
             heading: Device heading/bearing
+            category_hint: Previous category to consider
 
         Returns:
             ClassificationResult with category, priority, tags, and confidence
@@ -84,11 +88,11 @@ class IncidentClassifier:
         )
 
         # Create classification prompt
-        prompt = self._create_classification_prompt(incident_text)
+        prompt = self._create_classification_prompt(incident_text, category_hint)
 
         try:
-            # Call LLM API
-            result = await self._call_llm_api(prompt)
+            # Call LLM API (with vision if image provided)
+            result = await self._call_llm_api(prompt, image_url=image_url)
 
             # Parse and validate result
             classification = self._parse_llm_response(result)
@@ -129,14 +133,16 @@ class IncidentClassifier:
 
         return "\n".join(parts)
 
-    def _create_classification_prompt(self, incident_text: str) -> str:
+    def _create_classification_prompt(self, incident_text: str, category_hint: Optional[str] = None) -> str:
         """Create prompt for LLM classification."""
         categories_list = "\n".join([f"- {cat}" for cat in Config.INCIDENT_CATEGORIES])
         priorities_list = ", ".join(Config.PRIORITY_LEVELS)
 
+        category_context = f"\n\nNOTE: This incident was previously classified as '{category_hint}'. Consider this context but re-evaluate based on new information." if category_hint else ""
+
         return f"""You are an expert incident classification system for military and civilian emergency response.
 
-Analyze the following incident report and classify it.
+Analyze the following incident report and classify it.{category_context}
 
 INCIDENT REPORT:
 {incident_text}
@@ -169,8 +175,8 @@ RESPONSE FORMAT (JSON only, no other text):
 
 Respond with ONLY the JSON object, no additional text."""
 
-    async def _call_llm_api(self, prompt: str) -> str:
-        """Call FeatherAI API."""
+    async def _call_llm_api(self, prompt: str, image_url: Optional[str] = None) -> str:
+        """Call FeatherAI API with optional vision support."""
         url = f"{self.api_base}/chat/completions"
 
         headers = {
@@ -178,16 +184,38 @@ Respond with ONLY the JSON object, no additional text."""
             "Content-Type": "application/json"
         }
 
+        # Build user message content (multimodal if image provided)
+        if image_url:
+            # Use vision model with multimodal content
+            user_content = [
+                {
+                    "type": "text",
+                    "text": f"{prompt}\n\nPlease analyze the provided image as part of the incident assessment."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url
+                    }
+                }
+            ]
+            # Use vision-capable model if available
+            model = self.model if "vision" in self.model.lower() else self.model
+        else:
+            # Text-only classification
+            user_content = prompt
+            model = self.model
+
         payload = {
-            "model": self.model,
+            "model": model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert incident classification system. Always respond with valid JSON only."
+                    "content": "You are an expert incident classification system. Analyze text descriptions and images to classify security incidents. Always respond with valid JSON only."
                 },
                 {
                     "role": "user",
-                    "content": prompt
+                    "content": user_content
                 }
             ],
             "temperature": self.temperature,
