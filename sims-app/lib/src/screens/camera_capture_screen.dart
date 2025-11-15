@@ -78,6 +78,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final List<ChatMessage> _messages = [];
   bool _showTextInput = false;
   String? _currentIncidentId;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -317,6 +318,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     setState(() {
       _messages.add(message);
+      _isProcessing = true;
     });
 
     _scrollToBottom();
@@ -351,6 +353,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               mediaUrl: result.url,
             );
+            _isProcessing = false;
           });
 
           // Delete local file after successful upload to save storage
@@ -371,6 +374,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               failed: true,
             );
+            _isProcessing = false;
           });
         }
         _showError('Failed to upload ${type.name}');
@@ -385,6 +389,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               isUploading: false,
               failed: true,
             );
+            _isProcessing = false;
           });
         }
       }
@@ -686,6 +691,30 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+
+            // Loading overlay when processing
+            if (_isProcessing)
+              Container(
+                color: Colors.black54,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        color: SimsColors.teal,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Processing...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],
