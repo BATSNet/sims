@@ -140,18 +140,25 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
   }
 
-  Future<String?> _createIncident() async {
+  Future<String?> _createIncident({String? description}) async {
     try {
       final location = await _locationService.getCurrentLocation();
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
 
+      // Use provided description or generate based on what's available
+      final incidentDescription = description ??
+          (_capturedImage != null ? 'Incident with photo' :
+           _capturedVideo != null ? 'Incident with video' :
+           _recordedAudio != null ? 'Incident with audio' :
+           'Incident report');
+
       final response = await http.post(
         Uri.parse('${AppConfig.baseUrl}/api/incidents'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'title': 'Incident Report',
-          'description': 'Incident reported from mobile app',
+          'title': DateTime.now().toString().substring(0, 16),
+          'description': incidentDescription,
           'latitude': location?.latitude,
           'longitude': location?.longitude,
           'heading': location?.heading,
@@ -182,7 +189,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     // Create incident if not already created
     if (_currentIncidentId == null) {
-      _currentIncidentId = await _createIncident();
+      _currentIncidentId = await _createIncident(description: text);
       if (_currentIncidentId == null) {
         _showError('Failed to create incident');
         return;
