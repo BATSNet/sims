@@ -538,11 +538,13 @@ async def render_stats(incidents: List[Dict]):
             ui.label('2.3m').classes('metric-value')
 
 
-async def render_overview(incidents: List[Dict]):
+async def render_overview(incidents: List[Dict], container=None):
     """Render overview section with map and stats"""
-    with ui.element('div').classes('overview-section w-full'):
+    target = container if container else ui.element('div').classes('overview-section w-full')
+    with target:
         await render_map(incidents)
         await render_stats(incidents)
+    return target
 
 
 async def render_incident_table(incidents: List[Dict], is_mock_data: bool = False):
@@ -550,6 +552,77 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
     # Section title in container
     with ui.element('div').classes('content-container'):
         ui.label('Active Incidents').classes('section-title w-full')
+
+    # Filter state
+    filter_state = {
+        'priority': None,
+        'category': None,
+        'status': None,
+        'assigned_org': None
+    }
+
+    # Get unique values for filters
+    priorities = sorted(list(set(inc['priority'] for inc in incidents)))
+    categories = sorted(list(set(inc.get('category', 'Unclassified') for inc in incidents)))
+    statuses = sorted(list(set(inc['status'] for inc in incidents)))
+    organizations = sorted(list(set(
+        inc['assigned_org']['name'] for inc in incidents
+        if inc.get('assigned_org')
+    )))
+
+    def apply_filters(incidents_list):
+        """Apply current filters to incidents list"""
+        filtered = incidents_list
+
+        if filter_state['priority']:
+            filtered = [inc for inc in filtered if inc['priority'] == filter_state['priority']]
+
+        if filter_state['category']:
+            filtered = [inc for inc in filtered if inc.get('category', 'Unclassified') == filter_state['category']]
+
+        if filter_state['status']:
+            filtered = [inc for inc in filtered if inc['status'] == filter_state['status']]
+
+        if filter_state['assigned_org']:
+            filtered = [inc for inc in filtered
+                       if inc.get('assigned_org') and inc['assigned_org']['name'] == filter_state['assigned_org']]
+
+        return filtered
+
+    # Filter section - minimal, no styling
+    with ui.row().classes('gap-2 items-center mb-2'):
+        search_input = ui.input(
+            placeholder='Search...'
+        ).classes('w-64').props('dense dark clearable borderless')
+
+        priority_filter = ui.select(
+            options=['All'] + priorities,
+            value='All',
+            label='Priority'
+        ).classes('w-32').props('dense dark clearable borderless')
+
+        category_filter = ui.select(
+            options=['All'] + categories,
+            value='All',
+            label='Category'
+        ).classes('w-44').props('dense dark clearable borderless')
+
+        status_filter = ui.select(
+            options=['All'] + statuses,
+            value='All',
+            label='Status'
+        ).classes('w-32').props('dense dark clearable borderless')
+
+        org_filter = ui.select(
+            options=['All'] + organizations,
+            value='All',
+            label='Organization'
+        ).classes('w-48').props('dense dark clearable borderless')
+
+        clear_btn = ui.button(
+            'Clear',
+            on_click=lambda: clear_filters()
+        ).props('flat dense')
 
     # Table section - full width
     with ui.element('div').classes('table-section w-full'):
@@ -801,6 +874,88 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
         table.on('forward', handle_forward)
         table.on('remove_assignment', handle_remove_assignment)
 
+    # Store references for filter updates
+    filter_refs = {
+        'overview_container': None,
+        'incidents': incidents
+    }
+
+    # Define filter update handlers
+    async def update_filters():
+        """Update table and map when filters change"""
+        # Update filter state
+        filter_state['priority'] = None if priority_filter.value == 'All' else priority_filter.value
+        filter_state['category'] = None if category_filter.value == 'All' else category_filter.value
+        filter_state['status'] = None if status_filter.value == 'All' else status_filter.value
+        filter_state['assigned_org'] = None if org_filter.value == 'All' else org_filter.value
+
+        # Apply filters
+        filtered_incidents = apply_filters(filter_refs['incidents'])
+
+        # Apply text search if provided
+        search_text = (search_input.value or '').lower().strip()
+        if search_text:
+            filtered_incidents = [
+                inc for inc in filtered_incidents
+                if search_text in inc['id'].lower()
+                or search_text in inc['description'].lower()
+                or search_text in inc.get('category', '').lower()
+                or search_text in inc['location']['label'].lower()
+            ]
+
+        # Update table rows
+        new_rows = []
+        for incident in filtered_incidents:
+            assigned_org_display = None
+            if incident.get('assigned_org'):
+                assigned_org_display = {
+                    'id': incident['assigned_org']['id'],
+                    'name': incident['assigned_org']['name'],
+                    'is_auto': incident.get('is_auto_assigned', False)
+                }
+
+            new_rows.append({
+                'id': incident['id'],
+                'timestamp': incident['timestamp'].split(' ')[1],
+                'category': incident.get('category', 'Unclassified'),
+                'category_raw': incident.get('category_raw', 'unclassified'),
+                'location': incident['location']['label'],
+                'description': incident['description'],
+                'priority': incident['priority'],
+                'assigned_org': assigned_org_display,
+                'action': incident['id'],
+            })
+
+        table.rows = new_rows
+        table.update()
+
+        # Update map with filtered incidents
+        if filter_refs['overview_container']:
+            filter_refs['overview_container'].clear()
+            with filter_refs['overview_container']:
+                await render_overview(filtered_incidents)
+
+        ui.notify(f'Showing {len(filtered_incidents)} of {len(filter_refs["incidents"])} incidents', type='info')
+
+    def clear_filters():
+        """Clear all filters and show all incidents"""
+        search_input.value = ''
+        priority_filter.value = 'All'
+        category_filter.value = 'All'
+        status_filter.value = 'All'
+        org_filter.value = 'All'
+        update_filters()
+
+    # Connect filter change handlers
+    search_input.on('update:model-value', lambda: update_filters())
+    priority_filter.on('update:model-value', lambda: update_filters())
+    category_filter.on('update:model-value', lambda: update_filters())
+    status_filter.on('update:model-value', lambda: update_filters())
+    org_filter.on('update:model-value', lambda: update_filters())
+
+    # Return filter refs so dashboard can set container reference
+    return filter_refs
+
 
 async def dashboard():
     """Main dashboard page"""
@@ -819,12 +974,14 @@ async def dashboard():
         await render_overview(incidents)
 
     with ui.element('div').classes('w-full') as table_container:
-        await render_incident_table(incidents, is_mock_data=is_mock_data)
+        filter_refs = await render_incident_table(incidents, is_mock_data=is_mock_data)
+        # Set overview container reference for filter updates
+        filter_refs['overview_container'] = overview_container
 
     # Define refresh function
     async def refresh_dashboard():
         """Reload incidents and refresh the dashboard"""
-        nonlocal incidents, is_mock_data
+        nonlocal incidents, is_mock_data, filter_refs
         logger.info("Refreshing dashboard due to WebSocket update")
 
         # Reload incidents from API
@@ -845,7 +1002,9 @@ async def dashboard():
             await render_overview(incidents)
 
         with table_container:
-            await render_incident_table(incidents, is_mock_data=is_mock_data)
+            new_filter_refs = await render_incident_table(incidents, is_mock_data=is_mock_data)
+            new_filter_refs['overview_container'] = overview_container
+            filter_refs = new_filter_refs
 
     # Create a button that can be triggered from JavaScript (hidden)
     refresh_button = ui.button('', on_click=refresh_dashboard).classes('hidden')

@@ -82,8 +82,22 @@ class AutoAssignmentService:
                 logger.warning("No active organizations available for assignment")
                 return self._create_no_match_result("No active organizations available")
 
+            # Filter organizations by category mapping first
+            filtered_orgs = self._filter_orgs_by_category(
+                classification.category,
+                active_orgs
+            )
+
+            # If no orgs match category, use all active orgs as fallback
+            if not filtered_orgs:
+                logger.warning(
+                    f"No organizations match category '{classification.category}', "
+                    f"using all active organizations"
+                )
+                filtered_orgs = active_orgs
+
             # Calculate distances if incident has location
-            orgs_with_distance = self._calculate_distances(incident, active_orgs)
+            orgs_with_distance = self._calculate_distances(incident, filtered_orgs)
 
             # Use LLM to semantically match incident to organizations
             assignment = await self._llm_match_organizations(
@@ -102,6 +116,41 @@ class AutoAssignmentService:
         except Exception as e:
             logger.error(f"Auto-assignment failed: {e}", exc_info=True)
             return self._create_no_match_result(f"Assignment error: {str(e)}")
+
+    def _filter_orgs_by_category(
+        self,
+        category: str,
+        organizations: List[OrganizationORM]
+    ) -> List[OrganizationORM]:
+        """
+        Filter organizations by incident category using mapping.
+
+        Args:
+            category: Incident category
+            organizations: List of organizations to filter
+
+        Returns:
+            Filtered list of organizations matching category
+        """
+        # Get preferred org types for this category
+        preferred_types = Config.CATEGORY_TO_ORG_TYPE.get(category, [])
+
+        if not preferred_types:
+            logger.warning(f"No organization type mapping for category '{category}'")
+            return organizations
+
+        # Filter organizations by type
+        filtered = [
+            org for org in organizations
+            if org.type in preferred_types
+        ]
+
+        logger.info(
+            f"Filtered {len(filtered)} organizations for category '{category}' "
+            f"(types: {', '.join(preferred_types)})"
+        )
+
+        return filtered
 
     def _calculate_distances(
         self,
