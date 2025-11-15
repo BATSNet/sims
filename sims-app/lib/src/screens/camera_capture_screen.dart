@@ -146,12 +146,20 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
 
-      // Use provided description or generate based on what's available
-      final incidentDescription = description ??
-          (_capturedImage != null ? 'Incident with photo' :
-           _capturedVideo != null ? 'Incident with video' :
-           _recordedAudio != null ? 'Incident with audio' :
-           'Incident report');
+      // Use provided description or generate based on existing messages
+      String incidentDescription = description ?? 'Incident report';
+      if (incidentDescription == 'Incident report' && _messages.isNotEmpty) {
+        final firstMessage = _messages.first;
+        if (firstMessage.type == MessageType.image) {
+          incidentDescription = 'Incident with photo';
+        } else if (firstMessage.type == MessageType.video) {
+          incidentDescription = 'Incident with video';
+        } else if (firstMessage.type == MessageType.audio) {
+          incidentDescription = 'Incident with audio';
+        } else if (firstMessage.text != null && firstMessage.text!.isNotEmpty) {
+          incidentDescription = firstMessage.text!;
+        }
+      }
 
       final response = await http.post(
         Uri.parse('${AppConfig.baseUrl}/api/incidents'),
