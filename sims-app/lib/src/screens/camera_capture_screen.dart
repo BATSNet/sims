@@ -2,11 +2,56 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/location_service.dart';
 import '../services/media_upload_service.dart';
 import '../utils/sims_colors.dart';
+
+export '../services/media_upload_service.dart' show UploadResult;
+
+// Chat message types
+enum MessageType { text, image, audio, video }
+
+class ChatMessage {
+  final String id;
+  final MessageType type;
+  final String? text;
+  final String? mediaUrl;
+  final File? localFile;
+  final DateTime timestamp;
+  final bool isUploading;
+  final bool failed;
+
+  ChatMessage({
+    required this.id,
+    required this.type,
+    this.text,
+    this.mediaUrl,
+    this.localFile,
+    required this.timestamp,
+    this.isUploading = false,
+    this.failed = false,
+  });
+
+  ChatMessage copyWith({
+    bool? isUploading,
+    bool? failed,
+    String? mediaUrl,
+  }) {
+    return ChatMessage(
+      id: id,
+      type: type,
+      text: text,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      localFile: localFile,
+      timestamp: timestamp,
+      isUploading: isUploading ?? this.isUploading,
+      failed: failed ?? this.failed,
+    );
+  }
+}
 
 class CameraCaptureScreen extends StatefulWidget {
   const CameraCaptureScreen({super.key});
@@ -20,16 +65,14 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final AudioService _audioService = AudioService();
   final LocationService _locationService = LocationService();
   final MediaUploadService _uploadService = MediaUploadService();
+  final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   bool _isInitialized = false;
-  bool _isProcessing = false;
-  bool _showChatInput = false;
-  File? _capturedImage;
-  File? _capturedAudio;
   FlashMode _flashMode = FlashMode.auto;
-  final List<String> _chatMessages = [];
+  final List<ChatMessage> _messages = [];
+  bool _showTextInput = false;
 
   @override
   void initState() {
@@ -56,7 +99,6 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         _showError('Microphone permission denied');
       }
       if (!locationPermission) {
-        // Just log - location is optional, don't show error to user
         debugPrint('Location permission not available - incident will be submitted without location data');
       }
     } catch (e) {
@@ -75,22 +117,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     super.dispose();
   }
 
-  void _toggleChatInput() {
-    setState(() {
-      _showChatInput = !_showChatInput;
-    });
-  }
-
-  void _sendChatMessage() {
-    final message = _textController.text.trim();
-    if (message.isEmpty) return;
-
-    setState(() {
-      _chatMessages.add(message);
-      _textController.clear();
-    });
-
-    // Scroll to bottom
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -102,39 +129,84 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
   }
 
-  Future<void> _takePicture() async {
-    if (_isProcessing) return;
+  void _toggleTextInput() {
+    setState(() {
+      _showTextInput = !_showTextInput;
+    });
+  }
+
+  Future<void> _sendTextMessage() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+
+    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+    final message = ChatMessage(
+      id: messageId,
+      type: MessageType.text,
+      text: text,
+      timestamp: DateTime.now(),
+    );
 
     setState(() {
-      _isProcessing = true;
+      _messages.add(message);
+      _textController.clear();
     });
 
+    _scrollToBottom();
+  }
+
+  Future<void> _takePicture() async {
     try {
       final image = await _cameraService.takePicture();
-      if (image != null && mounted) {
-        setState(() {
-          _capturedImage = image;
-        });
+      if (image == null) {
+        _showError('Failed to capture image');
+        return;
       }
+
+      await _uploadMedia(image, MessageType.image);
     } catch (e) {
       _showError('Error taking picture: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+    }
+  }
+
+  Future<void> _startVideoRecording() async {
+    try {
+      final started = await _cameraService.startVideoRecording();
+      if (!started) {
+        _showError('Failed to start video recording');
+        return;
       }
+      setState(() {});
+    } catch (e) {
+      _showError('Error starting video recording: $e');
+    }
+  }
+
+  Future<void> _stopVideoRecording() async {
+    try {
+      final video = await _cameraService.stopVideoRecording();
+      if (video == null) {
+        _showError('Failed to save video');
+        return;
+      }
+
+      setState(() {});
+      await _uploadMedia(video, MessageType.video);
+    } catch (e) {
+      _showError('Error stopping video recording: $e');
+      setState(() {});
     }
   }
 
   Future<void> _toggleRecording() async {
     if (_audioService.isRecording) {
       final audio = await _audioService.stopRecording();
-      if (audio != null && mounted) {
-        setState(() {
-          _capturedAudio = audio;
-        });
+      if (audio == null) {
+        _showError('Failed to save recording');
+        return;
       }
+
+      await _uploadMedia(audio, MessageType.audio);
     } else {
       final started = await _audioService.startRecording();
       if (!started) {
@@ -144,91 +216,74 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     }
   }
 
-  Future<void> _submitIncident() async {
-    if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
+  Future<void> _pickFromGallery() async {
     try {
-      String? imageUrl;
-      String? audioUrl;
-      String? transcription;
-
-      if (_capturedImage != null) {
-        final imageResult = await _uploadService.uploadImage(_capturedImage!);
-        if (imageResult.success) {
-          imageUrl = imageResult.url;
-        } else {
-          _showError('Image upload failed: ${imageResult.error}');
-        }
-      }
-
-      if (_capturedAudio != null) {
-        final audioResult = await _uploadService.uploadAudio(_capturedAudio!);
-        if (audioResult.success) {
-          audioUrl = audioResult.url;
-          transcription = audioResult.metadata?['transcription'];
-        } else {
-          _showError('Audio upload failed: ${audioResult.error}');
-        }
-      }
-
-      final location = await _locationService.getCurrentLocation();
-
-      // Build description from chat messages and transcription
-      String description = '';
-      if (_chatMessages.isNotEmpty) {
-        description = _chatMessages.join('\n');
-      }
-      if (transcription != null && transcription.isNotEmpty) {
-        if (description.isNotEmpty) {
-          description += '\n\nVoice note: $transcription';
-        } else {
-          description = transcription;
-        }
-      }
-      if (description.isEmpty) {
-        description = 'Incident captured via mobile app';
-      }
-
-      final incident = await _uploadService.createIncident(
-        title: 'New Incident Report',
-        description: description,
-        imageUrl: imageUrl,
-        audioUrl: audioUrl,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        heading: location?.heading,
-        metadata: {
-          'captureTime': DateTime.now().toIso8601String(),
-          'hasImage': _capturedImage != null,
-          'hasAudio': _capturedAudio != null,
-          'messageCount': _chatMessages.length,
-        },
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
       );
 
-      if (incident != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Incident submitted successfully'),
-            backgroundColor: SimsColors.green600,
-          ),
-        );
+      if (pickedFile == null) return;
 
-        context.pop();
-      } else {
-        _showError('Failed to create incident');
-      }
+      final image = File(pickedFile.path);
+      await _uploadMedia(image, MessageType.image);
     } catch (e) {
-      _showError('Error submitting incident: $e');
-    } finally {
-      if (mounted) {
+      _showError('Error picking image: $e');
+    }
+  }
+
+  Future<void> _uploadMedia(File file, MessageType type) async {
+    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+    final message = ChatMessage(
+      id: messageId,
+      type: type,
+      localFile: file,
+      timestamp: DateTime.now(),
+      isUploading: true,
+    );
+
+    setState(() {
+      _messages.add(message);
+    });
+
+    _scrollToBottom();
+
+    // Upload based on type
+    final UploadResult result;
+    switch (type) {
+      case MessageType.image:
+        result = await _uploadService.uploadImage(file);
+        break;
+      case MessageType.audio:
+        result = await _uploadService.uploadAudio(file);
+        break;
+      case MessageType.video:
+        result = await _uploadService.uploadVideo(file);
+        break;
+      default:
+        result = UploadResult(success: false, error: 'Unknown message type');
+    }
+
+    if (result.success && mounted) {
+      final index = _messages.indexWhere((m) => m.id == messageId);
+      if (index != -1) {
         setState(() {
-          _isProcessing = false;
+          _messages[index] = message.copyWith(
+            isUploading: false,
+            mediaUrl: result.url,
+          );
         });
       }
+    } else if (mounted) {
+      final index = _messages.indexWhere((m) => m.id == messageId);
+      if (index != -1) {
+        setState(() {
+          _messages[index] = message.copyWith(
+            isUploading: false,
+            failed: true,
+          );
+        });
+      }
+      _showError('Failed to upload ${type.name}');
     }
   }
 
@@ -264,109 +319,184 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     });
   }
 
-  String _getFlashModeIcon() {
-    switch (_flashMode) {
-      case FlashMode.off:
-        return 'flash_off';
-      case FlashMode.auto:
-        return 'flash_auto';
-      case FlashMode.always:
-        return 'flash_on';
-      default:
-        return 'flash_auto';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Camera preview - shrinks when chat is shown
-            Flexible(
-              flex: _showChatInput ? 3 : 10,
-              child: Stack(
+            // Camera preview - full screen background
+            if (_isInitialized && _cameraService.controller != null)
+              SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _cameraService.controller!.value.previewSize!.height,
+                    height: _cameraService.controller!.value.previewSize!.width,
+                    child: CameraPreview(_cameraService.controller!),
+                  ),
+                ),
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(color: SimsColors.teal),
+              ),
+
+            // Top controls
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (_isInitialized && _cameraService.controller != null)
-                    SizedBox.expand(
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: _cameraService.controller!.value.previewSize!.height,
-                          height: _cameraService.controller!.value.previewSize!.width,
-                          child: CameraPreview(_cameraService.controller!),
-                        ),
-                      ),
-                    )
-                  else
-                    const Center(
-                      child: CircularProgressIndicator(color: SimsColors.teal),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 32),
+                    onPressed: () => context.pop(),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _flashMode == FlashMode.off
+                          ? Icons.flash_off
+                          : _flashMode == FlashMode.auto
+                              ? Icons.flash_auto
+                              : Icons.flash_on,
+                      color: Colors.white,
+                      size: 32,
                     ),
-                  // Top controls
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    right: 16,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 32),
-                          onPressed: () => context.pop(),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            _flashMode == FlashMode.off
-                                ? Icons.flash_off
-                                : _flashMode == FlashMode.auto
-                                    ? Icons.flash_auto
-                                    : Icons.flash_on,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                          onPressed: _toggleFlashMode,
-                        ),
-                      ],
-                    ),
+                    onPressed: _toggleFlashMode,
                   ),
                 ],
               ),
             ),
 
-            // Chat interface - slides up when shown
-            if (_showChatInput)
-              Flexible(
-                flex: 5,
+            // Chat area (only when there are messages) - positioned at bottom 5/8 of screen
+            if (_messages.isNotEmpty)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                top: MediaQuery.of(context).size.height * 0.375, // Start at 3/8 from top (leaves 5/8 for chat)
                 child: Container(
-                  color: SimsColors.navyBlue,
+                  color: SimsColors.navyBlue.withOpacity(0.85),
                   child: Column(
                     children: [
-                      // Chat messages
+                      // Chat messages list
                       Expanded(
                         child: ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
-                          itemCount: _chatMessages.length,
+                          itemCount: _messages.length,
                           itemBuilder: (context, index) {
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: SimsColors.accentBlue,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                _chatMessages[index],
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            );
+                            return _buildMessageBubble(_messages[index]);
                           },
                         ),
                       ),
-                      // Text input
+
+                      // Text input (only show when keyboard button is pressed)
+                      if (_showTextInput)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: SimsColors.navyBlueLight,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, -2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _textController,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Describe the incident...',
+                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    filled: true,
+                                    fillColor: SimsColors.navyBlueDark,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  maxLines: null,
+                                  textInputAction: TextInputAction.send,
+                                  onSubmitted: (_) => _sendTextMessage(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.send, color: SimsColors.accentBlue),
+                                onPressed: _sendTextMessage,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Bottom controls
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        color: SimsColors.navyBlue,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            GestureDetector(
+                              onTap: _takePicture,
+                              onLongPress: _startVideoRecording,
+                              onLongPressUp: _stopVideoRecording,
+                              child: _buildControlButtonWidget(
+                                icon: _cameraService.isRecordingVideo ? Icons.videocam : Icons.camera_alt,
+                                color: _cameraService.isRecordingVideo ? SimsColors.criticalRed : SimsColors.white,
+                                iconColor: _cameraService.isRecordingVideo ? Colors.white : SimsColors.blue,
+                              ),
+                            ),
+                            _buildControlButton(
+                              icon: _audioService.isRecording ? Icons.stop : Icons.mic,
+                              color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
+                              iconColor: _audioService.isRecording ? Colors.white : SimsColors.blue,
+                              onTap: _toggleRecording,
+                            ),
+                            _buildControlButton(
+                              icon: Icons.photo_library,
+                              color: SimsColors.white,
+                              iconColor: SimsColors.blue,
+                              onTap: _pickFromGallery,
+                            ),
+                            _buildControlButton(
+                              icon: _showTextInput ? Icons.keyboard_hide : Icons.keyboard,
+                              color: _showTextInput ? SimsColors.accentBlue : SimsColors.white,
+                              iconColor: _showTextInput ? Colors.white : SimsColors.blue,
+                              onTap: _toggleTextInput,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Bottom controls (when no messages) - positioned at bottom
+            if (_messages.isEmpty)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Text input (only show when keyboard button is pressed)
+                    if (_showTextInput)
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -401,145 +531,274 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                                 ),
                                 maxLines: null,
                                 textInputAction: TextInputAction.send,
-                                onSubmitted: (_) => _sendChatMessage(),
+                                onSubmitted: (_) => _sendTextMessage(),
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton(
                               icon: const Icon(Icons.send, color: SimsColors.accentBlue),
-                              onPressed: _sendChatMessage,
+                              onPressed: _sendTextMessage,
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
 
-            // Bottom controls
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    _showChatInput ? SimsColors.navyBlue : Colors.transparent,
-                    _showChatInput ? SimsColors.navyBlue : Colors.black.withOpacity(0.7),
-                    _showChatInput ? SimsColors.navyBlue : Colors.black,
-                  ],
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_capturedImage != null || _capturedAudio != null || _chatMessages.isNotEmpty)
+                    // Bottom controls
                     Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: SimsColors.navyBlueLight,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
+                      padding: const EdgeInsets.all(16),
+                      color: SimsColors.navyBlue,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          if (_capturedImage != null)
-                            Row(
-                              children: [
-                                const Icon(Icons.image, color: SimsColors.teal),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Image captured',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.white),
-                                  onPressed: () {
-                                    setState(() {
-                                      _capturedImage = null;
-                                    });
-                                  },
-                                ),
-                              ],
+                          GestureDetector(
+                            onTap: _takePicture,
+                            onLongPress: _startVideoRecording,
+                            onLongPressUp: _stopVideoRecording,
+                            child: _buildControlButtonWidget(
+                              icon: _cameraService.isRecordingVideo ? Icons.videocam : Icons.camera_alt,
+                              color: _cameraService.isRecordingVideo ? SimsColors.criticalRed : SimsColors.white,
+                              iconColor: _cameraService.isRecordingVideo ? Colors.white : SimsColors.blue,
                             ),
-                          if (_capturedAudio != null)
-                            Row(
-                              children: [
-                                const Icon(Icons.mic, color: SimsColors.teal),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Audio recorded',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.white),
-                                  onPressed: () {
-                                    setState(() {
-                                      _capturedAudio = null;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          if (_chatMessages.isNotEmpty)
-                            Row(
-                              children: [
-                                const Icon(Icons.chat, color: SimsColors.teal),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${_chatMessages.length} message${_chatMessages.length > 1 ? 's' : ''}',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
+                          ),
+                          _buildControlButton(
+                            icon: _audioService.isRecording ? Icons.stop : Icons.mic,
+                            color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
+                            iconColor: _audioService.isRecording ? Colors.white : SimsColors.blue,
+                            onTap: _toggleRecording,
+                          ),
+                          _buildControlButton(
+                            icon: Icons.photo_library,
+                            color: SimsColors.white,
+                            iconColor: SimsColors.blue,
+                            onTap: _pickFromGallery,
+                          ),
+                          _buildControlButton(
+                            icon: _showTextInput ? Icons.keyboard_hide : Icons.keyboard,
+                            color: _showTextInput ? SimsColors.accentBlue : SimsColors.white,
+                            iconColor: _showTextInput ? Colors.white : SimsColors.blue,
+                            onTap: _toggleTextInput,
+                          ),
                         ],
                       ),
                     ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Camera button
-                      _buildControlButton(
-                        icon: Icons.camera_alt,
-                        color: _audioService.isRecording ? Colors.grey : SimsColors.white,
-                        iconColor: SimsColors.blue,
-                        onTap: _audioService.isRecording ? null : _takePicture,
-                        isLoading: _isProcessing && !_audioService.isRecording,
-                      ),
-                      // Microphone button
-                      _buildControlButton(
-                        icon: _audioService.isRecording ? Icons.stop : Icons.mic,
-                        color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
-                        iconColor: _audioService.isRecording ? Colors.white : SimsColors.blue,
-                        onTap: _toggleRecording,
-                      ),
-                      // Keyboard/Text button
-                      _buildControlButton(
-                        icon: _showChatInput ? Icons.keyboard_hide : Icons.keyboard,
-                        color: _showChatInput ? SimsColors.accentBlue : SimsColors.white,
-                        iconColor: _showChatInput ? Colors.white : SimsColors.blue,
-                        onTap: _toggleChatInput,
-                      ),
-                      // Submit button (only if something was captured)
-                      if (_capturedImage != null || _capturedAudio != null || _chatMessages.isNotEmpty)
-                        _buildControlButton(
-                          icon: Icons.send,
-                          color: _isProcessing ? Colors.grey : SimsColors.green600,
-                          iconColor: Colors.white,
-                          onTap: _isProcessing ? null : _submitIncident,
-                          isLoading: _isProcessing && _audioService.isRecording,
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(ChatMessage message) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Message content
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: SimsColors.accentBlue,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (message.type == MessageType.text)
+                    Text(
+                      message.text!,
+                      style: const TextStyle(color: Colors.white),
+                    )
+                  else if (message.type == MessageType.image)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (message.localFile != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              message.localFile!,
+                              height: 200,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        if (message.isUploading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Uploading...',
+                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (message.failed)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error, color: Colors.red, size: 16),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Upload failed',
+                                  style: TextStyle(color: Colors.red, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    )
+                  else if (message.type == MessageType.audio)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.mic, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Voice message',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
                         ),
-                    ],
+                        if (message.isUploading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Uploading...',
+                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (message.failed)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error, color: Colors.red, size: 16),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Upload failed',
+                                  style: TextStyle(color: Colors.red, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    )
+                  else if (message.type == MessageType.video)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.videocam, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Video message',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                        if (message.isUploading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Uploading...',
+                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (message.failed)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error, color: Colors.red, size: 16),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Upload failed',
+                                  style: TextStyle(color: Colors.red, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  // Timestamp
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildControlButtonWidget({
+    required IconData icon,
+    required Color color,
+    required Color iconColor,
+  }) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        border: Border.all(color: Colors.white, width: 3),
+      ),
+      child: Icon(icon, size: 28, color: iconColor),
     );
   }
 
@@ -548,27 +807,13 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     required Color color,
     required Color iconColor,
     required VoidCallback? onTap,
-    bool isLoading = false,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 70,
-        height: 70,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-          border: Border.all(color: Colors.white, width: 4),
-        ),
-        child: isLoading
-            ? Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  color: iconColor,
-                ),
-              )
-            : Icon(icon, size: 32, color: iconColor),
+      child: _buildControlButtonWidget(
+        icon: icon,
+        color: color,
+        iconColor: iconColor,
       ),
     );
   }
