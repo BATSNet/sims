@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS incident (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     incident_id VARCHAR(50) UNIQUE NOT NULL,
     user_phone VARCHAR(20) CHECK (
-        user_phone ~ '^(\+?[0-9]{1,12})$'
+        user_phone ~ '^(\+?[0-9]{1,18})$'
         AND LENGTH(user_phone) BETWEEN 10 AND 20
     ),
 
