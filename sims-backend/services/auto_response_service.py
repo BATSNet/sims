@@ -39,7 +39,7 @@ class AutoResponseService:
         """
         try:
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {
@@ -87,7 +87,7 @@ class AutoResponseService:
                 db = db_session_factory()
                 try:
                     incident = db.query(IncidentORM).filter(
-                        IncidentORM.incident_id == incident_id
+                        IncidentORM.id == UUID(incident_id)
                     ).first()
 
                     if incident and incident.routed_to:
@@ -118,7 +118,7 @@ class AutoResponseService:
             db = db_session_factory()
             try:
                 incident = db.query(IncidentORM).filter(
-                    IncidentORM.incident_id == incident_id
+                    IncidentORM.id == UUID(incident_id)
                 ).first()
 
                 if incident and incident.routed_to:
@@ -170,7 +170,7 @@ class AutoResponseService:
 
             # Broadcast via WebSocket
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {
@@ -218,7 +218,7 @@ class AutoResponseService:
 
             # Broadcast via WebSocket
             message = {
-                'type': 'chat_message',
+                'type': 'incident_message',
                 'incident_id': incident_id,
                 'session_id': session_id,
                 'message': {

@@ -225,6 +225,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
 
+      debugPrint('Creating incident with phone number: $userPhone');
+
       // Use provided description or generate based on existing messages
       String incidentDescription = description ?? 'Incident report';
       if (incidentDescription == 'Incident report' && _messages.isNotEmpty) {

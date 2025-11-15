@@ -116,6 +116,22 @@ class WebSocketManager:
         }
         await self.broadcast_to_all(message, topic='stats')
 
+    async def broadcast(self, message: dict, topic: str = None):
+        """
+        Generic broadcast method that sends a message to clients subscribed to a topic.
+
+        This is a convenience wrapper around broadcast_to_all for cleaner API usage.
+        Supports organization-specific topics like 'org_1', 'org_2', etc.
+
+        Args:
+            message: Dictionary message to send
+            topic: Optional topic filter (e.g., 'incidents', 'org_1', 'stats')
+
+        Example:
+            await websocket_manager.broadcast({'type': 'update'}, topic='org_5')
+        """
+        await self.broadcast_to_all(message, topic=topic)
+
 
 # Global singleton instance
 websocket_manager = WebSocketManager()

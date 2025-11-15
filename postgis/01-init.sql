@@ -164,6 +164,42 @@ CREATE INDEX IF NOT EXISTS idx_media_message_id ON media(chat_message_id);
 CREATE INDEX IF NOT EXISTS idx_media_type ON media(media_type);
 
 -- ============================================================================
+-- ORGANIZATION TOKENS TABLE (for responder portal access)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS organization_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    token VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    created_by VARCHAR(100),
+    last_used_at TIMESTAMPTZ,
+    active BOOLEAN DEFAULT true
+);
+
+-- Organization tokens indexes
+CREATE INDEX IF NOT EXISTS idx_org_tokens_organization_id ON organization_tokens(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_tokens_token ON organization_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_org_tokens_active ON organization_tokens(active);
+
+-- ============================================================================
+-- INCIDENT NOTES TABLE (internal responder notes, not visible to reporter)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS incident_notes (
+    id BIGSERIAL PRIMARY KEY,
+    incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    note_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+-- Incident notes indexes
+CREATE INDEX IF NOT EXISTS idx_incident_notes_incident_id ON incident_notes(incident_id);
+CREATE INDEX IF NOT EXISTS idx_incident_notes_organization_id ON incident_notes(organization_id);
+CREATE INDEX IF NOT EXISTS idx_incident_notes_created_at ON incident_notes(created_at);
+
+-- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
 

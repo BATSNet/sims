@@ -3,6 +3,7 @@ Organization API Endpoints
 Handles organization CRUD operations
 """
 import logging
+import secrets
 from typing import List, Optional
 from datetime import datetime
 
@@ -18,6 +19,12 @@ from models.organization_model import (
     OrganizationResponse,
     OrganizationUpdate
 )
+from models.organization_token_model import (
+    OrganizationTokenORM,
+    OrganizationTokenCreate,
+    OrganizationTokenResponse
+)
+from auth.responder_auth import hash_token
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +234,170 @@ async def delete_organization(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete organization: {str(e)}"
+        )
+
+
+@organization_router.post("/{org_id}/token", response_model=OrganizationTokenResponse, status_code=status.HTTP_201_CREATED)
+async def create_organization_token(
+    org_id: int,
+    token_data: OrganizationTokenCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a new access token for an organization.
+
+    The token is used for responder portal access and BMS/SEDAP integration.
+    Returns both the plain token (only shown once) and the hashed token record.
+    """
+    try:
+        # Verify organization exists
+        org = db.query(OrganizationORM).filter(
+            OrganizationORM.id == org_id
+        ).first()
+
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization {org_id} not found"
+            )
+
+        # Generate secure random token
+        plain_token = secrets.token_urlsafe(32)
+        token_hash = hash_token(plain_token)
+
+        # Create token record
+        db_token = OrganizationTokenORM(
+            organization_id=org_id,
+            token=token_hash,
+            created_by=token_data.created_by,
+            expires_at=token_data.expires_at,
+            created_at=datetime.utcnow(),
+            active=True
+        )
+
+        db.add(db_token)
+        db.commit()
+        db.refresh(db_token)
+
+        logger.info(f"Created access token for organization {org_id} ({org.name})")
+
+        # Return response with plain token (only shown once)
+        response = OrganizationTokenResponse(
+            id=db_token.id,
+            organization_id=db_token.organization_id,
+            token=plain_token,  # Return plain token, not hash
+            created_at=db_token.created_at.isoformat(),
+            expires_at=db_token.expires_at.isoformat() if db_token.expires_at else None,
+            created_by=db_token.created_by,
+            last_used_at=db_token.last_used_at.isoformat() if db_token.last_used_at else None,
+            active=db_token.active
+        )
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating organization token: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create token: {str(e)}"
+        )
+
+
+@organization_router.get("/{org_id}/tokens", response_model=List[OrganizationTokenResponse])
+async def list_organization_tokens(
+    org_id: int,
+    include_inactive: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    List all access tokens for an organization.
+
+    Note: Only token metadata is returned, not the actual token values.
+    """
+    try:
+        # Verify organization exists
+        org = db.query(OrganizationORM).filter(
+            OrganizationORM.id == org_id
+        ).first()
+
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization {org_id} not found"
+            )
+
+        # Query tokens
+        query = db.query(OrganizationTokenORM).filter(
+            OrganizationTokenORM.organization_id == org_id
+        )
+
+        if not include_inactive:
+            query = query.filter(OrganizationTokenORM.active == True)
+
+        tokens = query.order_by(OrganizationTokenORM.created_at.desc()).all()
+
+        return [
+            OrganizationTokenResponse(
+                id=token.id,
+                organization_id=token.organization_id,
+                token="[REDACTED]",  # Never show the actual token
+                created_at=token.created_at.isoformat(),
+                expires_at=token.expires_at.isoformat() if token.expires_at else None,
+                created_by=token.created_by,
+                last_used_at=token.last_used_at.isoformat() if token.last_used_at else None,
+                active=token.active
+            )
+            for token in tokens
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing organization tokens: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list tokens: {str(e)}"
+        )
+
+
+@organization_router.delete("/token/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_organization_token(
+    token_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Revoke (deactivate) an organization access token.
+
+    The token record is not deleted, but marked as inactive.
+    """
+    try:
+        token = db.query(OrganizationTokenORM).filter(
+            OrganizationTokenORM.id == token_id
+        ).first()
+
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Token {token_id} not found"
+            )
+
+        # Mark as inactive instead of deleting
+        token.active = False
+        db.commit()
+
+        logger.info(f"Revoked token {token_id} for organization {token.organization_id}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error revoking token: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke token: {str(e)}"
         )
 
 
