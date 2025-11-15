@@ -14,9 +14,10 @@ class CameraService {
 
   Future<bool> initialize() async {
     try {
-      final status = await Permission.camera.request();
+      // Check permission status (don't request - should be granted at app startup)
+      final status = await Permission.camera.status;
       if (!status.isGranted) {
-        debugPrint('Camera permission denied');
+        debugPrint('Camera permission not granted - please grant permissions in app settings');
         return false;
       }
 
