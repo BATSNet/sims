@@ -668,6 +668,13 @@ async def render_map(incidents: List[Dict]):
 
                     // Add marker to cluster group
                     window.incidentClusterGroup.addLayer(marker);
+
+                    // Store marker reference for dynamic updates
+                    if (!window.incidentMarkers) {{
+                        window.incidentMarkers = {{}};
+                    }}
+                    window.incidentMarkers['{inc_id}'] = marker;
+
                     console.log('[SIMS] Marker added for incident {inc_id} at ({lat}, {lon})');
                 }}
 
@@ -1244,11 +1251,11 @@ async def dashboard():
         # Set overview container reference for filter updates
         filter_refs['overview_container'] = overview_container
 
-    # Define refresh function
+    # Define refresh function that only updates table, not map
     async def refresh_dashboard():
-        """Reload incidents and refresh the dashboard"""
+        """Reload incidents and refresh the table only"""
         nonlocal incidents, is_mock_data, filter_refs
-        logger.info("Refreshing dashboard due to WebSocket update")
+        logger.info("Refreshing dashboard table (not map)")
 
         # Reload incidents from API
         all_new_incidents = await load_incidents()
@@ -1262,12 +1269,8 @@ async def dashboard():
             incidents = MOCK_INCIDENTS
             is_mock_data = True
 
-        # Clear and re-render
-        overview_container.clear()
+        # Only re-render the table, NOT the map
         table_container.clear()
-
-        with overview_container:
-            await render_overview(incidents)
 
         with table_container:
             new_filter_refs = await render_incident_table(incidents, is_mock_data=is_mock_data)
@@ -1277,7 +1280,7 @@ async def dashboard():
     # Create a button that can be triggered from JavaScript (hidden)
     refresh_button = ui.button('', on_click=refresh_dashboard).classes('hidden')
 
-    # WebSocket client JavaScript code
+    # WebSocket client JavaScript code with dynamic marker handling
     ws_code = f'''
     (function() {{
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1286,6 +1289,73 @@ async def dashboard():
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 10;
         let heartbeatInterval = null;
+
+        // Colors for different priorities
+        const priorityColors = {{
+            'critical': '#FF4444',
+            'high': '#ffa600',
+            'medium': '#63ABFF',
+            'low': 'rgba(255, 255, 255, 0.4)'
+        }};
+
+        // Function to add or update a marker
+        function addOrUpdateMarker(incident) {{
+            const lat = incident.latitude;
+            const lon = incident.longitude;
+            const incidentId = incident.incidentId || incident.incident_id;
+            const priority = incident.priority || 'medium';
+            const status = incident.status || 'open';
+
+            // Skip if no coordinates or if closed
+            if (!lat || !lon || status === 'closed') {{
+                // Remove marker if it exists
+                if (window.incidentMarkers[incidentId]) {{
+                    removeMarker(incidentId);
+                }}
+                return;
+            }}
+
+            // Remove existing marker if updating
+            if (window.incidentMarkers[incidentId]) {{
+                removeMarker(incidentId);
+            }}
+
+            const color = priorityColors[priority] || '#63ABFF';
+            const icon = L.divIcon({{
+                html: '<div style="background: ' + color + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + color + '; cursor: pointer;"></div>',
+                className: 'custom-marker',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }});
+
+            const marker = L.marker([lat, lon], {{ icon: icon }});
+
+            const description = incident.description || 'No description';
+            const popupContent = '<div class="popup-title">' + incidentId + '</div>' +
+                               '<div class="popup-description">' + description + '</div>' +
+                               '<div class="popup-priority priority-' + priority + '">' + priority.toUpperCase() + '</div>';
+
+            marker.bindPopup(popupContent, {{
+                className: 'custom-popup-' + priority
+            }});
+
+            // Add to cluster group
+            if (window.incidentClusterGroup) {{
+                window.incidentClusterGroup.addLayer(marker);
+                window.incidentMarkers[incidentId] = marker;
+                console.log('[SIMS] Added/updated marker for incident', incidentId);
+            }}
+        }}
+
+        // Function to remove a marker
+        function removeMarker(incidentId) {{
+            const marker = window.incidentMarkers[incidentId];
+            if (marker && window.incidentClusterGroup) {{
+                window.incidentClusterGroup.removeLayer(marker);
+                delete window.incidentMarkers[incidentId];
+                console.log('[SIMS] Removed marker for incident', incidentId);
+            }}
+        }}
 
         function updateSystemStatus(message, isConnected) {{
             const statusText = document.getElementById('system-status-text');
@@ -1351,9 +1421,14 @@ async def dashboard():
                         message.type === 'incident_update' ||
                         message.type === 'incident_assigned') {{
 
-                        console.log('[SIMS WebSocket] Incident update detected, refreshing dashboard');
+                        console.log('[SIMS WebSocket] Incident event:', message.type);
 
-                        // Trigger dashboard refresh by clicking hidden button
+                        // Update marker dynamically using Leaflet API
+                        if (message.incident) {{
+                            addOrUpdateMarker(message.incident);
+                        }}
+
+                        // Refresh table only (not map)
                         getElement({refresh_button.id}).click();
                     }}
                 }} catch (error) {{
