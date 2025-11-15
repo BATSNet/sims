@@ -116,6 +116,48 @@ class MediaUploadService {
     }
   }
 
+  Future<UploadResult> uploadVideo(File videoFile) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/upload/video');
+      final request = http.MultipartRequest('POST', uri);
+
+      final mimeType = lookupMimeType(videoFile.path);
+      final mimeTypeData = mimeType?.split('/');
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          videoFile.path,
+          contentType: mimeTypeData != null
+              ? MediaType(mimeTypeData[0], mimeTypeData[1])
+              : null,
+        ),
+      );
+
+      debugPrint('Uploading video to: $uri');
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      debugPrint('Video upload response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return UploadResult.fromJson(data);
+      } else {
+        return UploadResult(
+          success: false,
+          error: 'Upload failed with status ${response.statusCode}: ${response.body}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error uploading video: $e');
+      return UploadResult(
+        success: false,
+        error: 'Error uploading video: $e',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>?> createIncident({
     required String title,
     required String description,

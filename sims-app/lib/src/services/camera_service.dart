@@ -90,4 +90,48 @@ class CameraService {
     if (_controller == null) return;
     await _controller!.setFlashMode(mode);
   }
+
+  Future<bool> startVideoRecording() async {
+    if (!_isInitialized || _controller == null) {
+      debugPrint('Camera not initialized');
+      return false;
+    }
+
+    if (_controller!.value.isRecordingVideo) {
+      debugPrint('Already recording video');
+      return false;
+    }
+
+    try {
+      await _controller!.startVideoRecording();
+      return true;
+    } catch (e) {
+      debugPrint('Error starting video recording: $e');
+      return false;
+    }
+  }
+
+  Future<File?> stopVideoRecording() async {
+    if (!_isInitialized || _controller == null) {
+      debugPrint('Camera not initialized');
+      return null;
+    }
+
+    if (!_controller!.value.isRecordingVideo) {
+      debugPrint('Not recording video');
+      return null;
+    }
+
+    try {
+      final video = await _controller!.stopVideoRecording();
+      return File(video.path);
+    } catch (e) {
+      debugPrint('Error stopping video recording: $e');
+      return null;
+    }
+  }
+
+  bool get isRecordingVideo {
+    return _controller?.value.isRecordingVideo ?? false;
+  }
 }
