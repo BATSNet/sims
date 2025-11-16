@@ -8,6 +8,20 @@ import 'src/routes/app_routes.dart';
 import 'src/utils/sims_colors.dart';
 
 void main() {
+  // Suppress visual overflow indicators for minor rendering overflows
+  FlutterError.onError = (FlutterErrorDetails details) {
+    final exception = details.exception;
+    final isOverflowError = exception is FlutterError &&
+        !exception.diagnostics.any((node) => node.value.toString().contains('overflowed by'));
+
+    if (isOverflowError) {
+      FlutterError.presentError(details);
+    } else {
+      // Log the error but don't show the visual indicator
+      FlutterError.dumpErrorToConsole(details);
+    }
+  };
+
   runApp(const SimsApp());
 }
 
