@@ -364,8 +364,12 @@ async def render_map(incidents: List[Dict]):
                         }}
                     }},
                     function(error) {{
-                        console.warn('[SIMS] Geolocation error:', error.message);
-                        console.log('[SIMS] Geolocation failed, auto-zooming to incidents');
+                        if (error.message && error.message.includes('secure origins')) {{
+                            console.info('[SIMS] Geolocation requires HTTPS. Map will center on incidents instead.');
+                        }} else {{
+                            console.warn('[SIMS] Geolocation error:', error.message);
+                        }}
+                        console.log('[SIMS] Auto-zooming to incidents');
 
                         // Trigger auto-zoom to incidents if geolocation fails
                         if (window.autoZoomToIncidents) {{
