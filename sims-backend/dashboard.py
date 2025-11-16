@@ -925,6 +925,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left', 'sortable': True},
             {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left', 'sortable': True},
             {'name': 'assigned_to', 'label': 'Assigned To', 'field': 'assigned_to', 'align': 'left', 'sortable': False},
+            {'name': 'responder_url', 'label': 'Responder Link', 'field': 'responder_url', 'align': 'center'},
             {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
         ]
 
@@ -1032,6 +1033,22 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         style="font-size: 12px;"
                     />
                     <span v-else style="color: #718096; font-size: 12px;">Unassigned</span>
+                </q-td>
+                <q-td key="responder_url" :props="props" @click.stop>
+                    <q-btn
+                        v-if="props.row.assigned_org"
+                        outline
+                        dense
+                        size="sm"
+                        label="Get Link"
+                        color="teal"
+                        no-caps
+                        style="font-size: 12px; padding: 3px 10px"
+                        @click="$parent.$emit('generate_responder_link', props.row.id, props.row.assigned_org.id)"
+                    >
+                        <q-tooltip>Generate responder portal link</q-tooltip>
+                    </q-btn>
+                    <span v-else style="color: #718096; font-size: 11px;">No org</span>
                 </q-td>
                 <q-td key="action" :props="props" @click.stop>
                     <div class="flex gap-2">
@@ -1261,9 +1278,41 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 logger.error(f"Error closing incident: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
 
+        # Handle generate responder link
+        async def handle_generate_responder_link(e):
+            incident_id, org_id = e.args
+            try:
+                from config import Config
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(f"{API_BASE}/organization/{org_id}/token")
+                    if response.status_code == 201:
+                        data = response.json()
+                        plain_token = data.get('plain_token')
+                        base_url = Config.PUBLIC_SERVER_URL or 'http://localhost:8000'
+                        responder_url = f"{base_url}/responder/incidents/{incident_id}?token={plain_token}"
+
+                        with ui.dialog() as dialog, ui.card().classes('p-4'):
+                            ui.label('Responder Portal Link').classes('text-lg font-bold mb-4')
+                            ui.label(f'Incident: {incident_id}').classes('text-sm text-gray-400 mb-2')
+
+                            with ui.row().classes('gap-2 w-full items-center'):
+                                url_input = ui.input('URL', value=responder_url).classes('flex-1').props('readonly')
+                                ui.button('Copy URL', on_click=lambda: ui.run_javascript(f'navigator.clipboard.writeText("{responder_url}")'))
+
+                            with ui.row().classes('gap-2 mt-4'):
+                                ui.button('Close', on_click=dialog.close)
+
+                        dialog.open()
+                    else:
+                        ui.notify('Failed to generate token', type='negative')
+            except Exception as error:
+                logger.error(f"Error generating responder link: {error}", exc_info=True)
+                ui.notify(f'Error: {str(error)}', type='negative')
+
         table.on('forward', handle_forward)
         table.on('remove_assignment', handle_remove_assignment)
         table.on('close', handle_close_incident)
+        table.on('generate_responder_link', handle_generate_responder_link)
 
     # Store references for filter updates
     filter_refs = {
