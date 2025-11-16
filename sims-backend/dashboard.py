@@ -1284,7 +1284,14 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             try:
                 from config import Config
                 async with httpx.AsyncClient() as client:
-                    response = await client.post(f"{API_BASE}/organization/{org_id}/token")
+                    response = await client.post(
+                        f"{API_BASE}/organization/{org_id}/token",
+                        json={
+                            "organization_id": org_id,
+                            "created_by": "dashboard",
+                            "expires_at": None
+                        }
+                    )
                     if response.status_code == 201:
                         data = response.json()
                         plain_token = data.get('plain_token')
@@ -1304,7 +1311,9 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 
                         dialog.open()
                     else:
-                        ui.notify('Failed to generate token', type='negative')
+                        error_detail = response.text if response else 'Unknown error'
+                        logger.error(f"Failed to generate token: {response.status_code} - {error_detail}")
+                        ui.notify(f'Failed to generate token: {response.status_code}', type='negative')
             except Exception as error:
                 logger.error(f"Error generating responder link: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
