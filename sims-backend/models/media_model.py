@@ -35,7 +35,10 @@ class MediaORM(Base):
     file_size = Column(BigInteger)
     media_type = Column(String(20))
 
-    # Transcription for audio files
+    # Content analysis/transcription for all media types
+    # - Audio: speech-to-text transcription
+    # - Image: visual description
+    # - Video: content summary
     transcription = Column(Text)
 
     # Metadata
