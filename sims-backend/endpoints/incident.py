@@ -26,6 +26,7 @@ from services.chat_history import ChatHistory, create_chat_session, get_session_
 from services.classification_service import get_classifier
 from services.assignment_service import get_assignment_service
 from services.sedap_service import SEDAPService
+from services.media_analysis_service import get_media_analyzer
 from transcription_service import TranscriptionService
 from websocket import websocket_manager
 from pydantic import BaseModel
@@ -134,7 +135,21 @@ async def create_incident(
                 metadata={}
             )
             db.add(media)
+            db.flush()  # Flush to get the media ID
             image_url = incident_data.imageUrl
+
+            # Analyze image content
+            try:
+                logger.info(f"Analyzing image for incident {incident_id}")
+                media_analyzer = get_media_analyzer()
+                image_description = await media_analyzer.analyze_image(incident_data.imageUrl)
+                if image_description:
+                    media.transcription = image_description
+                    logger.info(f"Successfully analyzed image for incident {incident_id}: {image_description[:100]}...")
+                else:
+                    logger.warning(f"Failed to analyze image for incident {incident_id}")
+            except Exception as e:
+                logger.error(f"Error analyzing image for incident {incident_id}: {e}", exc_info=True)
 
         if incident_data.audioUrl:
             media = MediaORM(
@@ -1157,6 +1172,175 @@ async def transcribe_incident_audio(
         raise
     except Exception as e:
         logger.error(f"Error in transcribe endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process request: {str(e)}"
+        )
+
+
+@incident_router.post("/{incident_id}/analyze-image")
+async def analyze_incident_image(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """Analyze image for an incident that doesn't have a description yet"""
+    try:
+        # Find the incident
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Find image media for this incident
+        image_media = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id,
+            MediaORM.media_type == 'image'
+        ).first()
+
+        if not image_media:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No image found for incident {incident_id}"
+            )
+
+        # Analyze the image
+        try:
+            logger.info(f"Re-analyzing image for incident {incident_id}")
+            media_analyzer = get_media_analyzer()
+            image_url = image_media.file_path or image_media.file_url
+
+            image_description = await media_analyzer.analyze_image(image_url)
+            if image_description:
+                image_media.transcription = image_description
+                db.commit()
+                logger.info(f"Successfully analyzed image for incident {incident_id}")
+                return {
+                    "status": "success",
+                    "incident_id": incident_id,
+                    "description": image_description
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to analyze image"
+                )
+        except Exception as e:
+            logger.error(f"Error analyzing image for incident {incident_id}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error analyzing image: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in analyze-image endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process request: {str(e)}"
+        )
+
+
+@incident_router.post("/{incident_id}/analyze-all-media")
+async def analyze_all_incident_media(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """Analyze all media (images, audio, video) for an incident"""
+    try:
+        # Find the incident
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Find all media for this incident
+        media_files = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        if not media_files:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No media found for incident {incident_id}"
+            )
+
+        results = []
+        transcription_service = TranscriptionService()
+        media_analyzer = get_media_analyzer()
+
+        for media in media_files:
+            try:
+                media_path = media.file_path or media.file_url
+
+                if media.media_type == 'audio':
+                    logger.info(f"Transcribing audio for incident {incident_id}")
+                    text = await transcription_service.transcribe_and_get_text(media_path)
+                    if text:
+                        media.transcription = text
+                        results.append({
+                            "type": "audio",
+                            "status": "success",
+                            "content": text[:100] + "..."
+                        })
+                    else:
+                        results.append({"type": "audio", "status": "failed"})
+
+                elif media.media_type == 'image':
+                    logger.info(f"Analyzing image for incident {incident_id}")
+                    description = await media_analyzer.analyze_image(media_path)
+                    if description:
+                        media.transcription = description
+                        results.append({
+                            "type": "image",
+                            "status": "success",
+                            "content": description[:100] + "..."
+                        })
+                    else:
+                        results.append({"type": "image", "status": "failed"})
+
+                elif media.media_type == 'video':
+                    logger.info(f"Analyzing video for incident {incident_id}")
+                    description = await media_analyzer.analyze_video(media_path)
+                    if description:
+                        media.transcription = description
+                        results.append({
+                            "type": "video",
+                            "status": "success",
+                            "content": description[:100] + "..."
+                        })
+                    else:
+                        results.append({"type": "video", "status": "failed"})
+
+            except Exception as e:
+                logger.error(f"Error analyzing {media.media_type} for incident {incident_id}: {e}")
+                results.append({
+                    "type": media.media_type,
+                    "status": "error",
+                    "error": str(e)
+                })
+
+        db.commit()
+        return {
+            "status": "completed",
+            "incident_id": incident_id,
+            "results": results
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in analyze-all-media endpoint: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process request: {str(e)}"
