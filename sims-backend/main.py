@@ -286,7 +286,7 @@ async def upload_image(
 
         file_url = f'/static/uploads/images/{file_id}'
 
-        logger.info(f'Image uploaded successfully: {file_id}')
+        logger.info(f'[DEBUG] Image upload: file_id={file_id}, incident_id={incident_id}')
 
         # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
@@ -362,7 +362,7 @@ async def upload_audio(
 
         file_url = f'/static/uploads/audio/{file_id}'
 
-        logger.info(f'Audio uploaded successfully: {file_id}')
+        logger.info(f'[DEBUG] Audio upload: file_id={file_id}, incident_id={incident_id}')
 
         # Create Media record (link to incident if provided)
         media_uuid = uuid.uuid4()
