@@ -1519,8 +1519,10 @@ async def dashboard():
 
                         console.log('[SIMS WebSocket] Incident event:', message.type);
 
-                        // Fetch fresh incident data and update map
-                        fetch('{API_BASE}/incident/?limit=100')
+                        // Fetch fresh incident data and update map using current origin
+                        const apiUrl = window.location.protocol + '//' + window.location.host + '/api/incident/?limit=100';
+                        console.log('[SIMS] Fetching incidents from:', apiUrl);
+                        fetch(apiUrl)
                             .then(response => response.json())
                             .then(incidents => {{
                                 console.log('[SIMS] Fetched', incidents.length, 'incidents, updating map');
