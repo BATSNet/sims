@@ -276,6 +276,7 @@ async def organizations_page():
                     {'name': 'phone', 'label': 'Phone', 'field': 'phone', 'align': 'left'},
                     {'name': 'emergency_phone', 'label': 'Emergency', 'field': 'emergency_phone', 'align': 'left'},
                     {'name': 'active', 'label': 'Active', 'field': 'active', 'align': 'center'},
+                    {'name': 'portal_access', 'label': 'Portal Access', 'field': 'portal_access', 'align': 'center'},
                     {'name': 'actions', 'label': 'Actions', 'field': 'actions', 'align': 'center'},
                 ]
 
@@ -308,6 +309,14 @@ async def organizations_page():
                     pagination={'rowsPerPage': 10, 'sortBy': 'name'}
                 ).classes('w-full')
 
+                table.add_slot('body-cell-portal_access', '''
+                    <q-td :props="props">
+                        <q-btn outline dense size="sm" label="Generate Token" color="teal" @click="$parent.$emit('generate-token', props.row.id)">
+                            <q-tooltip>Generate responder portal access token</q-tooltip>
+                        </q-btn>
+                    </q-td>
+                ''')
+
                 table.add_slot('body-cell-actions', '''
                     <q-td :props="props">
                         <q-btn flat dense icon="edit" color="primary" size="sm" @click="$parent.$emit('edit-org', props.row.id)">
@@ -329,8 +338,73 @@ async def organizations_page():
                     org_id = e.args
                     await delete_organization(org_id)
 
+                async def on_generate_token(e):
+                    org_id = e.args
+                    org = next((o for o in organizations if o['id'] == org_id), None)
+                    if not org:
+                        ui.notify('Organization not found', type='negative')
+                        return
+
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.post(f"{API_BASE}/organization/{org_id}/token")
+                            if response.status_code == 201:
+                                token_data = response.json()
+                                plain_token = token_data.get('plain_token')
+
+                                if plain_token:
+                                    portal_url = f"http://localhost:8080/responder/incidents?token={plain_token}"
+
+                                    with ui.dialog() as token_dialog, ui.card().classes('w-full max-w-3xl p-6'):
+                                        ui.label(f'Responder Portal Access - {org["name"]}').classes('text-lg font-bold mb-4 title-font')
+
+                                        ui.label('Portal URL (send this to the organization):').classes('text-sm mb-2 text-gray-400')
+
+                                        with ui.row().classes('w-full gap-2'):
+                                            url_input = ui.input(value=portal_url).classes('flex-1').props('readonly outlined')
+
+                                            def copy_to_clipboard():
+                                                ui.run_javascript(f'''
+                                                    navigator.clipboard.writeText("{portal_url}");
+                                                ''')
+                                                ui.notify('URL copied to clipboard', type='positive')
+
+                                            ui.button(icon='content_copy', on_click=copy_to_clipboard).props('flat')
+
+                                        ui.separator().classes('my-4')
+
+                                        ui.label('Token:').classes('text-sm mb-2 text-gray-400')
+                                        with ui.row().classes('w-full gap-2'):
+                                            token_input = ui.input(value=plain_token).classes('flex-1').props('readonly outlined')
+
+                                            def copy_token():
+                                                ui.run_javascript(f'''
+                                                    navigator.clipboard.writeText("{plain_token}");
+                                                ''')
+                                                ui.notify('Token copied to clipboard', type='positive')
+
+                                            ui.button(icon='content_copy', on_click=copy_token).props('flat')
+
+                                        ui.label('IMPORTANT: Save this token securely. It will not be shown again.').classes('text-sm mt-4 text-yellow-400')
+
+                                        ui.separator().classes('my-4')
+
+                                        with ui.row().classes('w-full justify-end'):
+                                            ui.button('Close', on_click=token_dialog.close).props('color=primary')
+
+                                    token_dialog.open()
+                                else:
+                                    ui.notify('Token generated but not returned', type='warning')
+                            else:
+                                error_detail = response.json().get('detail', 'Unknown error') if response.text else 'Unknown error'
+                                ui.notify(f'Failed to generate token: {error_detail}', type='negative')
+                    except Exception as e:
+                        logger.error(f"Error generating token: {e}", exc_info=True)
+                        ui.notify(f'Error generating token: {str(e)}', type='negative')
+
                 table.on('edit-org', on_edit)
                 table.on('delete-org', on_delete)
+                table.on('generate-token', on_generate_token)
 
                 return table
 
