@@ -240,8 +240,8 @@ async def delete_organization(
 @organization_router.post("/{org_id}/token", response_model=OrganizationTokenResponse, status_code=status.HTTP_201_CREATED)
 async def create_organization_token(
     org_id: int,
-    token_data: OrganizationTokenCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: OrganizationTokenCreate = None
 ):
     """
     Generate a new access token for an organization.
@@ -265,12 +265,16 @@ async def create_organization_token(
         plain_token = secrets.token_urlsafe(32)
         token_hash = hash_token(plain_token)
 
+        # Get values from token_data or use defaults
+        created_by = token_data.created_by if token_data else "dashboard"
+        expires_at = token_data.expires_at if token_data else None
+
         # Create token record
         db_token = OrganizationTokenORM(
             organization_id=org_id,
             token=token_hash,
-            created_by=token_data.created_by,
-            expires_at=token_data.expires_at,
+            created_by=created_by,
+            expires_at=expires_at,
             created_at=datetime.utcnow(),
             active=True
         )

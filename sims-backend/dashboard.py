@@ -1294,9 +1294,9 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     )
                     if response.status_code == 201:
                         data = response.json()
-                        plain_token = data.get('plain_token')
+                        token = data.get('token')
                         base_url = Config.PUBLIC_SERVER_URL or 'http://localhost:8000'
-                        responder_url = f"{base_url}/responder/incidents/{incident_id}?token={plain_token}"
+                        responder_url = f"{base_url}/responder/incidents/{incident_id}?token={token}"
 
                         with ui.dialog() as dialog, ui.card().classes('p-4'):
                             ui.label('Responder Portal Link').classes('text-lg font-bold mb-4')
