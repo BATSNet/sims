@@ -25,7 +25,7 @@ class Config:
     # External API Integration Settings
     API_ENDPOINTS = {
         "SEDAP": {
-            "url": os.getenv("SEDAP_API_URL", "http://localhost:80/SEDAPEXPRESS"),
+            "url": os.getenv("SEDAP_API_URL", "http://10.3.1.127:80/SEDAPEXPRESS"),
             "port": int(os.getenv("SEDAP_API_PORT", "80")),
             "sender_id": os.getenv("SEDAP_SENDER_ID", "SIMS"),
             "classification": os.getenv("SEDAP_CLASSIFICATION", "U"),
