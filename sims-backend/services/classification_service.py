@@ -147,6 +147,13 @@ Analyze the following incident report and classify it.{category_context}
 INCIDENT REPORT:
 {incident_text}
 
+CLASSIFICATION GUIDELINES:
+- If the report mentions PEOPLE (person, someone, individual, hacker, attacker, suspect): Use "suspicious_person" or related person categories
+- If the report mentions VEHICLES (car, truck, van, military vehicle): Use "suspicious_vehicle"
+- If the report mentions COMPUTERS, HACKING, CYBERSECURITY: Use "cyber_incident"
+- If the report mentions DRONES, UAVs: Use "drone_detection"
+- Pay close attention to keywords like "hacking", "laptop", "computer", "network" for cyber incidents
+
 TASK:
 Classify this incident by providing:
 1. Category (choose the most appropriate from the list below)
