@@ -1,179 +1,140 @@
-# SIMS - Situation Incident Management System
+<div align="center">
+  <img src="resources/sims_square.svg" alt="SIMS Logo" width="200"/>
+  <h1>SIMS - Situation Incident Management System</h1>
+  <p><strong>Fast, intelligent incident reporting for military and civilian use</strong></p>
+</div>
 
-## Overview
+---
 
-SIMS (Situation Incident Management System) is a dual-use (military and civilian) incident alert tracking system that enables fast reporting of threats, drones, and emergency situations directly to an orchestration layer, bypassing traditional reporting chains.
+## What is SIMS?
 
-## Problem Statement
+SIMS is a dual-use incident alert tracking system that enables rapid reporting of threats, drones, and emergencies directly to an orchestration layer, bypassing traditional reporting chains. Submit incidents in seconds with automatic location capture, media collection, and AI-powered classification.
 
-Traditional reporting chains are too slow for real-time situational awareness. People often don't know how to report incidents properly, and there is a critical need for a fallback system for unknown incident types. This system provides direct reporting capability for both military and civilian use cases.
+## Features
 
-## Key Features
+- **Rapid Reporting** - Submit incidents in under a few seconds
+- **Multi-Modal Input** - Photos, voice messages, and text descriptions
+- **Auto Location Capture** - GPS coordinates and device bearing/orientation
+- **AI Processing** - Voice-to-text transcription and LLM summarization
+- **Smart Classification** - Automatic incident categorization and intelligent routing
+- **Real-Time Dashboard** - Operator interface with map visualization and alert management
+- **Geospatial Database** - PostGIS integration for location-based queries
+- **BMS Integration** - SEDAP/STANAG compatibility for military systems
+- **Offline Support** - Queue submissions when network unavailable
 
-- **Fast Reporting**: Submit incidents in under a few seconds
-- **Multi-Modal Input**: Support for photos, voice messages, and text
-- **Automatic Location Capture**: GPS coordinates and device bearing/orientation
-- **AI Processing**: Voice-to-text transcription and LLM-based summarization
-- **Intelligent Classification**: Automatic incident categorization and routing
-- **Operator Dashboard**: Real-time visualization and alert management
-- **BMS Integration**: SEDAP/STANAG compatibility for military systems
+## Quick Start
 
-## Use Cases
-
-### Civilian Scenarios
-- Armored vehicle sightings: Capture coordinates and photos for forwarding
-- Airport drone detection: Quick photo and voice message reporting
-- Natural disasters: Flooding, dam breaks - rapid photo submission
-
-### Military Scenarios
-- Drone detection: Soldier reports suspected drone near barracks
-- Threat identification: Real-time situational awareness for patrol units
-
-## Architecture
-### Mobile App (sims-app)
-Flutter-based Android application for rapid incident capture:
-- Camera and voice recording
-- GPS and bearing detection
-- Quick submission interface
-- Offline queueing capability
-
-### Backend (sims-backend)
-Python-based backend with FastAPI:
-- REST API for mobile app
-- Voice-to-text transcription
-- LLM summarization and classification
-- PostGIS database for geospatial data
-- NiceGUI operator dashboard
-- SEDAP.Express integration for BMS forwarding
-
-### Infrastructure
-- PostgreSQL with PostGIS extension
-- Docker containerization
-- External LLM APIs (FeatherAI, DeepInfra)
-
-## Getting Started
-
-### Prerequisites
-- Docker and Docker Compose
-- Python 3.11+ (for local backend development)
-- Flutter SDK (for app development)
-- PostgreSQL with PostGIS (or use Docker)
-
-### Running with Docker
+### Using Docker (Recommended)
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone <repository-url>
 cd sims-bw
 
-# Create environment file
+# Configure environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (FEATHER_API_KEY, DEEPINFRA_API_KEY)
 
 # Start all services
 docker-compose up -d
 
-# View logs
-docker-compose logs -f backend
+# Backend API: http://localhost:8000
+# Operator Dashboard: http://localhost:8080
 ```
 
-The backend API will be available at http://localhost:8000
-
-### Backend Development
+### Backend Installation
 
 ```bash
 cd sims-backend
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Run development server
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8000
 ```
 
-### Mobile App Development
+**Database Setup:**
+```bash
+# Using Docker
+docker-compose up -d db
+
+# Or install PostgreSQL with PostGIS extension manually
+```
+
+### Mobile App Installation
+
+**Prerequisites:** Flutter SDK, Android Studio/Xcode
 
 ```bash
 cd sims-app
 
-# Get dependencies
+# Install dependencies
 flutter pub get
 
-# Run on connected device
+# Configure backend URL (see below)
+
+# Run on device/emulator
 flutter run
 
-# Build APK
-flutter build apk
+# Build APK for Android
+flutter build apk --release
 ```
+
+**Configure Backend Connection:**
+
+Edit `sims-app/lib/src/config/app_config.dart`:
+
+```dart
+// For Android Emulator
+static const String devBaseUrl = 'http://10.0.2.2:8080';
+
+// For Physical Device (use your computer's local IP)
+static const String devBaseUrlPhysical = 'http://192.168.1.100:8080';
+```
+
+## Technology Stack
+
+**Backend:** Python 3.11+, FastAPI, NiceGUI, PostgreSQL + PostGIS, Alembic
+
+**Mobile:** Flutter (Android)
+
+**AI/ML:** FeatherAI (LLM), DeepInfra (Speech-to-Text)
+
+**Infrastructure:** Docker, Docker Compose
+
+**Integration:** SEDAP.Express for BMS connectivity
 
 ## Project Structure
 
 ```
 sims-bw/
-├── sims-backend/       # Python backend (FastAPI, NiceGUI)
+├── sims-backend/       # Python backend (API + Dashboard)
 ├── sims-app/          # Flutter mobile application
-├── research/          # API documentation and research notes
-├── docker/            # Docker configuration files
-├── docker-compose.yml # Multi-container orchestration
-├── CLAUDE.md          # Development guidelines for Claude Code
-└── README.md          # This file
+├── research/          # API docs and integration notes
+├── resources/         # Logos and assets
+├── docker-compose.yml # Container orchestration
+└── LICENSE            # MIT License
 ```
 
-## Technology Stack
+## Use Cases
 
-**Backend:**
-- Python 3.11+
-- FastAPI (REST API)
-- NiceGUI (Operator Dashboard)
-- PostgreSQL + PostGIS (Database)
-- Alembic (Database migrations)
-- FeatherAI (LLM processing)
-- DeepInfra (Voice-to-text)
+**Civilian:** Armored vehicle sightings, airport drone detection, natural disasters (flooding, structural damage)
 
-**Mobile App:**
-- Flutter
-- Android (primary platform)
-
-**Infrastructure:**
-- Docker & Docker Compose
-- PostGIS/PostgreSQL
-- SEDAP.Express (BMS integration)
-
-## Data Model
-
-### Core Entities
-- **Incident**: Event records with geospatial data, media, and classification
-- **User**: Reporter information
-- **Organization**: Responding institutions
-- **Classification**: Object type, domain (land/air/sea), movement, direction, threat level
-
-### Integration Format
-JSON schema standardized against SEDAP.Express format for BMS compatibility.
-
-## External Integrations
-
-- **SEDAP.Express**: CSV over REST API for BMS integration
-- **FeatherAI**: Text summarization, classification, object description
-- **DeepInfra**: Automatic speech recognition
-- **Katwarn**: To be evaluated
-
-## Security Considerations
-
-- Environment variables for API keys and secrets
-- Input validation and sanitization
-- Rate limiting on API endpoints
-- HTTPS in production
-- Media upload validation
-- Keycloak authentication (planned)
-
-## Contributing
-
-This is a hackathon/pitch project with a tight development timeline. For questions or collaboration, please contact the development team.
+**Military:** Drone detection near installations, threat identification, real-time patrol situational awareness
 
 ## License
 
-To be determined
+MIT License - see [LICENSE](LICENSE) file for details
+
+## Security
+
+- Store API keys in `.env` (never commit)
+- Use HTTPS in production
+- Validate and sanitize all inputs
+- Rate limiting on API endpoints
+- Media upload validation
