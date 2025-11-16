@@ -105,7 +105,19 @@ async def load_incidents() -> List[Dict]:
             response = await client.get(f"{API_BASE}/incident/", params={'limit': 100})
             if response.status_code == 200:
                 raw_incidents = response.json()
+
+                # Debug: Log first incident to see what data we're getting
+                if raw_incidents:
+                    first_incident = raw_incidents[0]
+                    logger.info(f"[DEBUG] Sample raw incident: ID={first_incident.get('incidentId')}, imageUrl={first_incident.get('imageUrl')}, audioUrl={first_incident.get('audioUrl')}, audioTranscript={first_incident.get('audioTranscript')}")
+
                 incidents = [format_incident_for_dashboard(inc) for inc in raw_incidents]
+
+                # Debug: Log formatted incident
+                if incidents:
+                    first_formatted = incidents[0]
+                    logger.info(f"[DEBUG] Sample formatted incident: ID={first_formatted.get('id')}, imageUrl={first_formatted.get('imageUrl')}, audioUrl={first_formatted.get('audioUrl')}, audioTranscript={first_formatted.get('audioTranscript')}")
+
                 logger.info(f"Loaded {len(incidents)} incidents from API")
                 return incidents
             else:
@@ -1065,25 +1077,54 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="text-xs text-gray-400 uppercase mb-1">Reporter</div>
                                 <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
                             </div>
-                            <div v-if="props.row.imageUrl" class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Image</div>
-                                <img :src="props.row.imageUrl" class="max-w-full h-auto rounded" style="max-height: 400px;" />
-                            </div>
-                            <div v-if="props.row.audioUrl" class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Audio</div>
-                                <audio controls class="w-full">
-                                    <source :src="props.row.audioUrl" />
-                                </audio>
-                            </div>
-                            <div v-if="props.row.audioTranscript" class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Audio Transcript</div>
-                                <div class="text-white bg-gray-800 p-3 rounded" style="font-family: monospace; font-size: 12px;">{{ props.row.audioTranscript }}</div>
-                            </div>
-                            <div v-if="props.row.videoUrl" class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
-                                <video controls class="max-w-full h-auto rounded" style="max-height: 400px;">
-                                    <source :src="props.row.videoUrl" />
-                                </video>
+
+                            <!-- MEDIA FILES SECTION - ALWAYS VISIBLE -->
+                            <div class="col-span-1 sm:col-span-2" style="border-top: 2px solid #FF4444; padding-top: 16px; margin-top: 16px;">
+                                <div class="text-sm text-white font-bold mb-3" style="color: #FF4444;">MEDIA FILES</div>
+
+                                <!-- Image -->
+                                <div class="mb-4">
+                                    <div class="text-xs text-gray-400 uppercase mb-1">Image</div>
+                                    <div v-if="props.row.imageUrl">
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.imageUrl }}</div>
+                                        <img :src="props.row.imageUrl" class="max-w-full h-auto rounded border-2 border-gray-700" style="max-height: 400px;" />
+                                    </div>
+                                    <div v-else class="text-gray-500 italic text-xs">No image attached</div>
+                                </div>
+
+                                <!-- Audio -->
+                                <div class="mb-4">
+                                    <div class="text-xs text-gray-400 uppercase mb-1">Audio</div>
+                                    <div v-if="props.row.audioUrl">
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.audioUrl }}</div>
+                                        <audio controls class="w-full">
+                                            <source :src="props.row.audioUrl" />
+                                        </audio>
+                                    </div>
+                                    <div v-else class="text-gray-500 italic text-xs">No audio attached</div>
+                                </div>
+
+                                <!-- Video -->
+                                <div class="mb-4">
+                                    <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
+                                    <div v-if="props.row.videoUrl">
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.videoUrl }}</div>
+                                        <video controls class="max-w-full h-auto rounded border-2 border-gray-700" style="max-height: 400px;">
+                                            <source :src="props.row.videoUrl" />
+                                        </video>
+                                    </div>
+                                    <div v-else class="text-gray-500 italic text-xs">No video attached</div>
+                                </div>
+
+                                <!-- Media Analysis/Transcription -->
+                                <div class="mb-4">
+                                    <div class="text-xs text-gray-400 uppercase mb-1">Media Analysis / Transcription</div>
+                                    <div v-if="props.row.audioTranscript" class="text-white bg-gray-800 p-3 rounded border-2 border-green-700" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">{{ props.row.audioTranscript }}</div>
+                                    <div v-else>
+                                        <div class="text-yellow-400 italic text-xs mb-2">No analysis available yet</div>
+                                        <div class="text-xs text-gray-500">Run: POST /api/incident/{{ props.row.id }}/analyze-all-media</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
