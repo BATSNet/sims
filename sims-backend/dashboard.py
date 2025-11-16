@@ -328,7 +328,11 @@ async def render_map(incidents: List[Dict]):
                         console.log('[SIMS] Geolocation obtained:', lat, lon);
 
                         // Center map on user's location with zoom 11 (approximately 50km view)
-                        var map = getElement({m.id}).map;
+                        var map = window.leafletMap || getElement({m.id}).map;
+                        if (!map) {{
+                            console.error('[SIMS] Map not available for geolocation');
+                            return;
+                        }}
                         map.setView([lat, lon], 11);
 
                         // Add a marker for user's current location

@@ -124,6 +124,8 @@ async def create_incident(
         # Link media if provided
         image_url = None
         audio_url = None
+        image_media_to_analyze = None
+        audio_media_to_analyze = None
 
         if incident_data.imageUrl:
             media = MediaORM(
@@ -138,18 +140,8 @@ async def create_incident(
             db.flush()  # Flush to get the media ID
             image_url = incident_data.imageUrl
 
-            # Analyze image content
-            try:
-                logger.info(f"Analyzing image for incident {incident_id}")
-                media_analyzer = get_media_analyzer()
-                image_description = await media_analyzer.analyze_image(incident_data.imageUrl)
-                if image_description:
-                    media.transcription = image_description
-                    logger.info(f"Successfully analyzed image for incident {incident_id}: {image_description[:100]}...")
-                else:
-                    logger.warning(f"Failed to analyze image for incident {incident_id}")
-            except Exception as e:
-                logger.error(f"Error analyzing image for incident {incident_id}: {e}", exc_info=True)
+            # Store media reference for later analysis
+            image_media_to_analyze = media
 
         if incident_data.audioUrl:
             media = MediaORM(
@@ -164,24 +156,8 @@ async def create_incident(
             db.flush()  # Flush to get the media ID
             audio_url = incident_data.audioUrl
 
-            # Transcribe audio asynchronously
-            try:
-                logger.info(f"Transcribing audio for incident {incident_id}")
-                transcription_service = TranscriptionService()
-                # Check if audioUrl is a local file path or URL
-                audio_path = incident_data.audioUrl
-                if audio_path.startswith('http'):
-                    # It's a URL, we need to handle this differently
-                    logger.warning(f"Audio URL is a web URL, transcription might not work: {audio_path}")
-
-                transcription_text = await transcription_service.transcribe_and_get_text(audio_path)
-                if transcription_text:
-                    media.transcription = transcription_text
-                    logger.info(f"Successfully transcribed audio for incident {incident_id}: {transcription_text[:100]}...")
-                else:
-                    logger.warning(f"Failed to transcribe audio for incident {incident_id}")
-            except Exception as e:
-                logger.error(f"Error transcribing audio for incident {incident_id}: {e}", exc_info=True)
+            # Store media reference for later analysis
+            audio_media_to_analyze = media
 
         # Auto-classify incident using LLM
         try:
@@ -339,6 +315,30 @@ async def create_incident(
         db.commit()
 
         logger.info(f"Incident {incident_id} created successfully with session {session_id}")
+
+        # Analyze media AFTER commit (in background, don't block response)
+        try:
+            if image_media_to_analyze:
+                logger.info(f"Analyzing image for incident {incident_id}")
+                media_analyzer = get_media_analyzer()
+                image_description = await media_analyzer.analyze_image(image_media_to_analyze.file_url)
+                if image_description:
+                    image_media_to_analyze.transcription = image_description
+                    db.commit()
+                    logger.info(f"Successfully analyzed image for incident {incident_id}")
+
+            if audio_media_to_analyze:
+                logger.info(f"Transcribing audio for incident {incident_id}")
+                transcription_service = TranscriptionService()
+                transcription_text = await transcription_service.transcribe_and_get_text(audio_media_to_analyze.file_url)
+                if transcription_text:
+                    audio_media_to_analyze.transcription = transcription_text
+                    transcription = transcription_text  # Update for response
+                    db.commit()
+                    logger.info(f"Successfully transcribed audio for incident {incident_id}")
+        except Exception as media_error:
+            logger.error(f"Error analyzing media (non-critical): {media_error}", exc_info=True)
+            # Continue anyway - media analysis failure shouldn't break incident creation
 
         # Prepare response
         response = IncidentResponse.from_orm(db_incident, image_url, audio_url, transcription)
@@ -624,9 +624,16 @@ async def list_incidents(
             audio_url = None
             audio_transcript = None
 
+            # Debug: Log media files for first incident
+            if inc.incident_id == incidents[0].incident_id:
+                logger.info(f"[DEBUG] Incident {inc.incident_id}: hasattr(media_files)={hasattr(inc, 'media_files')}")
+                if hasattr(inc, 'media_files'):
+                    logger.info(f"[DEBUG] media_files={inc.media_files}, count={len(inc.media_files) if inc.media_files else 0}")
+
             # Use eager-loaded media_files relationship
             if hasattr(inc, 'media_files') and inc.media_files:
                 for media in inc.media_files:
+                    logger.info(f"[DEBUG] Media for {inc.incident_id}: type={media.media_type}, url={media.file_url}, has_transcription={hasattr(media, 'transcription')}")
                     if media.media_type == 'image' and not image_url:
                         image_url = media.file_url
                     elif media.media_type == 'audio' and not audio_url:
