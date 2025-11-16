@@ -129,6 +129,7 @@ class IncidentResponse(BaseModel):
     heading: Optional[float] = None
     imageUrl: Optional[str] = None
     audioUrl: Optional[str] = None
+    audioTranscript: Optional[str] = None
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -157,7 +158,7 @@ class IncidentResponse(BaseModel):
     )
 
     @classmethod
-    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None):
+    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None, audio_transcript: Optional[str] = None):
         """Create response from ORM model"""
         # Get organization name if assigned
         routed_to_name = None
@@ -182,6 +183,7 @@ class IncidentResponse(BaseModel):
             heading=incident.heading,
             imageUrl=image_url,
             audioUrl=audio_url,
+            audioTranscript=audio_transcript,
             category=incident.category,
             tags=incident.tags or [],
             metadata=incident.meta_data or {},
