@@ -15,7 +15,7 @@ class MediaAnalysisService:
     def __init__(self):
         self.api_key = Config.FEATHERLESS_API_KEY
         self.api_base = Config.FEATHERLESS_API_BASE
-        self.model = Config.DEFAULT_LLM_MODEL
+        self.model = Config.VISION_MODEL
         self.temperature = 0.7
         self.max_tokens = 500
 
@@ -43,14 +43,7 @@ class MediaAnalysisService:
                 "Content-Type": "application/json"
             }
 
-            prompt = """Analyze this incident image and provide a detailed description including:
-1. What objects, people, or structures are visible
-2. Any signs of damage, danger, or unusual conditions
-3. Environmental context (weather, time of day, location type)
-4. Any text or signage visible
-5. Overall assessment of what the image shows
-
-Be concise but thorough. Focus on factual observations relevant to emergency response."""
+            prompt = "Describe what this picture shows in 2-3 sentences."
 
             # Build multimodal content with image
             user_content = [
@@ -71,7 +64,7 @@ Be concise but thorough. Focus on factual observations relevant to emergency res
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are an expert image analyst for emergency incident reporting. Provide clear, factual descriptions."
+                        "content": "You are a helpful image analyst. Provide clear, concise descriptions."
                     },
                     {
                         "role": "user",

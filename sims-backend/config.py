@@ -39,6 +39,7 @@ class Config:
     # LLM Settings
     FEATHERLESS_API_BASE: str = "https://api.featherless.ai/v1"
     DEFAULT_LLM_MODEL: str = os.getenv("LLM_MODEL", "meta-llama/Meta-Llama-3.1-8B-Instruct")
+    VISION_MODEL: str = os.getenv("VISION_MODEL", "llava-hf/llava-1.5-7b-hf")
     LLM_TEMPERATURE: float = 0.3  # Lower temperature for more deterministic classification
     LLM_MAX_TOKENS: int = 500
     LLM_TIMEOUT: int = 120  # Timeout in seconds
