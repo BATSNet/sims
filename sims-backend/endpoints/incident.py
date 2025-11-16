@@ -26,6 +26,7 @@ from services.chat_history import ChatHistory, create_chat_session, get_session_
 from services.classification_service import get_classifier
 from services.assignment_service import get_assignment_service
 from services.sedap_service import SEDAPService
+from transcription_service import TranscriptionService
 from websocket import websocket_manager
 from pydantic import BaseModel
 from config import Config
@@ -145,7 +146,27 @@ async def create_incident(
                 metadata={}
             )
             db.add(media)
+            db.flush()  # Flush to get the media ID
             audio_url = incident_data.audioUrl
+
+            # Transcribe audio asynchronously
+            try:
+                logger.info(f"Transcribing audio for incident {incident_id}")
+                transcription_service = TranscriptionService()
+                # Check if audioUrl is a local file path or URL
+                audio_path = incident_data.audioUrl
+                if audio_path.startswith('http'):
+                    # It's a URL, we need to handle this differently
+                    logger.warning(f"Audio URL is a web URL, transcription might not work: {audio_path}")
+
+                transcription_text = await transcription_service.transcribe_and_get_text(audio_path)
+                if transcription_text:
+                    media.transcription = transcription_text
+                    logger.info(f"Successfully transcribed audio for incident {incident_id}: {transcription_text[:100]}...")
+                else:
+                    logger.warning(f"Failed to transcribe audio for incident {incident_id}")
+            except Exception as e:
+                logger.error(f"Error transcribing audio for incident {incident_id}: {e}", exc_info=True)
 
         # Auto-classify incident using LLM
         try:
@@ -1072,6 +1093,74 @@ async def add_chat_message(
         )
 
         return {"status": "ok", "incident_id": incident.incident_id}
+
+
+@incident_router.post("/{incident_id}/transcribe-audio")
+async def transcribe_incident_audio(
+    incident_id: str,
+    db: Session = Depends(get_db)
+):
+    """Transcribe audio for an incident that doesn't have a transcription yet"""
+    try:
+        # Find the incident
+        incident = db.query(IncidentORM).filter(
+            IncidentORM.incident_id == incident_id
+        ).first()
+
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Incident {incident_id} not found"
+            )
+
+        # Find audio media for this incident
+        audio_media = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id,
+            MediaORM.media_type == 'audio'
+        ).first()
+
+        if not audio_media:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No audio found for incident {incident_id}"
+            )
+
+        # Transcribe the audio
+        try:
+            logger.info(f"Re-transcribing audio for incident {incident_id}")
+            transcription_service = TranscriptionService()
+            audio_path = audio_media.file_path or audio_media.file_url
+
+            transcription_text = await transcription_service.transcribe_and_get_text(audio_path)
+            if transcription_text:
+                audio_media.transcription = transcription_text
+                db.commit()
+                logger.info(f"Successfully transcribed audio for incident {incident_id}")
+                return {
+                    "status": "success",
+                    "incident_id": incident_id,
+                    "transcription": transcription_text
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to transcribe audio"
+                )
+        except Exception as e:
+            logger.error(f"Error transcribing audio for incident {incident_id}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error transcribing audio: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in transcribe endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process request: {str(e)}"
+        )
 
     except HTTPException:
         raise
