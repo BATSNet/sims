@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from nicegui import app, ui
-from fastapi import UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import UploadFile, File, Form, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
@@ -261,7 +261,7 @@ async def api_health():
 @app.post('/api/upload/image')
 async def upload_image(
     file: UploadFile = File(...),
-    incident_id: Optional[str] = None,
+    incident_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload an image file"""
@@ -337,7 +337,7 @@ async def upload_image(
 @app.post('/api/upload/audio')
 async def upload_audio(
     file: UploadFile = File(...),
-    incident_id: Optional[str] = None,
+    incident_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload an audio file and queue it for transcription"""
@@ -429,7 +429,7 @@ async def upload_audio(
 @app.post('/api/upload/video')
 async def upload_video(
     file: UploadFile = File(...),
-    incident_id: Optional[str] = None,
+    incident_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload a video file"""
