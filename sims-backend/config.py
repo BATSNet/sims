@@ -48,10 +48,11 @@ class Config:
     INCIDENT_CATEGORIES = [
         "drone_detection",
         "suspicious_vehicle",
+        "suspicious_person",
         "fire_incident",
         "medical_emergency",
         "infrastructure_damage",
-        "cyber_attack",
+        "cyber_incident",
         "hazmat_incident",
         "natural_disaster",
         "airport_incident",
@@ -61,6 +62,7 @@ class Config:
         "explosion",
         "chemical_biological",
         "maritime_incident",
+        "theft_burglary",
         "unclassified"
     ]
 
@@ -72,10 +74,11 @@ class Config:
     CATEGORY_TO_ORG_TYPE = {
         "drone_detection": ["military", "police", "civil_defense"],
         "suspicious_vehicle": ["police", "military", "civil_defense"],
+        "suspicious_person": ["police", "civil_defense"],
         "fire_incident": ["fire", "civil_defense"],
         "medical_emergency": ["medical", "fire"],
         "infrastructure_damage": ["civil_defense", "government"],
-        "cyber_attack": ["military", "government", "police"],
+        "cyber_incident": ["military", "government", "police"],
         "hazmat_incident": ["fire", "civil_defense", "medical"],
         "natural_disaster": ["civil_defense", "fire", "government"],
         "airport_incident": ["police", "fire", "civil_defense"],
@@ -85,6 +88,7 @@ class Config:
         "explosion": ["fire", "police", "military", "civil_defense"],
         "chemical_biological": ["fire", "medical", "military", "civil_defense"],
         "maritime_incident": ["police", "military", "civil_defense"],
+        "theft_burglary": ["police"],
         "unclassified": ["police", "civil_defense", "government"]
     }
 

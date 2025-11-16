@@ -258,6 +258,36 @@ async def api_health():
     return {'status': 'ok', 'service': 'sims-api'}
 
 
+@app.get('/api/media/image/{filename}')
+async def serve_image(filename: str):
+    """Serve image file"""
+    from fastapi.responses import FileResponse
+    file_path = IMAGE_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail='Image not found')
+    return FileResponse(file_path, media_type='image/jpeg')
+
+
+@app.get('/api/media/audio/{filename}')
+async def serve_audio(filename: str):
+    """Serve audio file"""
+    from fastapi.responses import FileResponse
+    file_path = AUDIO_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail='Audio not found')
+    return FileResponse(file_path, media_type='audio/mpeg')
+
+
+@app.get('/api/media/video/{filename}')
+async def serve_video(filename: str):
+    """Serve video file"""
+    from fastapi.responses import FileResponse
+    file_path = VIDEO_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail='Video not found')
+    return FileResponse(file_path, media_type='video/mp4')
+
+
 @app.post('/api/upload/image')
 async def upload_image(
     file: UploadFile = File(...),
@@ -284,7 +314,7 @@ async def upload_image(
             content = await file.read()
             f.write(content)
 
-        file_url = f'/static/uploads/images/{file_id}'
+        file_url = f'/api/media/image/{file_id}'
 
         logger.info(f'[DEBUG] Image upload: file_id={file_id}, incident_id={incident_id}')
 
@@ -360,7 +390,7 @@ async def upload_audio(
         with open(file_path, 'wb') as f:
             f.write(content)
 
-        file_url = f'/static/uploads/audio/{file_id}'
+        file_url = f'/api/media/audio/{file_id}'
 
         logger.info(f'[DEBUG] Audio upload: file_id={file_id}, incident_id={incident_id}')
 
@@ -468,7 +498,7 @@ async def upload_video(
         with open(file_path, 'wb') as f:
             f.write(content)
 
-        file_url = f'/static/uploads/videos/{file_id}'
+        file_url = f'/api/media/video/{file_id}'
 
         logger.info(f'Video uploaded successfully: {file_id}')
 

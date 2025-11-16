@@ -35,8 +35,8 @@ services:
       OBJECT_STORAGE_DIR: /app/uploads
       FEATHERLESS_API_KEY: ${FEATHERLESS_API_KEY}
       DEEPINFRA_API_KEY: ${DEEPINFRA_API_KEY}
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
@@ -46,5 +46,21 @@ services:
       - ./resources:/resources
     command: python main.py
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: sims-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
