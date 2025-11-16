@@ -1,8 +1,4 @@
-{
-    email {$CADDY_EMAIL:admin@example.com}
-}
-
-{$DOMAIN:91.99.179.35} {
+http://91.99.179.35 {
     encode gzip
 
     reverse_proxy backend:8000 {
