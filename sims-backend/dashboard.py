@@ -149,7 +149,8 @@ async def load_organizations() -> List[Dict]:
 async def assign_incident_to_org(incident_id: str, organization_id: int, notes: Optional[str] = None):
     """Assign an incident to an organization"""
     try:
-        async with httpx.AsyncClient() as client:
+        # Use longer timeout for assignment since it includes SEDAP forwarding (up to 30s)
+        async with httpx.AsyncClient(timeout=45.0) as client:
             response = await client.post(
                 f"{API_BASE}/incident/{incident_id}/assign",
                 json={'organization_id': organization_id, 'notes': notes}
