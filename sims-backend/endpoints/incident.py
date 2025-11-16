@@ -1109,6 +1109,15 @@ async def add_chat_message(
 
         return {"status": "ok", "incident_id": incident.incident_id}
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in add_chat_message: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add chat message: {str(e)}"
+        )
+
 
 @incident_router.post("/{incident_id}/transcribe-audio")
 async def transcribe_incident_audio(
@@ -1344,13 +1353,4 @@ async def analyze_all_incident_media(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process request: {str(e)}"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error adding chat message: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to add chat message: {str(e)}"
         )
