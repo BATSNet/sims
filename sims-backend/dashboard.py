@@ -94,6 +94,7 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'imageUrl': image_url,
         'audioUrl': audio_url,
         'videoUrl': video_url,
+        'audioTranscript': incident.get('audioTranscript'),
     }
 
 
@@ -934,6 +935,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 'imageUrl': incident.get('imageUrl'),
                 'audioUrl': incident.get('audioUrl'),
                 'videoUrl': incident.get('videoUrl'),
+                'audioTranscript': incident.get('audioTranscript'),
             })
 
         table = ui.table(
@@ -1072,6 +1074,10 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <audio controls class="w-full">
                                     <source :src="props.row.audioUrl" />
                                 </audio>
+                            </div>
+                            <div v-if="props.row.audioTranscript" class="col-span-1 sm:col-span-2">
+                                <div class="text-xs text-gray-400 uppercase mb-1">Audio Transcript</div>
+                                <div class="text-white bg-gray-800 p-3 rounded" style="font-family: monospace; font-size: 12px;">{{ props.row.audioTranscript }}</div>
                             </div>
                             <div v-if="props.row.videoUrl" class="col-span-1 sm:col-span-2">
                                 <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
@@ -1259,6 +1265,13 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 'priority': incident['priority'],
                 'assigned_org': assigned_org_display,
                 'action': incident['id'],
+                'reporter': incident.get('reporter', 'Unknown'),
+                'status': incident.get('status', 'active'),
+                'type': incident.get('type', 'Incident'),
+                'imageUrl': incident.get('imageUrl'),
+                'audioUrl': incident.get('audioUrl'),
+                'videoUrl': incident.get('videoUrl'),
+                'audioTranscript': incident.get('audioTranscript'),
             })
 
         table.rows = new_rows
@@ -1529,6 +1542,22 @@ async def dashboard():
                                 }});
 
                                 console.log('[SIMS] Re-added', addedCount, 'incident markers');
+
+                                // Force map refresh after updating markers
+                                var map = getElement({m.id}).map;
+                                if (map) {{
+                                    // Invalidate map size to force redraw
+                                    map.invalidateSize();
+
+                                    // Force tile layer redraw
+                                    map.eachLayer(function(layer) {{
+                                        if (layer instanceof L.TileLayer) {{
+                                            layer.redraw();
+                                        }}
+                                    }});
+
+                                    console.log('[SIMS] Map refreshed after marker update');
+                                }}
                             }})
                             .catch(error => {{
                                 console.error('[SIMS] Error fetching incidents:', error);

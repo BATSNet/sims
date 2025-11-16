@@ -305,7 +305,7 @@ async def create_incident(
         logger.info(f"Incident {incident_id} created successfully with session {session_id}")
 
         # Prepare response
-        response = IncidentResponse.from_orm(db_incident, image_url, audio_url)
+        response = IncidentResponse.from_orm(db_incident, image_url, audio_url, transcription)
         logger.info(f"Incident response user_phone: {response.user_phone}")
 
         # Broadcast new incident via WebSocket
@@ -372,13 +372,16 @@ async def get_incident(
 
         image_url = None
         audio_url = None
+        audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
+                if hasattr(media, 'transcription') and media.transcription:
+                    audio_transcript = media.transcription
 
-        return IncidentResponse.from_orm(incident, image_url, audio_url)
+        return IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
 
     except HTTPException:
         raise
@@ -509,8 +512,24 @@ async def update_incident(
 
         logger.info(f"Updated incident {incident_id}")
 
+        # Get associated media for response
+        media_files = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        image_url = None
+        audio_url = None
+        audio_transcript = None
+        for media in media_files:
+            if media.media_type == 'image' and not image_url:
+                image_url = media.file_url
+            elif media.media_type == 'audio' and not audio_url:
+                audio_url = media.file_url
+                if hasattr(media, 'transcription') and media.transcription:
+                    audio_transcript = media.transcription
+
         # Prepare response
-        response = IncidentResponse.from_orm(incident)
+        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
 
         # Broadcast incident update via WebSocket
         try:
@@ -567,6 +586,7 @@ async def list_incidents(
         for inc in incidents:
             image_url = None
             audio_url = None
+            audio_transcript = None
 
             # Use eager-loaded media_files relationship
             if hasattr(inc, 'media_files') and inc.media_files:
@@ -575,8 +595,11 @@ async def list_incidents(
                         image_url = media.file_url
                     elif media.media_type == 'audio' and not audio_url:
                         audio_url = media.file_url
+                        # Get transcription from audio media
+                        if hasattr(media, 'transcription') and media.transcription:
+                            audio_transcript = media.transcription
 
-            result.append(IncidentResponse.from_orm(inc, image_url, audio_url))
+            result.append(IncidentResponse.from_orm(inc, image_url, audio_url, audio_transcript))
 
         return result
 
@@ -698,8 +721,24 @@ async def assign_incident(
 
         logger.info(f"Assigned incident {incident_id} to organization {org.name}")
 
+        # Get associated media for response
+        media_files = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        image_url = None
+        audio_url = None
+        audio_transcript = None
+        for media in media_files:
+            if media.media_type == 'image' and not image_url:
+                image_url = media.file_url
+            elif media.media_type == 'audio' and not audio_url:
+                audio_url = media.file_url
+                if hasattr(media, 'transcription') and media.transcription:
+                    audio_transcript = media.transcription
+
         # Prepare response
-        response = IncidentResponse.from_orm(incident)
+        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
 
         # Broadcast assignment via WebSocket
         try:
@@ -770,8 +809,24 @@ async def unassign_incident(
 
         logger.info(f"Unassigned organization from incident {incident_id}")
 
+        # Get associated media for response
+        media_files = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        image_url = None
+        audio_url = None
+        audio_transcript = None
+        for media in media_files:
+            if media.media_type == 'image' and not image_url:
+                image_url = media.file_url
+            elif media.media_type == 'audio' and not audio_url:
+                audio_url = media.file_url
+                if hasattr(media, 'transcription') and media.transcription:
+                    audio_transcript = media.transcription
+
         # Prepare response
-        response = IncidentResponse.from_orm(incident)
+        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
 
         # Broadcast unassignment via WebSocket
         try:
@@ -993,8 +1048,24 @@ async def add_chat_message(
         db.commit()
         db.refresh(incident)
 
+        # Get associated media for response
+        media_files = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        image_url = None
+        audio_url = None
+        audio_transcript = None
+        for media in media_files:
+            if media.media_type == 'image' and not image_url:
+                image_url = media.file_url
+            elif media.media_type == 'audio' and not audio_url:
+                audio_url = media.file_url
+                if hasattr(media, 'transcription') and media.transcription:
+                    audio_transcript = media.transcription
+
         # Broadcast updated incident
-        response = IncidentResponse.from_orm(incident)
+        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
         await websocket_manager.broadcast_incident(
             incident_data=response.dict(),
             event_type='incident_update'
