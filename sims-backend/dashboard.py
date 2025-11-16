@@ -311,7 +311,8 @@ async def render_map(incidents: List[Dict]):
         (function() {{
             var map = getElement({m.id}).map;
             map.options.maxZoom = 19;
-            console.log('[SIMS] Set map maxZoom to 19');
+            window.leafletMap = map;  // Store map reference globally
+            console.log('[SIMS] Set map maxZoom to 19 and stored global reference');
         }})();
     ''')
 
@@ -1587,13 +1588,12 @@ async def dashboard():
                                 console.log('[SIMS] Re-added', addedCount, 'incident markers');
 
                                 // Force map refresh after updating markers
-                                var map = getElement({m.id}).map;
-                                if (map) {{
+                                if (window.leafletMap) {{
                                     // Invalidate map size to force redraw
-                                    map.invalidateSize();
+                                    window.leafletMap.invalidateSize();
 
                                     // Force tile layer redraw
-                                    map.eachLayer(function(layer) {{
+                                    window.leafletMap.eachLayer(function(layer) {{
                                         if (layer instanceof L.TileLayer) {{
                                             layer.redraw();
                                         }}
