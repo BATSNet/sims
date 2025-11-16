@@ -74,7 +74,8 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         video_url = incident.get('videoUrl') or incident.get('video_url')
 
     return {
-        'id': incident.get('incidentId', 'UNKNOWN'),  # camelCase from API
+        'id': incident.get('incidentId', 'UNKNOWN'),  # Formatted ID for display
+        'uuid': incident.get('id', 'UNKNOWN'),  # UUID for API calls
         'timestamp': timestamp,
         'location': {
             'lat': lat,
@@ -943,6 +944,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 
             rows.append({
                 'id': incident['id'],
+                'uuid': incident['uuid'],
                 'timestamp': incident['timestamp'].split(' ')[1],  # Just time
                 'category': incident.get('category', 'Unclassified'),
                 'category_raw': incident.get('category_raw', 'unclassified'),
@@ -1044,7 +1046,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         color="teal"
                         no-caps
                         style="font-size: 12px; padding: 3px 10px"
-                        @click="$parent.$emit('generate_responder_link', props.row.id, props.row.assigned_org.id)"
+                        @click="$parent.$emit('generate_responder_link', props.row.uuid, props.row.assigned_org.id)"
                     >
                         <q-tooltip>Generate responder portal link</q-tooltip>
                     </q-btn>
