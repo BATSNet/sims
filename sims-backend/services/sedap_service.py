@@ -103,7 +103,8 @@ class SEDAPService:
             comment               # Comment (free text)
         ]
 
-        return ";".join(parts)
+        # Message MUST end with \n (0x0A) per SEDAP ICD v1.0 section III.1
+        return ";".join(parts) + "\n"
 
     @staticmethod
     def _format_text_message(
@@ -136,7 +137,8 @@ class SEDAPService:
             f'"{message}"'        # Text (quoted if contains special chars)
         ]
 
-        return ";".join(parts)
+        # Message MUST end with \n (0x0A) per SEDAP ICD v1.0 section III.1
+        return ";".join(parts) + "\n"
 
     @staticmethod
     async def forward_incident(
@@ -188,8 +190,10 @@ class SEDAPService:
                 ]
             }
 
-            # Send to SEDAP endpoint
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            logger.info(f"Sending to {endpoint_url} with payload: {payload}")
+
+            # Send to SEDAP endpoint (30 second timeout for slow responses)
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     endpoint_url,
                     json=payload,
@@ -207,14 +211,19 @@ class SEDAPService:
                     logger.error(error_msg)
                     return False, error_msg
 
-        except httpx.TimeoutException:
-            error_msg = f"Timeout connecting to {api_type} endpoint"
-            logger.error(error_msg)
+        except httpx.TimeoutException as e:
+            error_msg = f"Timeout connecting to {api_type} endpoint: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return False, error_msg
+
+        except httpx.ConnectError as e:
+            error_msg = f"Connection error to {api_type} at {endpoint_url}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             return False, error_msg
 
         except Exception as e:
-            error_msg = f"Error forwarding to {api_type}: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"Error forwarding to {api_type}: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             return False, error_msg
 
     @staticmethod
