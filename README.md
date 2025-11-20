@@ -13,6 +13,9 @@ SIMS (Situation Incident Management System) is a dual-use (military and civilian
 Traditional reporting chains are too slow for real-time situational awareness. People often don't know how to report incidents properly, and there is a critical need for a fallback system for unknown incident types. This system provides direct reporting capability for both military and civilian use cases.
 
 ## Key Features
+<div align="center">
+  <img src="resources/screenshot.png" alt="SIMS Application Screenshot" width="600"/>
+</div>
 
 - **Fast Reporting**: Submit incidents in under a few seconds
 - **Multi-Modal Input**: Support for photos, voice messages, and text
@@ -195,11 +198,35 @@ See `documents/SEDAP_DEMO_GUIDE.md` for detailed setup and testing instructions.
 
 ## Contributing
 
-This is a hackathon/pitch project with a tight development timeline. For questions or collaboration, please contact the development team.
+We welcome contributions from the community! SIMS is an open project, and we encourage you to adopt, modify, and extend it for your own use cases.
 
-## License
+### How to Contribute
 
-To be determined
+1. **Fork the repository** and create your feature branch
+2. **Make your changes** - bug fixes, new features, documentation improvements
+3. **Test thoroughly** - ensure your changes work as expected
+4. **Submit a pull request** - describe your changes and their purpose
+
+### Areas for Contribution
+
+- Feature enhancements and new capabilities
+- Bug fixes and performance improvements
+- Documentation and guides
+- Integration with additional platforms and services
+- Translations and localization
+- Security improvements
+
+### Adoption and Modification
+
+Feel free to:
+- Adapt this system for your specific use case (civilian emergency response, military operations, enterprise security, etc.)
+- Modify the classification system and routing logic
+- Integrate with your existing infrastructure
+- Build upon the architecture for related applications
+
+We're happy to see this project evolve and serve diverse needs across both civilian and military domains.
+
+For questions, collaboration opportunities, or to discuss major changes, please open an issue or contact the development team.
 
 ## Contributors
 
