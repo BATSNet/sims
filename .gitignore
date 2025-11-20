@@ -132,3 +132,4 @@ media/
 *.bak
 *.backup
 backups/*.sql
+CLAUDE.md
