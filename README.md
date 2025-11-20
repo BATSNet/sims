@@ -20,7 +20,7 @@ Traditional reporting chains are too slow for real-time situational awareness. P
 </div>
 
 
-- **Fast Reporting**: Submit incidents in under a few seconds
+- **Fast Reporting**: Submit incidents in under a few seconds via mobile apps (Android / iOS)
 - **Multi-Modal Input**: Support for photos, voice messages, and text
 - **Automatic Location Capture**: GPS coordinates and device bearing/orientation
 - **AI Processing**: Voice-to-text transcription and LLM-based summarization
