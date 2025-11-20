@@ -6,7 +6,8 @@ nicegui>=3.3.0
 psycopg2==2.9.11
 psycopg_pool==3.2.7
 sqlalchemy>=2.0.23
-geoalchemy2>=0.14.2
+geoalchemy2[shapely]>=0.14.2
+shapely>=2.0.0
 alembic>=1.12.1
 
 # Environment & Configuration

@@ -8,10 +8,9 @@ import uuid
 
 from sqlalchemy import Column, String, BigInteger, TIMESTAMP, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class MediaType(str, Enum):
@@ -26,7 +25,7 @@ class MediaORM(Base):
     __tablename__ = "media"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=False)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey('incident.id', ondelete='CASCADE'), nullable=True)
     chat_message_id = Column(BigInteger, ForeignKey('chat_message.id', ondelete='SET NULL'))
 
     # File information
@@ -36,13 +35,14 @@ class MediaORM(Base):
     file_size = Column(BigInteger)
     media_type = Column(String(20))
 
-    # Transcription for audio files
+    # Content analysis/transcription for all media types
+    # - Audio: speech-to-text transcription
+    # - Image: visual description
+    # - Video: content summary
     transcription = Column(Text)
 
     # Metadata
     meta_data = Column('metadata', JSONB, default={})
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
 
-    # Relationships
-    incident = relationship("IncidentORM", back_populates="media_files")
-    chat_message = relationship("ChatMessageORM", back_populates="media_files")
+    # Relationships configured in models/__init__.py

@@ -114,19 +114,18 @@ class ChatHistory:
             additional_kwargs: Optional metadata
         """
         try:
+            from models.chat_model import ChatMessageORM
             message = ChatMessage(role, content, additional_kwargs)
-            message_json = json.dumps(message.to_dict())
+            message_dict = message.to_dict()
 
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                INSERT INTO chat_message (session_id, message)
-                VALUES (%s, %s::jsonb)
-                """,
-                (self.session_id, message_json)
+            # Create ORM object
+            chat_message = ChatMessageORM(
+                session_id=self.session_id,
+                message=message_dict
             )
+
+            self.db.add(chat_message)
             self.db.commit()
-            cursor.close()
 
             logger.info(f"Added {role} message to session {self.session_id}")
 
@@ -143,24 +142,17 @@ class ChatHistory:
             List of message dicts with role, content, and timestamp
         """
         try:
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                SELECT message, created_at
-                FROM chat_message
-                WHERE session_id = %s
-                ORDER BY id ASC
-                """,
-                (self.session_id,)
-            )
+            from models.chat_model import ChatMessageORM
 
-            rows = cursor.fetchall()
-            cursor.close()
+            # Query messages using SQLAlchemy
+            chat_messages = self.db.query(ChatMessageORM).filter(
+                ChatMessageORM.session_id == self.session_id
+            ).order_by(ChatMessageORM.id.asc()).all()
 
             messages = []
-            for row in rows:
-                msg_data = row[0]  # JSONB data
-                timestamp = row[1]
+            for chat_msg in chat_messages:
+                msg_data = chat_msg.message  # JSONB data
+                timestamp = chat_msg.created_at
 
                 # Parse message from langchain format
                 msg = ChatMessage.from_dict(msg_data)
@@ -187,21 +179,14 @@ class ChatHistory:
             List of raw langchain-compatible message dicts
         """
         try:
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                SELECT message
-                FROM chat_message
-                WHERE session_id = %s
-                ORDER BY id ASC
-                """,
-                (self.session_id,)
-            )
+            from models.chat_model import ChatMessageORM
 
-            rows = cursor.fetchall()
-            cursor.close()
+            # Query messages using SQLAlchemy
+            chat_messages = self.db.query(ChatMessageORM).filter(
+                ChatMessageORM.session_id == self.session_id
+            ).order_by(ChatMessageORM.id.asc()).all()
 
-            return [row[0] for row in rows]
+            return [chat_msg.message for chat_msg in chat_messages]
 
         except Exception as e:
             logger.error(f"Error retrieving raw messages: {e}", exc_info=True)
@@ -210,13 +195,14 @@ class ChatHistory:
     def clear(self):
         """Clear all messages for the session."""
         try:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "DELETE FROM chat_message WHERE session_id = %s",
-                (self.session_id,)
-            )
+            from models.chat_model import ChatMessageORM
+
+            # Delete messages using SQLAlchemy
+            self.db.query(ChatMessageORM).filter(
+                ChatMessageORM.session_id == self.session_id
+            ).delete()
+
             self.db.commit()
-            cursor.close()
 
             logger.info(f"Cleared all messages for session {self.session_id}")
 
@@ -228,13 +214,13 @@ class ChatHistory:
     def count_messages(self) -> int:
         """Get the number of messages in the session."""
         try:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM chat_message WHERE session_id = %s",
-                (self.session_id,)
-            )
-            count = cursor.fetchone()[0]
-            cursor.close()
+            from models.chat_model import ChatMessageORM
+
+            # Count messages using SQLAlchemy
+            count = self.db.query(ChatMessageORM).filter(
+                ChatMessageORM.session_id == self.session_id
+            ).count()
+
             return count
 
         except Exception as e:
@@ -242,34 +228,39 @@ class ChatHistory:
             raise
 
 
-def create_chat_session(db_connection, incident_id: str, user_phone: Optional[str] = None) -> str:
+def create_chat_session(db_connection, incident_id: str, user_phone: Optional[str] = None, session_id: Optional[str] = None) -> str:
     """
     Create a new chat session for an incident.
 
     Args:
-        db_connection: psycopg2 connection
+        db_connection: SQLAlchemy Session
         incident_id: UUID of the incident
         user_phone: Optional phone number of the user
+        session_id: Optional app-generated session ID (UUID string)
 
     Returns:
         session_id (UUID string)
     """
     try:
-        cursor = db_connection.cursor()
-        cursor.execute(
-            """
-            INSERT INTO chat_session (incident_id, user_phone)
-            VALUES (%s, %s)
-            RETURNING session_id
-            """,
-            (incident_id, user_phone)
-        )
-        session_id = cursor.fetchone()[0]
-        db_connection.commit()
-        cursor.close()
+        from models.chat_model import ChatSessionORM
+        import uuid as uuid_module
 
-        logger.info(f"Created chat session {session_id} for incident {incident_id}")
-        return str(session_id)
+        # Use app-provided session_id if available
+        session_uuid = uuid_module.UUID(session_id) if session_id else uuid_module.uuid4()
+
+        # Create chat session ORM object
+        chat_session = ChatSessionORM(
+            session_id=session_uuid,
+            incident_id=incident_id,
+            user_phone=user_phone
+        )
+
+        db_connection.add(chat_session)
+        db_connection.commit()
+        db_connection.refresh(chat_session)
+
+        logger.info(f"Created chat session {chat_session.session_id} for incident {incident_id}")
+        return str(chat_session.session_id)
 
     except Exception as e:
         logger.error(f"Error creating chat session: {e}", exc_info=True)
@@ -282,23 +273,22 @@ def get_session_by_incident(db_connection, incident_id: str) -> Optional[str]:
     Get the session_id for an incident.
 
     Args:
-        db_connection: psycopg2 connection
+        db_connection: SQLAlchemy Session
         incident_id: UUID of the incident
 
     Returns:
         session_id (UUID string) or None if not found
     """
     try:
-        cursor = db_connection.cursor()
-        cursor.execute(
-            "SELECT session_id FROM chat_session WHERE incident_id = %s LIMIT 1",
-            (incident_id,)
-        )
-        row = cursor.fetchone()
-        cursor.close()
+        from models.chat_model import ChatSessionORM
 
-        if row:
-            return str(row[0])
+        # Query for chat session
+        chat_session = db_connection.query(ChatSessionORM).filter(
+            ChatSessionORM.incident_id == incident_id
+        ).first()
+
+        if chat_session:
+            return str(chat_session.session_id)
         return None
 
     except Exception as e:

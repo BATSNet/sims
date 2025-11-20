@@ -8,12 +8,11 @@ import uuid
 
 from sqlalchemy import Column, String, Float, TIMESTAMP, ARRAY, Text, BigInteger, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from geoalchemy2 import Geometry
 
-Base = declarative_base()
+from db.connection import Base
 
 
 class IncidentStatus(str, Enum):
@@ -38,7 +37,7 @@ class IncidentORM(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id = Column(String(50), unique=True, nullable=False)
-    user_phone = Column(String(13))
+    user_phone = Column(String(20))
 
     # Location data
     location = Column(Geometry('POINT', srid=4326))
@@ -66,15 +65,16 @@ class IncidentORM(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    chat_sessions = relationship("ChatSessionORM", back_populates="incident", cascade="all, delete-orphan")
-    media_files = relationship("MediaORM", back_populates="incident", cascade="all, delete-orphan")
+    # Relationships will be configured after all models are loaded
+    # See models/__init__.py for relationship configuration
 
 
 # Pydantic models for API
 
 class IncidentCreate(BaseModel):
     """Request model for creating an incident"""
+    id: Optional[str] = None  # App-generated incident UUID
+    session_id: Optional[str] = None  # Session ID for the entire chat
     title: str
     description: str
     imageUrl: Optional[str] = None
@@ -89,6 +89,8 @@ class IncidentCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_id": "sess-123e4567-e89b-12d3-a456-426614174001",
                 "title": "Suspicious Activity",
                 "description": "Unidentified vehicle near checkpoint",
                 "latitude": 52.520,
@@ -114,44 +116,59 @@ class IncidentUpdate(BaseModel):
 class IncidentResponse(BaseModel):
     """Response model for incident (aligned with Flutter expectations)"""
     id: str
-    incident_id: str
+    incident_id: str = Field(alias='incidentId', serialization_alias='incidentId')
     title: str
     description: str
     priority: str
     status: str
-    created_at: str
-    updated_at: str
+    created_at: str = Field(alias='createdAt', serialization_alias='createdAt')
+    updated_at: str = Field(alias='updatedAt', serialization_alias='updatedAt')
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     heading: Optional[float] = None
     imageUrl: Optional[str] = None
     audioUrl: Optional[str] = None
+    audioTranscript: Optional[str] = None
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
+    routed_to: Optional[int] = Field(default=None, alias='routedTo', serialization_alias='routedTo')
+    routed_to_name: Optional[str] = Field(default=None, alias='routedToName', serialization_alias='routedToName')
+    user_phone: Optional[str] = Field(default=None, alias='userPhone', serialization_alias='userPhone')
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
-                "incident_id": "INC-2847A9B2",
+                "incidentId": "INC-2847A9B2",
                 "title": "Suspicious Activity",
                 "description": "Unidentified vehicle near checkpoint",
                 "priority": "high",
                 "status": "open",
-                "created_at": "2025-11-14T14:25:33Z",
-                "updated_at": "2025-11-14T14:25:33Z",
+                "createdAt": "2025-11-14T14:25:33Z",
+                "updatedAt": "2025-11-14T14:25:33Z",
                 "latitude": 52.520,
                 "longitude": 13.405,
                 "category": "Security"
             }
         }
+    )
 
     @classmethod
-    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None):
+    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None, audio_transcript: Optional[str] = None):
         """Create response from ORM model"""
+        # Get organization name if assigned
+        routed_to_name = None
+        if incident.routed_to and hasattr(incident, 'organization'):
+            try:
+                if incident.organization:
+                    routed_to_name = incident.organization.short_name or incident.organization.name
+            except Exception:
+                pass  # Organization relationship not loaded
+
         return cls(
             id=str(incident.id),
             incident_id=incident.incident_id,
@@ -166,7 +183,11 @@ class IncidentResponse(BaseModel):
             heading=incident.heading,
             imageUrl=image_url,
             audioUrl=audio_url,
+            audioTranscript=audio_transcript,
             category=incident.category,
             tags=incident.tags or [],
-            metadata=incident.meta_data or {}
+            metadata=incident.meta_data or {},
+            routed_to=incident.routed_to,
+            routed_to_name=routed_to_name,
+            user_phone=incident.user_phone
         )

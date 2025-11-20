@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS organization (
     -- Additional contact info as JSONB for flexibility
     additional_contacts JSONB DEFAULT '[]'::jsonb,
 
+    -- External API Integration (SEDAP, KATWARN, etc.)
+    -- Actual endpoint configs are stored in config files
+    api_enabled BOOLEAN DEFAULT false,
+    api_type VARCHAR(50),
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -56,9 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_organization_location ON organization USING GIST(
 CREATE TABLE IF NOT EXISTS incident (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     incident_id VARCHAR(50) UNIQUE NOT NULL,
-    user_phone VARCHAR(13) CHECK (
-        user_phone ~ '^(\+?[0-9]{1,12})$'
-        AND LENGTH(user_phone) BETWEEN 10 AND 13
+    user_phone VARCHAR(20) CHECK (
+        user_phone ~ '^(\+?[0-9]{1,18})$'
+        AND LENGTH(user_phone) BETWEEN 10 AND 20
     ),
 
     -- Location data
@@ -104,7 +109,7 @@ CREATE TABLE IF NOT EXISTS chat_session (
     id BIGSERIAL PRIMARY KEY,
     session_id UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
     incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
-    user_phone VARCHAR(13),
+    user_phone VARCHAR(20),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -135,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_message_created_at ON chat_message(created_a
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS media (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
+    incident_id UUID REFERENCES incident(id) ON DELETE CASCADE,
     chat_message_id BIGINT REFERENCES chat_message(id) ON DELETE SET NULL,
 
     -- File information
@@ -157,6 +162,42 @@ CREATE TABLE IF NOT EXISTS media (
 CREATE INDEX IF NOT EXISTS idx_media_incident_id ON media(incident_id);
 CREATE INDEX IF NOT EXISTS idx_media_message_id ON media(chat_message_id);
 CREATE INDEX IF NOT EXISTS idx_media_type ON media(media_type);
+
+-- ============================================================================
+-- ORGANIZATION TOKENS TABLE (for responder portal access)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS organization_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    token VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    created_by VARCHAR(100),
+    last_used_at TIMESTAMPTZ,
+    active BOOLEAN DEFAULT true
+);
+
+-- Organization tokens indexes
+CREATE INDEX IF NOT EXISTS idx_org_tokens_organization_id ON organization_tokens(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_tokens_token ON organization_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_org_tokens_active ON organization_tokens(active);
+
+-- ============================================================================
+-- INCIDENT NOTES TABLE (internal responder notes, not visible to reporter)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS incident_notes (
+    id BIGSERIAL PRIMARY KEY,
+    incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    note_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+-- Incident notes indexes
+CREATE INDEX IF NOT EXISTS idx_incident_notes_incident_id ON incident_notes(incident_id);
+CREATE INDEX IF NOT EXISTS idx_incident_notes_organization_id ON incident_notes(organization_id);
+CREATE INDEX IF NOT EXISTS idx_incident_notes_created_at ON incident_notes(created_at);
 
 -- ============================================================================
 -- HELPER FUNCTIONS
