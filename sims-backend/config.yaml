@@ -1,0 +1,215 @@
+# SIMS Backend Configuration
+# This file contains all non-sensitive configuration
+# API keys should be stored in .env file
+
+# AI Provider Configuration
+ai_providers:
+  # Classification Service - Analyzes and classifies incidents
+  classification:
+    provider: anthropic  # Options: openai, anthropic, mistral, deepinfra, featherai
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.3
+    max_tokens: 1000
+    timeout: 120
+
+  # Transcription Service - Converts audio to text
+  transcription:
+    provider: deepinfra  # Options: openai, deepinfra
+    model: openai/whisper-large-v3
+    timeout: 60
+
+  # Vision/Media Analysis - Analyzes images and videos
+  vision:
+    provider: openai  # Options: openai, anthropic, featherai
+    model: gpt-4o
+    temperature: 0.7
+    max_tokens: 500
+    timeout: 60
+
+# Prompts for AI Services
+prompts:
+  # Image Analysis Prompt
+  media_analysis: |
+    You are analyzing an image from an incident report for military and civilian emergency response.
+
+    Focus on identifying and describing:
+    1. THREATS & HAZARDS: Weapons, suspicious objects, dangerous conditions, hazardous materials
+    2. PEOPLE: Number of individuals, clothing, behavior, distinguishing features
+    3. VEHICLES: Type, color, make/model if visible, license plates, military vs civilian
+    4. OBJECTS OF INTEREST: Drones, equipment, abandoned items, unusual objects
+    5. ENVIRONMENT: Location type (urban/rural/military), landmarks, weather conditions
+    6. TEXT & MARKERS: Signs, banners, identifying information, graffiti
+    7. DAMAGE OR EVIDENCE: Fire, smoke, structural damage, signs of incident
+
+    Provide a clear, factual, and detailed description in 3-5 sentences.
+    Prioritize information most relevant to emergency response and situational awareness.
+    Be specific about quantities, colors, positions, and any identifying details.
+
+  # Classification System Prompt
+  classification_system: |
+    You are an expert incident classification system for military and civilian emergency response.
+
+    Your role is to:
+    1. Analyze incident reports (text, voice transcripts, images)
+    2. Classify incidents into appropriate categories
+    3. Assign priority levels based on threat and urgency
+    4. Extract relevant tags for filtering and routing
+    5. Provide confidence scores for your classification
+
+    Guidelines:
+    - Be precise and err on the side of caution for potential threats
+    - Consider both immediate danger and long-term implications
+    - Account for military and civilian response needs
+    - Use image analysis to supplement text descriptions
+    - Pay attention to context clues (location, time, environment)
+
+  # Classification User Prompt Template
+  classification_prompt: |
+    Analyze the following incident report and classify it.{category_context}
+
+    INCIDENT REPORT:
+    {incident_text}
+
+    CLASSIFICATION GUIDELINES:
+    - PEOPLE-RELATED: Use "suspicious_person" for individuals exhibiting threatening behavior, trespassing, or unauthorized presence
+    - VEHICLE-RELATED: Use "suspicious_vehicle" for unusual vehicles, especially military-type vehicles in civilian areas
+    - CYBER-RELATED: Use "cyber_incident" for hacking, network intrusions, malware, data breaches, suspicious computer activity
+    - DRONE/UAV: Use "drone_detection" for unmanned aerial vehicles, especially near restricted areas
+    - FIRE/EXPLOSION: Distinguish between "fire_incident" and "explosion" based on nature of event
+    - MEDICAL: Use "medical_emergency" for injuries, health crises, mass casualty events
+    - INFRASTRUCTURE: Use "infrastructure_damage" for damage to utilities, buildings, transportation systems
+    - HAZMAT: Use "hazmat_incident" for chemical spills, radiation, biological hazards
+    - NATURAL DISASTERS: Floods, earthquakes, severe weather
+    - SECURITY: Use "security_breach" for unauthorized access, perimeter violations
+    - ARMED THREATS: Active shooters, armed individuals, weapon sightings
+
+    TASK:
+    Classify this incident by providing:
+    1. Category (choose the most appropriate from the list below)
+    2. Priority level (critical, high, medium, or low)
+    3. Tags (4-6 relevant keywords for filtering/search)
+    4. Confidence (0.0 to 1.0, how confident are you in this classification?)
+    5. Reasoning (2-3 sentence explanation of your classification decision)
+
+    AVAILABLE CATEGORIES:
+    {categories_list}
+
+    PRIORITY GUIDELINES:
+    - critical: Immediate threat to life, active attack, mass casualties, imminent danger
+    - high: Serious threat with potential for casualties, time-sensitive situation, armed individuals
+    - medium: Notable incident requiring response but limited immediate danger, property damage
+    - low: Minor incident, informational, routine matter
+
+    RESPONSE FORMAT (JSON only, no other text):
+    {{
+        "category": "category_name",
+        "priority": "priority_level",
+        "tags": ["tag1", "tag2", "tag3", "tag4"],
+        "confidence": 0.85,
+        "reasoning": "Brief explanation of why this classification was chosen based on the evidence."
+    }}
+
+    Respond with ONLY the JSON object, no additional text or markdown formatting.
+
+# Auto-Assignment Settings
+auto_assignment:
+  enabled: true
+  confidence_threshold: 0.7  # Minimum confidence for auto-assignment
+
+# Classification Categories
+incident_categories:
+  - drone_detection
+  - suspicious_vehicle
+  - suspicious_person
+  - fire_incident
+  - medical_emergency
+  - infrastructure_damage
+  - cyber_incident
+  - hazmat_incident
+  - natural_disaster
+  - airport_incident
+  - security_breach
+  - civil_unrest
+  - armed_threat
+  - explosion
+  - chemical_biological
+  - maritime_incident
+  - theft_burglary
+  - unclassified
+
+# Priority Levels
+priority_levels:
+  - critical
+  - high
+  - medium
+  - low
+
+# Category to Organization Type Mapping
+category_to_org_type:
+  drone_detection:
+    - military
+    - police
+    - civil_defense
+  suspicious_vehicle:
+    - police
+    - military
+    - civil_defense
+  suspicious_person:
+    - police
+    - civil_defense
+  fire_incident:
+    - fire
+    - civil_defense
+  medical_emergency:
+    - medical
+    - fire
+  infrastructure_damage:
+    - civil_defense
+    - government
+  cyber_incident:
+    - military
+    - government
+    - police
+  hazmat_incident:
+    - fire
+    - civil_defense
+    - medical
+  natural_disaster:
+    - civil_defense
+    - fire
+    - government
+  airport_incident:
+    - police
+    - fire
+    - civil_defense
+  security_breach:
+    - police
+    - military
+    - civil_defense
+  civil_unrest:
+    - police
+    - military
+    - government
+  armed_threat:
+    - police
+    - military
+  explosion:
+    - fire
+    - police
+    - military
+    - civil_defense
+  chemical_biological:
+    - fire
+    - medical
+    - military
+    - civil_defense
+  maritime_incident:
+    - police
+    - military
+    - civil_defense
+  theft_burglary:
+    - police
+  unclassified:
+    - police
+    - civil_defense
+    - government
