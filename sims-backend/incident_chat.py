@@ -1,6 +1,6 @@
 """
-SIMS Incident Chat Interface
-Chat-based incident reporting with Flutter integration and persistent history
+SIMS Incident Chat Interface - Simplified
+Simple chat interface for incident reporting via Flutter WebView
 """
 import json
 import uuid
@@ -10,115 +10,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from db.connection import get_db
-from services.chat_history import ChatHistory, create_chat_session, get_session_by_incident
+from services.chat_history import ChatHistory, create_chat_session
 from models.incident_model import IncidentORM
 from geoalchemy2.elements import WKTElement
 
 
-def send_flutter_message(message_type: str, data: dict = None) -> str:
-    """
-    Generate JavaScript to send messages to Flutter app via postMessage bridge
-
-    Args:
-        message_type: Type of message (loading, thought, upload_start, etc.)
-        data: Additional data to send with the message
-
-    Returns:
-        JavaScript code string to execute
-    """
-    message = {"type": message_type}
-
-    if message_type == 'loading':
-        message['value'] = bool(data.get('value', False))
-    else:
-        message.update(data or {})
-
-    return f"""
-        let message = {json.dumps(message)};
-
-        function sendMessage() {{
-            if (window.Flutter) {{
-                window.Flutter.postMessage(JSON.stringify(message));
-                return true;
-            }} else if (window.flutter_inappwebview) {{
-                window.flutter_inappwebview.callHandler('Flutter', JSON.stringify(message));
-                return true;
-            }} else {{
-                return false;
-            }}
-        }}
-
-        // Retry mechanism with 100 attempts every 10ms
-        if (!sendMessage()) {{
-            let attempts = 0;
-            const maxAttempts = 100;
-            const checkInterval = setInterval(() => {{
-                attempts++;
-                if (sendMessage()) {{
-                    clearInterval(checkInterval);
-                }} else if (attempts >= maxAttempts) {{
-                    console.error('Failed to find Flutter channel after ' + maxAttempts + ' attempts');
-                    clearInterval(checkInterval);
-                }}
-            }}, 10);
-        }}
-    """
-
-
-async def create_or_get_incident(db: Session, message: str, location: Optional[dict] = None, user_phone: Optional[str] = None) -> tuple:
-    """
-    Create a new incident or get existing one
-
-    Returns:
-        (incident_id, incident_uuid, session_id)
-    """
-    # Generate IDs
-    incident_uuid = uuid.uuid4()
-    incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
-
-    # Create PostGIS point if lat/lon provided
-    location_geom = None
-    if location and 'lat' in location and 'lon' in location:
-        # PostGIS uses (lon, lat) order for POINT
-        location_geom = WKTElement(
-            f'POINT({location["lon"]} {location["lat"]})',
-            srid=4326
-        )
-
-    # Create incident
-    db_incident = IncidentORM(
-        id=incident_uuid,
-        incident_id=incident_id,
-        user_phone=user_phone,
-        location=location_geom,
-        latitude=location.get('lat') if location else None,
-        longitude=location.get('lon') if location else None,
-        title=f"Incident reported at {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        description=message,
-        status='open',
-        priority='medium',
-        category='Unclassified',
-        tags=[],
-        metadata={}
-    )
-
-    db.add(db_incident)
-    db.flush()
-
-    # Create chat session
-    session_id = create_chat_session(db, str(incident_uuid), user_phone)
-
-    # Add initial message
-    chat = ChatHistory(db, session_id)
-    chat.add_message("user", message)
-
-    db.commit()
-
-    return incident_id, str(incident_uuid), session_id
-
-
-class IncidentChat:
-    """Handles incident reporting chat interface with persistent storage"""
+class SimpleIncidentChat:
+    """Simplified chat handler for incident reporting"""
 
     def __init__(self, chat_container, user_input, db: Session):
         self.chat_container = chat_container
@@ -130,84 +28,135 @@ class IncidentChat:
         self.incident_uuid = None
         self.session_id = None
 
-    async def load_chat_history(self):
-        """Load existing chat history from database"""
+    async def create_incident(self, initial_message: str):
+        """Create incident on first message"""
+        incident_uuid = uuid.uuid4()
+        incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
+
+        # Create PostGIS point if location available
+        location_geom = None
+        if self.location and 'lat' in self.location and 'lon' in self.location:
+            location_geom = WKTElement(
+                f'POINT({self.location["lon"]} {self.location["lat"]})',
+                srid=4326
+            )
+
+        # Create incident
+        db_incident = IncidentORM(
+            id=incident_uuid,
+            incident_id=incident_id,
+            user_phone=self.user_phone,
+            location=location_geom,
+            latitude=self.location.get('lat') if self.location else None,
+            longitude=self.location.get('lon') if self.location else None,
+            title=f"Incident {incident_id}",
+            description=initial_message,
+            status='open',
+            priority='medium',
+            category='Unclassified',
+            tags=[],
+            metadata={'source': 'mobile_chat'}
+        )
+
+        self.db.add(db_incident)
+        self.db.flush()
+
+        # Create chat session
+        self.session_id = create_chat_session(self.db, str(incident_uuid), self.user_phone)
+
+        # Add initial message
+        chat = ChatHistory(self.db, self.session_id)
+        chat.add_message("user", initial_message)
+
+        self.db.commit()
+
+        self.incident_id = incident_id
+        self.incident_uuid = str(incident_uuid)
+
+        return incident_id
+
+    async def add_message(self, message: str):
+        """Add user message to chat"""
         if not self.session_id:
             return
 
+        chat = ChatHistory(self.db, self.session_id)
+        chat.add_message("user", message)
+
+        # Update incident description with all messages
+        messages = chat.get_messages()
+        user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
+
+        if len(user_messages) > 1:
+            # Update incident with aggregated messages
+            incident = self.db.query(IncidentORM).filter(
+                IncidentORM.incident_id == self.incident_id
+            ).first()
+
+            if incident:
+                incident.description = '\n\n'.join(user_messages)
+                incident.updated_at = datetime.utcnow()
+                self.db.commit()
+
+    def refresh_chat_display(self):
+        """Refresh chat display from database"""
+        self.chat_container.clear()
+
+        if not self.session_id:
+            # Show welcome message
+            with self.chat_container:
+                with ui.row().classes('w-full justify-center mb-3 sm:mb-4'):
+                    with ui.card().classes('bg-gray-800 text-center p-3 sm:p-4'):
+                        ui.label('Describe what happened').classes('text-xs sm:text-sm text-gray-300')
+            return
+
+        # Load all messages from database
         try:
             chat = ChatHistory(self.db, self.session_id)
             messages = chat.get_messages()
 
-            # Display historical messages
-            for msg in messages:
-                if msg['role'] == 'user':
-                    with self.chat_container:
-                        with ui.row().classes('w-full justify-end mb-4'):
-                            with ui.card().classes('bg-[#63ABFF] text-white max-w-[80%]'):
-                                ui.label(msg['content']).classes('text-sm')
-                else:
-                    with self.chat_container:
-                        with ui.row().classes('w-full justify-start mb-4'):
-                            with ui.card().classes('bg-[rgba(26,31,46,0.6)] text-white max-w-[80%]'):
-                                ui.label(msg['content']).classes('text-sm')
+            with self.chat_container:
+                for msg in messages:
+                    role = msg.get('role', 'user')
+                    content = msg.get('content', '')
 
+                    if role == 'user':
+                        with ui.row().classes('w-full justify-end mb-2 sm:mb-3 px-2 sm:px-0'):
+                            with ui.card().classes('bg-blue-500 text-white max-w-[85%] sm:max-w-[75%] p-2 sm:p-3'):
+                                ui.label(content).classes('text-xs sm:text-sm break-words')
+                    else:
+                        with ui.row().classes('w-full justify-start mb-2 sm:mb-3 px-2 sm:px-0'):
+                            with ui.card().classes('bg-gray-700 text-white max-w-[85%] sm:max-w-[75%] p-2 sm:p-3'):
+                                ui.label(content).classes('text-xs sm:text-sm break-words')
         except Exception as e:
-            print(f"Error loading chat history: {e}")
+            print(f"Error refreshing chat: {e}")
 
     async def send_message(self):
-        """Process and send user message with database persistence"""
+        """Handle user message submission"""
         message = self.user_input.value.strip()
-
         if not message:
             return
 
-        # Clear input and show loading
         self.user_input.value = ''
-        await ui.run_javascript(send_flutter_message('loading', {'value': True}))
 
-        # Create incident if first message
+        # Create incident on first message
         if not self.incident_id:
             try:
-                self.incident_id, self.incident_uuid, self.session_id = await create_or_get_incident(
-                    self.db,
-                    message,
-                    self.location,
-                    self.user_phone
-                )
+                incident_id = await self.create_incident(message)
+                response = f"Incident {incident_id} created."
             except Exception as e:
                 print(f"Error creating incident: {e}")
-                await ui.run_javascript(send_flutter_message('loading', {'value': False}))
-                return
-
-        # Add user message to chat
-        with self.chat_container:
-            with ui.row().classes('w-full justify-end mb-4'):
-                with ui.card().classes('bg-[#63ABFF] text-white max-w-[80%]'):
-                    ui.label(message).classes('text-sm')
-
-        # If not first message, store in database
-        if self.session_id:
+                response = "Error creating incident."
+        else:
+            # Add follow-up message
             try:
-                chat = ChatHistory(self.db, self.session_id)
-                if len(chat.get_messages()) > 1:  # Not the initial message
-                    chat.add_message("user", message)
+                await self.add_message(message)
+                response = "Message saved."
             except Exception as e:
-                print(f"Error saving message: {e}")
+                print(f"Error adding message: {e}")
+                response = "Error saving message."
 
-        # Show thinking status
-        await ui.run_javascript(send_flutter_message('thought', {'value': 'Processing incident report...'}))
-
-        # Generate response (TODO: integrate with LLM)
-        response = f"Incident {self.incident_id} recorded. Please provide any additional details or media."
-
-        # Add system response to chat
-        with self.chat_container:
-            with ui.row().classes('w-full justify-start mb-4'):
-                with ui.card().classes('bg-[rgba(26,31,46,0.6)] text-white max-w-[80%]'):
-                    ui.label(response).classes('text-sm')
-
-        # Store assistant response in database
+        # Store assistant response
         if self.session_id:
             try:
                 chat = ChatHistory(self.db, self.session_id)
@@ -215,26 +164,24 @@ class IncidentChat:
             except Exception as e:
                 print(f"Error saving response: {e}")
 
-        # Clear loading and thought
-        await ui.run_javascript(send_flutter_message('loading', {'value': False}))
-        await ui.run_javascript(send_flutter_message('thought', {'value': ''}))
+        # Refresh entire chat display from database
+        self.refresh_chat_display()
 
-        # Scroll to bottom
+        # Auto-scroll
         await ui.run_javascript('''
-            const container = document.querySelector('.chat-messages');
+            const container = document.querySelector('.chat-container');
             if (container) {
                 container.scrollTop = container.scrollHeight;
             }
         ''')
 
 
-async def render_incident_chat(db: Session):
-    """Render incident chat interface"""
+async def render_simple_chat(db: Session):
+    """Render simplified chat interface"""
 
-    # Get location from request headers (sent by Flutter)
+    # Get location from storage
     location_str = app.storage.user.get('location', '')
     location = None
-
     if location_str:
         try:
             lat, lon = location_str.split(';')
@@ -242,44 +189,46 @@ async def render_incident_chat(db: Session):
         except:
             pass
 
-    # Full height container for chat
-    with ui.column().classes('w-full h-screen'):
-        # Chat messages container
-        chat_container = ui.column().classes('w-full flex-1 overflow-y-auto p-4 chat-messages')
+    # Get user phone from storage
+    user_phone = app.storage.user.get('user_phone', None)
 
-        # Welcome message
-        with chat_container:
-            with ui.row().classes('w-full justify-center mb-6'):
-                with ui.card().classes('bg-[rgba(26,31,46,0.6)] text-center'):
-                    ui.label('Incident Reporting').classes('text-lg font-bold mb-2 title-font')
-                    ui.label('Describe the incident you want to report.').classes('text-sm text-gray-400')
-                    if location:
-                        ui.label(f'Location: {location["lat"]:.4f}, {location["lon"]:.4f}').classes('text-xs text-gray-500 mt-2')
+    # Main container
+    with ui.column().classes('w-full h-screen bg-gray-900'):
+        # Header - responsive padding and text
+        with ui.row().classes('w-full p-3 sm:p-4 bg-gray-800 border-b border-gray-700 items-center'):
+            ui.label('Incident Report').classes('text-base sm:text-lg font-bold text-white')
+            if location:
+                ui.label(f'📍 {location["lat"]:.4f}, {location["lon"]:.4f}').classes('text-xs text-gray-400 ml-auto hidden sm:block')
 
-        # For Flutter app, create hidden elements
-        with ui.element('div').classes('hidden'):
-            # Create chat instance with database connection
-            user_input = ui.input(placeholder='').classes('hidden flapp-input').props('sims-chat-input')
-            incident_chat = IncidentChat(chat_container, user_input, db)
-            incident_chat.location = location
+        # Messages container - responsive padding
+        chat_container = ui.column().classes('w-full flex-1 overflow-y-auto p-2 sm:p-4 chat-container')
 
-            # Load existing chat history if incident_id provided
-            # TODO: Get incident_id from URL parameter or app.storage
-            # await incident_chat.load_chat_history()
+        # Input area - responsive layout
+        with ui.row().classes('w-full p-2 sm:p-4 bg-gray-800 border-t border-gray-700 gap-2'):
+            user_input = ui.input(placeholder='Type your message...').classes(
+                'flex-1 bg-gray-700 text-white border-gray-600 text-sm sm:text-base'
+            )
+            send_btn = ui.button('Send').classes('bg-blue-600 text-white text-xs sm:text-sm px-3 sm:px-4')
 
-            # Hidden submit button with special attribute for Flutter to target
-            ui.button(on_click=incident_chat.send_message).classes('hidden sims-submit-btn').props('sims-chat-submit')
+            # Create chat instance
+            chat_instance = SimpleIncidentChat(chat_container, user_input, db)
+            chat_instance.location = location
+            chat_instance.user_phone = user_phone
+
+            # Load initial chat state
+            chat_instance.refresh_chat_display()
+
+            # Wire up send button
+            send_btn.on_click(chat_instance.send_message)
+            user_input.on('keydown.enter', chat_instance.send_message)
 
 
 async def incident_page():
-    """Main incident chat page with database connection"""
-    # Get database session
+    """Main incident chat page"""
     db_gen = get_db()
     db = next(db_gen)
 
     try:
-        # Render chat interface
-        await render_incident_chat(db)
+        await render_simple_chat(db)
     finally:
-        # Close database session
         db.close()
