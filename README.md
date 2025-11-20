@@ -12,11 +12,14 @@ SIMS (Situation Incident Management System) is a dual-use (military and civilian
 
 Traditional reporting chains are too slow for real-time situational awareness. People often don't know how to report incidents properly, and there is a critical need for a fallback system for unknown incident types. This system provides direct reporting capability for both military and civilian use cases.
 
+## Key Features
+
+
 <div align="center">
   <img src="resources/screenshot.png" alt="SIMS Application Screenshot" width="600"/>
 </div>
 
-## Key Features
+
 - **Fast Reporting**: Submit incidents in under a few seconds
 - **Multi-Modal Input**: Support for photos, voice messages, and text
 - **Automatic Location Capture**: GPS coordinates and device bearing/orientation
