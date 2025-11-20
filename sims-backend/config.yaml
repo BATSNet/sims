@@ -6,25 +6,41 @@
 ai_providers:
   # Classification Service - Analyzes and classifies incidents
   classification:
-    provider: anthropic  # Options: openai, anthropic, mistral, deepinfra, featherai
+    provider: anthropic  # Options: openai, anthropic, mistral, deepinfra, featherai, google
     model: claude-3-5-sonnet-20241022
     temperature: 0.3
     max_tokens: 1000
     timeout: 120
+    # Model options by provider:
+    # - openai: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+    # - anthropic: claude-3-5-sonnet-20241022, claude-3-opus-20240229, claude-3-sonnet-20240229
+    # - mistral: mistral-large-latest, mistral-medium-latest
+    # - deepinfra: meta-llama/Meta-Llama-3.1-70B-Instruct, etc.
+    # - featherai: Various open-source models
+    # - google: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash
 
   # Transcription Service - Converts audio to text
   transcription:
     provider: deepinfra  # Options: openai, deepinfra
     model: openai/whisper-large-v3
     timeout: 60
+    # Model options:
+    # - openai: whisper-1
+    # - deepinfra: openai/whisper-large-v3, openai/whisper-medium, openai/whisper-small
 
   # Vision/Media Analysis - Analyzes images and videos
   vision:
-    provider: openai  # Options: openai, anthropic, featherai
-    model: gpt-4o
+    provider: deepinfra  # Options: openai, anthropic, featherai, google, deepinfra
+    model: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL
     temperature: 0.7
-    max_tokens: 500
-    timeout: 60
+    max_tokens: 1000
+    timeout: 120
+    # Model options by provider:
+    # - openai: gpt-4o, gpt-4-turbo (for images)
+    # - anthropic: claude-3-5-sonnet-20241022, claude-3-opus-20240229 (for images)
+    # - google: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash (images & video)
+    # - deepinfra: Qwen/Qwen3-VL-30B-A3B-Instruct, Qwen/Qwen3-VL-235B-A22B-Instruct (images & video)
+    # - deepinfra: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL (images & video - RECOMMENDED)
 
 # Prompts for AI Services
 prompts:
