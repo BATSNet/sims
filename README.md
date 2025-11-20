@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="resources/sims-patch.png" alt="SIMS Logo" width="200"/>
+</div>
+
 # SIMS - Situation Incident Management System
 
 ## Overview
@@ -196,3 +200,22 @@ This is a hackathon/pitch project with a tight development timeline. For questio
 ## License
 
 To be determined
+
+## Contributors
+
+This project is developed by:
+
+- **Paul Piper** - [aivory.net](https://aivory.net) | [paul-piper.de](https://paul-piper.de) | [ilscipio.com](https://ilscipio.com)
+- **Patrick Schult** - [strixx.ai](https://strixx.ai)
+- **Tim Engelmann** - [adesso.de](https://adesso.de)
+- **Oleksandr Serbin**
+
+## Special Thanks
+
+This project originated during the EDTH (European Defence Tech Hackathon) organized by the [Cyber Innovation Hub](https://cyberinnovationhub.de/).
+
+<div align="center">
+  <img src="resources/cihbw.png" alt="Cyber Innovation Hub" height="80"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="resources/edth.png" alt="EDTH" height="80"/>
+</div>
