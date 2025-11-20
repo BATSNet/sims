@@ -1,11 +1,12 @@
 """
-LLM-based incident classification service using FeatherAI.
+LLM-based incident classification service using configurable AI providers.
 """
 import json
 import logging
 from typing import Optional, Dict, Any, List
-import httpx
 from config import Config
+from services.ai_providers.factory import ProviderFactory
+from services.ai_providers.base import Message
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +42,22 @@ class ClassificationResult:
 
 
 class IncidentClassifier:
-    """Classifies incidents using LLM."""
+    """Classifies incidents using configurable LLM provider."""
 
     def __init__(self):
-        self.api_key = Config.FEATHERLESS_API_KEY
-        self.api_base = Config.FEATHERLESS_API_BASE
-        self.model = Config.DEFAULT_LLM_MODEL
-        self.temperature = Config.LLM_TEMPERATURE
-        self.max_tokens = Config.LLM_MAX_TOKENS
+        """Initialize classifier with configured provider."""
+        self.provider = ProviderFactory.create_llm_provider(
+            provider_name=Config.CLASSIFICATION_PROVIDER,
+            model=Config.CLASSIFICATION_MODEL,
+            temperature=Config.CLASSIFICATION_TEMPERATURE,
+            max_tokens=Config.CLASSIFICATION_MAX_TOKENS,
+            timeout=Config.CLASSIFICATION_TIMEOUT
+        )
 
-        if not self.api_key:
-            logger.warning("FEATHERLESS_API_KEY not configured. Classification will fail.")
+        if not self.provider:
+            logger.warning(
+                f"Failed to initialize classification provider: {Config.CLASSIFICATION_PROVIDER}"
+            )
 
     async def classify_incident(
         self,
@@ -78,9 +84,9 @@ class IncidentClassifier:
         Returns:
             ClassificationResult with category, priority, tags, and confidence
         """
-        if not self.api_key:
-            logger.error("Cannot classify: FEATHERLESS_API_KEY not configured")
-            return self._create_fallback_result("API key not configured")
+        if not self.provider:
+            logger.error("Cannot classify: provider not initialized")
+            return self._create_fallback_result("Provider not initialized")
 
         # Build combined incident text
         incident_text = self._build_incident_text(
@@ -91,15 +97,27 @@ class IncidentClassifier:
         prompt = self._create_classification_prompt(incident_text, category_hint)
 
         try:
+            # Create messages
+            messages = [
+                Message(role="system", content=Config.CLASSIFICATION_SYSTEM_PROMPT),
+                Message(role="user", content=prompt)
+            ]
+
             # Call LLM API (with vision if image provided)
-            result = await self._call_llm_api(prompt, image_url=image_url)
+            if image_url:
+                result = await self.provider.chat_completion_with_vision(
+                    messages=messages,
+                    image_url=image_url
+                )
+            else:
+                result = await self.provider.chat_completion(messages=messages)
 
             # Parse and validate result
-            classification = self._parse_llm_response(result)
+            classification = self._parse_llm_response(result.content)
 
             logger.info(
                 f"Classified incident as '{classification.category}' "
-                f"with confidence {classification.confidence:.2f}"
+                f"with confidence {classification.confidence:.2f} using {Config.CLASSIFICATION_PROVIDER}"
             )
 
             return classification
@@ -134,114 +152,33 @@ class IncidentClassifier:
         return "\n".join(parts)
 
     def _create_classification_prompt(self, incident_text: str, category_hint: Optional[str] = None) -> str:
-        """Create prompt for LLM classification."""
+        """Create prompt for LLM classification using template from config."""
         categories_list = "\n".join([f"- {cat}" for cat in Config.INCIDENT_CATEGORIES])
-        priorities_list = ", ".join(Config.PRIORITY_LEVELS)
 
-        category_context = f"\n\nNOTE: This incident was previously classified as '{category_hint}'. Consider this context but re-evaluate based on new information." if category_hint else ""
+        category_context = ""
+        if category_hint:
+            category_context = f"\n\nNOTE: This incident was previously classified as '{category_hint}'. Consider this context but re-evaluate based on new information."
 
-        return f"""You are an expert incident classification system for military and civilian emergency response.
+        # Use template from config.yaml
+        prompt = Config.CLASSIFICATION_PROMPT_TEMPLATE.format(
+            category_context=category_context,
+            incident_text=incident_text,
+            categories_list=categories_list
+        )
 
-Analyze the following incident report and classify it.{category_context}
-
-INCIDENT REPORT:
-{incident_text}
-
-CLASSIFICATION GUIDELINES:
-- If the report mentions PEOPLE (person, someone, individual, hacker, attacker, suspect): Use "suspicious_person" or related person categories
-- If the report mentions VEHICLES (car, truck, van, military vehicle): Use "suspicious_vehicle"
-- If the report mentions COMPUTERS, HACKING, CYBERSECURITY: Use "cyber_incident"
-- If the report mentions DRONES, UAVs: Use "drone_detection"
-- Pay close attention to keywords like "hacking", "laptop", "computer", "network" for cyber incidents
-
-TASK:
-Classify this incident by providing:
-1. Category (choose the most appropriate from the list below)
-2. Priority level (critical, high, medium, or low)
-3. Tags (3-5 relevant keywords for filtering/search)
-4. Confidence (0.0 to 1.0, how confident are you in this classification?)
-5. Reasoning (brief explanation of your classification)
-
-AVAILABLE CATEGORIES:
-{categories_list}
-
-PRIORITY GUIDELINES:
-- critical: Immediate threat to life, active attack, mass casualties
-- high: Serious threat, potential casualties, time-sensitive
-- medium: Notable incident, limited immediate danger
-- low: Minor incident, informational
-
-RESPONSE FORMAT (JSON only, no other text):
-{{
-    "category": "category_name",
-    "priority": "priority_level",
-    "tags": ["tag1", "tag2", "tag3"],
-    "confidence": 0.85,
-    "reasoning": "Brief explanation of classification"
-}}
-
-Respond with ONLY the JSON object, no additional text."""
-
-    async def _call_llm_api(self, prompt: str, image_url: Optional[str] = None) -> str:
-        """Call FeatherAI API with optional vision support."""
-        url = f"{self.api_base}/chat/completions"
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        # Build user message content (multimodal if image provided)
-        if image_url:
-            # Use vision model with multimodal content
-            user_content = [
-                {
-                    "type": "text",
-                    "text": f"{prompt}\n\nPlease analyze the provided image as part of the incident assessment."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url
-                    }
-                }
-            ]
-            # Use vision-capable model if available
-            model = self.model if "vision" in self.model.lower() else self.model
-        else:
-            # Text-only classification
-            user_content = prompt
-            model = self.model
-
-        payload = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an expert incident classification system. Analyze text descriptions and images to classify security incidents. Always respond with valid JSON only."
-                },
-                {
-                    "role": "user",
-                    "content": user_content
-                }
-            ],
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens
-        }
-
-        timeout = httpx.Timeout(Config.LLM_TIMEOUT, connect=10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+        return prompt
 
     def _parse_llm_response(self, response: str) -> ClassificationResult:
         """Parse LLM response into ClassificationResult."""
         try:
             # Try to extract JSON from response (in case LLM added extra text)
             response = response.strip()
+
+            # Remove markdown code blocks if present
+            if response.startswith("```"):
+                # Find the JSON content between code blocks
+                lines = response.split("\n")
+                response = "\n".join(lines[1:-1]) if len(lines) > 2 else response
 
             # Find JSON object in response
             start_idx = response.find("{")

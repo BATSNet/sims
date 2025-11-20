@@ -1,12 +1,20 @@
 """
 Configuration settings for SIMS backend application.
+Loads configuration from config.yaml and environment variables.
 """
 import os
-from typing import Optional
+import yaml
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+
+# Load YAML configuration
+config_path = Path(__file__).parent / "config.yaml"
+with open(config_path, 'r') as f:
+    _yaml_config = yaml.safe_load(f)
 
 
 class Config:
-    """Application configuration."""
+    """Application configuration loaded from YAML and environment variables."""
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/sims")
@@ -14,15 +22,49 @@ class Config:
     # Server Configuration
     PUBLIC_SERVER_URL: Optional[str] = os.getenv("PUBLIC_SERVER_URL", "http://localhost:8000")
 
-    # API Keys
-    FEATHERLESS_API_KEY: Optional[str] = os.getenv("FEATHERLESS_API_KEY")
-    DEEPINFRA_API_KEY: Optional[str] = os.getenv("DEEPINFRA_API_KEY")
+    # AI Provider Configuration
+    _ai_providers = _yaml_config.get('ai_providers', {})
+
+    # Classification Provider Config
+    CLASSIFICATION_PROVIDER: str = _ai_providers.get('classification', {}).get('provider', 'anthropic')
+    CLASSIFICATION_MODEL: str = _ai_providers.get('classification', {}).get('model', 'claude-3-5-sonnet-20241022')
+    CLASSIFICATION_TEMPERATURE: float = _ai_providers.get('classification', {}).get('temperature', 0.3)
+    CLASSIFICATION_MAX_TOKENS: int = _ai_providers.get('classification', {}).get('max_tokens', 1000)
+    CLASSIFICATION_TIMEOUT: int = _ai_providers.get('classification', {}).get('timeout', 120)
+
+    # Transcription Provider Config
+    TRANSCRIPTION_PROVIDER: str = _ai_providers.get('transcription', {}).get('provider', 'deepinfra')
+    TRANSCRIPTION_MODEL: str = _ai_providers.get('transcription', {}).get('model', 'openai/whisper-large-v3')
+    TRANSCRIPTION_TIMEOUT: int = _ai_providers.get('transcription', {}).get('timeout', 60)
+
+    # Vision Provider Config
+    VISION_PROVIDER: str = _ai_providers.get('vision', {}).get('provider', 'openai')
+    VISION_MODEL: str = _ai_providers.get('vision', {}).get('model', 'gpt-4o')
+    VISION_TEMPERATURE: float = _ai_providers.get('vision', {}).get('temperature', 0.7)
+    VISION_MAX_TOKENS: int = _ai_providers.get('vision', {}).get('max_tokens', 500)
+    VISION_TIMEOUT: int = _ai_providers.get('vision', {}).get('timeout', 60)
+
+    # Prompts
+    _prompts = _yaml_config.get('prompts', {})
+    MEDIA_ANALYSIS_PROMPT: str = _prompts.get('media_analysis', '')
+    CLASSIFICATION_SYSTEM_PROMPT: str = _prompts.get('classification_system', '')
+    CLASSIFICATION_PROMPT_TEMPLATE: str = _prompts.get('classification_prompt', '')
 
     # Auto-Assignment Settings
-    AUTO_ASSIGN_ENABLED: bool = os.getenv("AUTO_ASSIGN_ENABLED", "true").lower() == "true"
-    AUTO_ASSIGN_CONFIDENCE_THRESHOLD: float = float(os.getenv("AUTO_ASSIGN_CONFIDENCE_THRESHOLD", "0.7"))
+    _auto_assignment = _yaml_config.get('auto_assignment', {})
+    AUTO_ASSIGN_ENABLED: bool = _auto_assignment.get('enabled', True)
+    AUTO_ASSIGN_CONFIDENCE_THRESHOLD: float = _auto_assignment.get('confidence_threshold', 0.7)
 
-    # External API Integration Settings
+    # Classification Categories
+    INCIDENT_CATEGORIES: List[str] = _yaml_config.get('incident_categories', [])
+
+    # Priority Levels
+    PRIORITY_LEVELS: List[str] = _yaml_config.get('priority_levels', [])
+
+    # Category to Organization Type Mapping
+    CATEGORY_TO_ORG_TYPE: Dict[str, List[str]] = _yaml_config.get('category_to_org_type', {})
+
+    # External API Integration Settings (kept from original config)
     API_ENDPOINTS = {
         "SEDAP": {
             "url": os.getenv("SEDAP_API_URL", "http://10.3.1.127:80/SEDAPEXPRESS"),
@@ -36,70 +78,52 @@ class Config:
         }
     }
 
-    # LLM Settings
+    # Legacy settings for backward compatibility
+    FEATHERLESS_API_KEY: Optional[str] = os.getenv("FEATHERLESS_API_KEY")
+    DEEPINFRA_API_KEY: Optional[str] = os.getenv("DEEPINFRA_API_KEY")
     FEATHERLESS_API_BASE: str = "https://api.featherless.ai/v1"
-    DEFAULT_LLM_MODEL: str = os.getenv("LLM_MODEL", "meta-llama/Meta-Llama-3.1-8B-Instruct")
-    VISION_MODEL: str = os.getenv("VISION_MODEL", "llava-hf/llava-1.5-7b-hf")
-    LLM_TEMPERATURE: float = 0.3  # Lower temperature for more deterministic classification
-    LLM_MAX_TOKENS: int = 500
-    LLM_TIMEOUT: int = 120  # Timeout in seconds
-
-    # Classification Categories
-    INCIDENT_CATEGORIES = [
-        "drone_detection",
-        "suspicious_vehicle",
-        "suspicious_person",
-        "fire_incident",
-        "medical_emergency",
-        "infrastructure_damage",
-        "cyber_incident",
-        "hazmat_incident",
-        "natural_disaster",
-        "airport_incident",
-        "security_breach",
-        "civil_unrest",
-        "armed_threat",
-        "explosion",
-        "chemical_biological",
-        "maritime_incident",
-        "theft_burglary",
-        "unclassified"
-    ]
-
-    # Priority Levels
-    PRIORITY_LEVELS = ["critical", "high", "medium", "low"]
-
-    # Category to Organization Type Mapping
-    # Maps incident categories to preferred organization types
-    CATEGORY_TO_ORG_TYPE = {
-        "drone_detection": ["military", "police", "civil_defense"],
-        "suspicious_vehicle": ["police", "military", "civil_defense"],
-        "suspicious_person": ["police", "civil_defense"],
-        "fire_incident": ["fire", "civil_defense"],
-        "medical_emergency": ["medical", "fire"],
-        "infrastructure_damage": ["civil_defense", "government"],
-        "cyber_incident": ["military", "government", "police"],
-        "hazmat_incident": ["fire", "civil_defense", "medical"],
-        "natural_disaster": ["civil_defense", "fire", "government"],
-        "airport_incident": ["police", "fire", "civil_defense"],
-        "security_breach": ["police", "military", "civil_defense"],
-        "civil_unrest": ["police", "military", "government"],
-        "armed_threat": ["police", "military"],
-        "explosion": ["fire", "police", "military", "civil_defense"],
-        "chemical_biological": ["fire", "medical", "military", "civil_defense"],
-        "maritime_incident": ["police", "military", "civil_defense"],
-        "theft_burglary": ["police"],
-        "unclassified": ["police", "civil_defense", "government"]
-    }
+    DEFAULT_LLM_MODEL: str = CLASSIFICATION_MODEL
+    LLM_TEMPERATURE: float = CLASSIFICATION_TEMPERATURE
+    LLM_MAX_TOKENS: int = CLASSIFICATION_MAX_TOKENS
+    LLM_TIMEOUT: int = CLASSIFICATION_TIMEOUT
+    VISION_MODEL: str = VISION_MODEL
 
     @classmethod
     def validate(cls):
         """Validate required configuration."""
-        if not cls.FEATHERLESS_API_KEY:
-            print("Warning: FEATHERLESS_API_KEY not set. LLM classification will not work.")
-
+        # Validate confidence threshold
         if not (0.0 <= cls.AUTO_ASSIGN_CONFIDENCE_THRESHOLD <= 1.0):
             raise ValueError("AUTO_ASSIGN_CONFIDENCE_THRESHOLD must be between 0.0 and 1.0")
+
+        # Check for required API keys based on provider configuration
+        provider_warnings = []
+
+        if cls.CLASSIFICATION_PROVIDER == 'openai' and not os.getenv('OPENAI_API_KEY'):
+            provider_warnings.append("OPENAI_API_KEY not set (required for classification)")
+        elif cls.CLASSIFICATION_PROVIDER == 'anthropic' and not os.getenv('ANTHROPIC_API_KEY'):
+            provider_warnings.append("ANTHROPIC_API_KEY not set (required for classification)")
+        elif cls.CLASSIFICATION_PROVIDER == 'mistral' and not os.getenv('MISTRAL_API_KEY'):
+            provider_warnings.append("MISTRAL_API_KEY not set (required for classification)")
+        elif cls.CLASSIFICATION_PROVIDER == 'deepinfra' and not os.getenv('DEEPINFRA_API_KEY'):
+            provider_warnings.append("DEEPINFRA_API_KEY not set (required for classification)")
+        elif cls.CLASSIFICATION_PROVIDER == 'featherai' and not os.getenv('FEATHERLESS_API_KEY'):
+            provider_warnings.append("FEATHERLESS_API_KEY not set (required for classification)")
+
+        if cls.TRANSCRIPTION_PROVIDER == 'openai' and not os.getenv('OPENAI_API_KEY'):
+            provider_warnings.append("OPENAI_API_KEY not set (required for transcription)")
+        elif cls.TRANSCRIPTION_PROVIDER == 'deepinfra' and not os.getenv('DEEPINFRA_API_KEY'):
+            provider_warnings.append("DEEPINFRA_API_KEY not set (required for transcription)")
+
+        if cls.VISION_PROVIDER == 'openai' and not os.getenv('OPENAI_API_KEY'):
+            provider_warnings.append("OPENAI_API_KEY not set (required for vision)")
+        elif cls.VISION_PROVIDER == 'anthropic' and not os.getenv('ANTHROPIC_API_KEY'):
+            provider_warnings.append("ANTHROPIC_API_KEY not set (required for vision)")
+        elif cls.VISION_PROVIDER == 'featherai' and not os.getenv('FEATHERLESS_API_KEY'):
+            provider_warnings.append("FEATHERLESS_API_KEY not set (required for vision)")
+
+        if provider_warnings:
+            for warning in provider_warnings:
+                print(f"Warning: {warning}")
 
         return True
 
