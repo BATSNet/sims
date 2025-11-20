@@ -128,36 +128,62 @@ async def create_incident(
         audio_media_to_analyze = None
 
         if incident_data.imageUrl:
-            media = MediaORM(
-                incident_id=incident_uuid,
-                file_path=incident_data.imageUrl,
-                file_url=incident_data.imageUrl,
-                mime_type='image/jpeg',
-                media_type='image',
-                metadata={}
-            )
-            db.add(media)
-            db.flush()  # Flush to get the media ID
-            image_url = incident_data.imageUrl
+            # Check if media already exists with this URL
+            existing_media = db.query(MediaORM).filter(
+                MediaORM.file_url == incident_data.imageUrl
+            ).first()
 
-            # Store media reference for later analysis
-            image_media_to_analyze = media
+            if existing_media:
+                # Link existing media to this incident
+                existing_media.incident_id = incident_uuid
+                db.flush()
+                image_url = existing_media.file_url
+                image_media_to_analyze = existing_media
+                logger.info(f"Linked existing image media {existing_media.id} to incident {incident_id}")
+            else:
+                # Create new media record (for backward compatibility with old URLs)
+                media = MediaORM(
+                    incident_id=incident_uuid,
+                    file_path=incident_data.imageUrl,
+                    file_url=incident_data.imageUrl,
+                    mime_type='image/jpeg',
+                    media_type='image',
+                    metadata={}
+                )
+                db.add(media)
+                db.flush()
+                image_url = incident_data.imageUrl
+                image_media_to_analyze = media
+                logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.imageUrl}")
 
         if incident_data.audioUrl:
-            media = MediaORM(
-                incident_id=incident_uuid,
-                file_path=incident_data.audioUrl,
-                file_url=incident_data.audioUrl,
-                mime_type='audio/m4a',
-                media_type='audio',
-                metadata={}
-            )
-            db.add(media)
-            db.flush()  # Flush to get the media ID
-            audio_url = incident_data.audioUrl
+            # Check if media already exists with this URL
+            existing_media = db.query(MediaORM).filter(
+                MediaORM.file_url == incident_data.audioUrl
+            ).first()
 
-            # Store media reference for later analysis
-            audio_media_to_analyze = media
+            if existing_media:
+                # Link existing media to this incident
+                existing_media.incident_id = incident_uuid
+                db.flush()
+                audio_url = existing_media.file_url
+                audio_media_to_analyze = existing_media
+                logger.info(f"Linked existing audio media {existing_media.id} to incident {incident_id}")
+            else:
+                # Create new media record (for backward compatibility with old URLs)
+                media = MediaORM(
+                    incident_id=incident_uuid,
+                    file_path=incident_data.audioUrl,
+                    file_url=incident_data.audioUrl,
+                    mime_type='audio/m4a',
+                    media_type='audio',
+                    metadata={}
+                )
+                db.add(media)
+                db.flush()
+                audio_url = incident_data.audioUrl
+                audio_media_to_analyze = media
+                logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.audioUrl}")
 
         # Auto-classify incident using LLM
         try:
