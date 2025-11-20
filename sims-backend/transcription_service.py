@@ -1,23 +1,31 @@
 """
-Audio Transcription Service using DeepInfra API
+Audio Transcription Service using configurable AI providers
 """
 import os
 import logging
-import httpx
 from typing import Optional
 from pathlib import Path
 from config import Config
+from services.ai_providers.factory import ProviderFactory
 
 logger = logging.getLogger(__name__)
 
 
 class TranscriptionService:
-    """Service for transcribing audio files using DeepInfra API"""
+    """Service for transcribing audio files using configured AI provider"""
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('DEEPINFRA_API_KEY')
-        self.base_url = 'https://api.deepinfra.com/v1/inference'
-        self.model = 'openai/whisper-large-v3'
+    def __init__(self):
+        """Initialize transcription service with configured provider."""
+        self.provider = ProviderFactory.create_transcription_provider(
+            provider_name=Config.TRANSCRIPTION_PROVIDER,
+            model=Config.TRANSCRIPTION_MODEL,
+            timeout=Config.TRANSCRIPTION_TIMEOUT
+        )
+
+        if not self.provider:
+            logger.error(
+                f"Failed to initialize transcription provider: {Config.TRANSCRIPTION_PROVIDER}"
+            )
 
     def _get_public_url(self, audio_file_path: str) -> Optional[str]:
         """
@@ -50,8 +58,8 @@ class TranscriptionService:
 
     async def transcribe_audio(self, audio_file_path: str) -> Optional[dict]:
         """
-        Transcribe an audio file using DeepInfra's Whisper API.
-        Tries URL-based transcription first (if PUBLIC_SERVER_URL is configured),
+        Transcribe an audio file using the configured AI provider.
+        Tries URL-based transcription first (if PUBLIC_SERVER_URL is configured and provider supports it),
         falls back to file upload if URL method fails.
 
         Args:
@@ -61,63 +69,30 @@ class TranscriptionService:
             Dictionary containing transcription result with 'text' field,
             or None if transcription failed
         """
-        if not self.api_key:
-            logger.error('DEEPINFRA_API_KEY not set')
+        if not self.provider:
+            logger.error('Transcription provider not initialized')
             return None
 
         try:
-            url = f'{self.base_url}/{self.model}'
-            headers = {
-                'Authorization': f'Bearer {self.api_key}',
-            }
-
+            # Try URL-based transcription if available
             public_url = self._get_public_url(audio_file_path)
 
-            if public_url:
+            if public_url and hasattr(self.provider, 'transcribe_audio_url'):
                 logger.info(f'Attempting URL-based transcription: {public_url}')
                 try:
-                    async with httpx.AsyncClient(timeout=60.0) as client:
-                        response = await client.post(
-                            url,
-                            headers=headers,
-                            json={'audio_url': public_url}
-                        )
-
-                        if response.status_code == 200:
-                            result = response.json()
-                            logger.info(f'URL-based transcription successful: {result}')
-                            return result
-                        else:
-                            logger.warning(
-                                f'URL-based transcription failed: {response.status_code} - {response.text}. '
-                                f'Falling back to file upload.'
-                            )
+                    result = await self.provider.transcribe_audio_url(public_url)
+                    logger.info(f'URL-based transcription successful: {result.text[:100]}...')
+                    return {'text': result.text, 'model': result.model}
                 except Exception as e:
-                    logger.warning(f'URL-based transcription error: {e}. Falling back to file upload.')
-
-            logger.info(f'Using file upload method for: {audio_file_path}')
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                with open(audio_file_path, 'rb') as audio_file:
-                    files = {
-                        'audio': audio_file,
-                    }
-
-                    logger.info(f'Transcribing audio file via upload: {audio_file_path}')
-                    response = await client.post(
-                        url,
-                        headers=headers,
-                        files=files,
+                    logger.warning(
+                        f'URL-based transcription failed: {e}. Falling back to file upload.'
                     )
 
-                    if response.status_code == 200:
-                        result = response.json()
-                        logger.info(f'File upload transcription successful: {result}')
-                        return result
-                    else:
-                        logger.error(
-                            f'File upload transcription failed: {response.status_code} - {response.text}'
-                        )
-                        return None
+            # Fall back to file upload
+            logger.info(f'Using file upload method for: {audio_file_path}')
+            result = await self.provider.transcribe_audio(audio_file_path)
+            logger.info(f'File upload transcription successful: {result.text[:100]}...')
+            return {'text': result.text, 'model': result.model}
 
         except Exception as e:
             logger.error(f'Error transcribing audio: {e}', exc_info=True)

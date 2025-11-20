@@ -1,10 +1,11 @@
 """
-Media Analysis Service - Analyze images and videos using vision models
+Media Analysis Service - Analyze images and videos using configurable vision models
 """
 import logging
-import httpx
 from typing import Optional
 from config import Config
+from services.ai_providers.factory import ProviderFactory
+from services.ai_providers.base import Message
 
 logger = logging.getLogger(__name__)
 
@@ -13,14 +14,19 @@ class MediaAnalysisService:
     """Service for analyzing images and videos to extract descriptions"""
 
     def __init__(self):
-        self.api_key = Config.FEATHERLESS_API_KEY
-        self.api_base = Config.FEATHERLESS_API_BASE
-        self.model = Config.VISION_MODEL
-        self.temperature = 0.7
-        self.max_tokens = 500
+        """Initialize media analysis service with configured provider."""
+        self.provider = ProviderFactory.create_llm_provider(
+            provider_name=Config.VISION_PROVIDER,
+            model=Config.VISION_MODEL,
+            temperature=Config.VISION_TEMPERATURE,
+            max_tokens=Config.VISION_MAX_TOKENS,
+            timeout=Config.VISION_TIMEOUT
+        )
 
-        if not self.api_key:
-            logger.warning("FEATHERLESS_API_KEY not configured. Media analysis will fail.")
+        if not self.provider:
+            logger.warning(
+                f"Failed to initialize vision provider: {Config.VISION_PROVIDER}"
+            )
 
     async def analyze_image(self, image_url: str) -> Optional[str]:
         """
@@ -32,60 +38,32 @@ class MediaAnalysisService:
         Returns:
             Description of the image content, or None if analysis failed
         """
-        if not self.api_key:
-            logger.error("Cannot analyze image: FEATHERLESS_API_KEY not configured")
+        if not self.provider:
+            logger.error("Cannot analyze image: provider not initialized")
             return None
 
         try:
-            url = f"{self.api_base}/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-
-            prompt = "Describe what this picture shows in 2-3 sentences."
-
-            # Build multimodal content with image
-            user_content = [
-                {
-                    "type": "text",
-                    "text": prompt
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url
-                    }
-                }
+            # Create messages with the improved prompt from config
+            messages = [
+                Message(
+                    role="system",
+                    content="You are an expert image analyst for emergency response and incident reporting. Provide clear, factual, and detailed descriptions focused on incident-relevant information."
+                ),
+                Message(
+                    role="user",
+                    content=Config.MEDIA_ANALYSIS_PROMPT
+                )
             ]
 
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful image analyst. Provide clear, concise descriptions."
-                    },
-                    {
-                        "role": "user",
-                        "content": user_content
-                    }
-                ],
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens
-            }
+            # Call vision API
+            result = await self.provider.chat_completion_with_vision(
+                messages=messages,
+                image_url=image_url
+            )
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-
-                if response.status_code == 200:
-                    result = response.json()
-                    description = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                    logger.info(f"Successfully analyzed image: {description[:100]}...")
-                    return description
-                else:
-                    logger.error(f"Image analysis failed: {response.status_code} - {response.text}")
-                    return None
+            description = result.content
+            logger.info(f"Successfully analyzed image: {description[:100]}...")
+            return description
 
         except Exception as e:
             logger.error(f"Error analyzing image: {e}", exc_info=True)
