@@ -924,7 +924,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             {'name': 'timestamp', 'label': 'Time', 'field': 'timestamp', 'align': 'left', 'sortable': True},
             {'name': 'category', 'label': 'Category', 'field': 'category', 'align': 'left', 'sortable': True},
             {'name': 'location', 'label': 'Location', 'field': 'location', 'align': 'left', 'sortable': True},
-            {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left', 'sortable': True},
+            {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left', 'sortable': True, 'style': 'max-width: 300px; white-space: normal; word-wrap: break-word;'},
             {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left', 'sortable': True},
             {'name': 'assigned_to', 'label': 'Assigned To', 'field': 'assigned_to', 'align': 'left', 'sortable': False},
             {'name': 'responder_url', 'label': 'Responder Link', 'field': 'responder_url', 'align': 'center'},
