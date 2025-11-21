@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS incident (
 
     -- Status and priority (aligned with Flutter)
     status VARCHAR(20) NOT NULL DEFAULT 'open'
-        CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+        CHECK (status IN ('processing', 'open', 'in_progress', 'resolved', 'closed')),
     priority VARCHAR(20) NOT NULL DEFAULT 'medium'
         CHECK (priority IN ('critical', 'high', 'medium', 'low')),
     category VARCHAR(50) NOT NULL DEFAULT 'Unclassified',
