@@ -70,10 +70,62 @@ class LocationService {
         return null;
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
+      debugPrint('Attempting to get location with high accuracy...');
+
+      Position? position;
+
+      // Try with high accuracy first
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15),
+        );
+        debugPrint('Got location with high accuracy: ${position.latitude}, ${position.longitude}');
+      } catch (e) {
+        debugPrint('High accuracy location failed: $e');
+
+        // Fallback to medium accuracy for older devices
+        try {
+          debugPrint('Attempting location with medium accuracy...');
+          position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 20),
+          );
+          debugPrint('Got location with medium accuracy: ${position.latitude}, ${position.longitude}');
+        } catch (e2) {
+          debugPrint('Medium accuracy location failed: $e2');
+
+          // Last resort: try low accuracy
+          try {
+            debugPrint('Attempting location with low accuracy...');
+            position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.low,
+              timeLimit: const Duration(seconds: 30),
+            );
+            debugPrint('Got location with low accuracy: ${position.latitude}, ${position.longitude}');
+          } catch (e3) {
+            debugPrint('All location accuracy levels failed: $e3');
+
+            // Final fallback: try to get last known position
+            try {
+              debugPrint('Attempting to get last known position...');
+              position = await Geolocator.getLastKnownPosition();
+              if (position != null) {
+                debugPrint('Using last known position: ${position.latitude}, ${position.longitude}');
+              } else {
+                debugPrint('No last known position available');
+              }
+            } catch (e4) {
+              debugPrint('Failed to get last known position: $e4');
+            }
+          }
+        }
+      }
+
+      if (position == null) {
+        debugPrint('Unable to obtain any location data');
+        return null;
+      }
 
       return LocationData(
         latitude: position.latitude,

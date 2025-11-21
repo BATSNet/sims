@@ -222,6 +222,14 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       debugPrint('Creating new incident with app-generated ID: $_currentIncidentUuid');
 
       final location = await _locationService.getCurrentLocation();
+
+      if (location == null) {
+        debugPrint('WARNING: Location data unavailable - incident will be created without coordinates');
+        debugPrint('This may be due to GPS issues on older devices or poor signal');
+      } else {
+        debugPrint('Location obtained: ${location.latitude}, ${location.longitude} (accuracy: ${location.accuracy}m)');
+      }
+
       final userRepo = await UserRepository.getInstance();
       final userPhone = userRepo.getPhoneNumberSync();
 
