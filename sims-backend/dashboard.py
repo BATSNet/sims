@@ -1004,6 +1004,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 </q-td>
                 <q-td key="description" :props="props">
                     <div class="flex items-center gap-2">
+                        <q-spinner-dots v-if="props.row.description && props.row.description.toLowerCase().includes('processing')" color="white" size="20px" />
                         <span class="cell-description">{{ props.row.description }}</span>
                         <div class="flex gap-1" v-if="props.row.imageUrl || props.row.audioUrl || props.row.videoUrl">
                             <a v-if="props.row.imageUrl" :href="props.row.imageUrl" target="_blank" class="text-blue-400 hover:text-blue-300" title="View Image">
