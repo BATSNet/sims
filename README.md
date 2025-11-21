@@ -236,7 +236,7 @@ For questions, collaboration opportunities, or to discuss major changes, please 
 This project is developed by:
 
 - **Paul Piper** - [aivory.net](https://aivory.net) | [paul-piper.de](https://paul-piper.de) | [ilscipio.com](https://ilscipio.com)
-- **Patrick Schult** - [strixx.ai](https://strixx.ai)
+- **Patrick Schult** - [reporter.ai](https://reporter.ai)
 - **Tim Engelmann** - [adesso.de](https://adesso.de)
 - **Oleksandr Serbin**
 
