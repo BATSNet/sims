@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 from nicegui import app, ui
 from fastapi import UploadFile, File, Form, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -69,14 +70,15 @@ import responder_portal
 responder_portal.init_responder_portal()
 
 
-# Startup and shutdown events
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on application startup"""
+# Lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan(app):
+    """Lifespan context manager for application startup and shutdown"""
     logger.info("=" * 80)
-    logger.info("STARTUP EVENT TRIGGERED")
+    logger.info("LIFESPAN STARTUP TRIGGERED")
     logger.info("=" * 80)
 
+    # Startup
     try:
         logger.info("Attempting to start summarization service...")
         service = await start_summarization_service()
@@ -138,16 +140,25 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to generate test token: {e}", exc_info=True)
 
+    logger.info("Startup complete, application running")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup services on application shutdown"""
+    # Yield control to the application
+    yield
+
+    # Shutdown
+    logger.info("=" * 80)
+    logger.info("LIFESPAN SHUTDOWN TRIGGERED")
+    logger.info("=" * 80)
     try:
         logger.info("Stopping summarization service...")
         await stop_summarization_service()
         logger.info("Summarization service stopped successfully")
     except Exception as e:
         logger.error(f"Error stopping summarization service: {e}", exc_info=True)
+
+
+# Register lifespan with the FastAPI app
+app.native.router.lifespan_context = lifespan
 
 
 @app.websocket("/ws/incidents")
