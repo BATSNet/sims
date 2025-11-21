@@ -677,9 +677,9 @@ async def list_incidents(
 
             # Get chat messages and build description from them
             try:
-                chat_session = get_session_by_incident(db, inc.id)
-                if chat_session:
-                    chat = ChatHistory(db, str(chat_session.session_id))
+                session_id = get_session_by_incident(db, inc.id)
+                if session_id:
+                    chat = ChatHistory(db, session_id)
                     messages = chat.get_messages()
                     if messages:
                         # Build description from user messages only
