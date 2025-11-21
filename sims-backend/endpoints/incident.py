@@ -648,7 +648,7 @@ async def list_incidents(
             IncidentORM.created_at.desc()
         ).offset(skip).limit(limit).all()
 
-        # Build response with media URLs
+        # Build response with media URLs and chat messages
         result = []
         for inc in incidents:
             image_url = None
@@ -672,6 +672,20 @@ async def list_incidents(
                         # Get transcription from audio media
                         if hasattr(media, 'transcription') and media.transcription:
                             audio_transcript = media.transcription
+
+            # Get chat messages and build description from them
+            try:
+                chat_session = get_session_by_incident(inc.id, db)
+                if chat_session:
+                    chat = ChatHistory(db, str(chat_session.session_id))
+                    messages = chat.get_messages()
+                    if messages:
+                        # Build description from user messages only
+                        user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
+                        if user_messages:
+                            inc.description = '\n'.join(user_messages)
+            except Exception as e:
+                logger.error(f"Failed to fetch chat messages for incident {inc.incident_id}: {e}")
 
             result.append(IncidentResponse.from_orm(inc, image_url, audio_url, audio_transcript))
 

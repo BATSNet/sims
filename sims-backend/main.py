@@ -345,6 +345,41 @@ async def upload_image(
         db.commit()
         db.refresh(media)
 
+        # Broadcast media upload via WebSocket if linked to incident
+        if parsed_incident_id:
+            try:
+                from websocket import websocket_manager
+                from models.incident_model import IncidentORM, IncidentResponse
+
+                incident = db.query(IncidentORM).filter(
+                    IncidentORM.id == parsed_incident_id
+                ).first()
+
+                if incident:
+                    # Get all media for this incident
+                    media_files = db.query(MediaORM).filter(
+                        MediaORM.incident_id == parsed_incident_id
+                    ).all()
+
+                    image_url = None
+                    audio_url = None
+                    audio_transcript = None
+                    for m in media_files:
+                        if m.media_type == 'image' and not image_url:
+                            image_url = m.file_url
+                        elif m.media_type == 'audio' and not audio_url:
+                            audio_url = m.file_url
+                            if hasattr(m, 'transcription') and m.transcription:
+                                audio_transcript = m.transcription
+
+                    response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+                    await websocket_manager.broadcast_incident(
+                        incident_data=response.dict(),
+                        event_type='media_upload'
+                    )
+            except Exception as ws_error:
+                logger.error(f"Failed to broadcast media upload: {ws_error}")
+
         return JSONResponse(
             content={
                 'success': True,
@@ -435,6 +470,41 @@ async def upload_audio(
         except Exception as e:
             logger.error(f'Failed to queue transcription: {e}')
             transcription_status = 'failed'
+
+        # Broadcast media upload via WebSocket if linked to incident
+        if parsed_incident_id:
+            try:
+                from websocket import websocket_manager
+                from models.incident_model import IncidentORM, IncidentResponse
+
+                incident = db.query(IncidentORM).filter(
+                    IncidentORM.id == parsed_incident_id
+                ).first()
+
+                if incident:
+                    # Get all media for this incident
+                    media_files = db.query(MediaORM).filter(
+                        MediaORM.incident_id == parsed_incident_id
+                    ).all()
+
+                    image_url = None
+                    audio_url = None
+                    audio_transcript = None
+                    for m in media_files:
+                        if m.media_type == 'image' and not image_url:
+                            image_url = m.file_url
+                        elif m.media_type == 'audio' and not audio_url:
+                            audio_url = m.file_url
+                            if hasattr(m, 'transcription') and m.transcription:
+                                audio_transcript = m.transcription
+
+                    response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+                    await websocket_manager.broadcast_incident(
+                        incident_data=response.dict(),
+                        event_type='media_upload'
+                    )
+            except Exception as ws_error:
+                logger.error(f"Failed to broadcast media upload: {ws_error}")
 
         return JSONResponse(
             content={
