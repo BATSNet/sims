@@ -73,12 +73,19 @@ responder_portal.init_responder_portal()
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on application startup"""
+    logger.info("=" * 80)
+    logger.info("STARTUP EVENT TRIGGERED")
+    logger.info("=" * 80)
+
     try:
-        logger.info("Starting summarization service...")
-        await start_summarization_service()
+        logger.info("Attempting to start summarization service...")
+        service = await start_summarization_service()
+        logger.info(f"Summarization service object created: {service}")
         logger.info("Summarization service started successfully")
     except Exception as e:
         logger.error(f"Failed to start summarization service: {e}", exc_info=True)
+        logger.error(f"Exception type: {type(e)}")
+        logger.error(f"Exception args: {e.args}")
 
     # Generate test responder token for development
     try:

@@ -63,12 +63,15 @@ class BatchProcessor:
 
     async def start(self):
         """Start the background processing loop."""
+        logger.info("BatchProcessor.start() called")
         if self.is_running:
             logger.warning("Batch processor already running")
             return
 
+        logger.info("Setting is_running to True and creating background task")
         self.is_running = True
         self.background_task = asyncio.create_task(self._process_loop())
+        logger.info(f"Background task created: {self.background_task}")
         logger.info("Batch processor started")
 
     async def stop(self):
@@ -153,8 +156,14 @@ class BatchProcessor:
 
     async def _process_loop(self):
         """Background loop that processes batches at regular intervals."""
+        logger.info(f"Process loop started. is_running={self.is_running}, batch_delay={self.batch_delay}")
+        loop_count = 0
         while self.is_running:
             try:
+                loop_count += 1
+                if loop_count % 10 == 1:  # Log every 10th iteration to avoid spam
+                    logger.info(f"Process loop iteration {loop_count}, transcription_queue={len(self.transcription_queue)}, summarization_queue={len(self.summarization_queue)}")
+
                 await asyncio.sleep(self.batch_delay)
 
                 # Process both queues
@@ -162,9 +171,12 @@ class BatchProcessor:
                 await self._process_summarization_batch()
 
             except asyncio.CancelledError:
+                logger.info("Process loop cancelled")
                 break
             except Exception as e:
                 logger.error(f"Error in batch processing loop: {e}", exc_info=True)
+
+        logger.info("Process loop exited")
 
     async def _process_transcription_batch(self):
         """Process queued transcription tasks in batch."""
@@ -657,7 +669,10 @@ class ScheduledSummarizationService:
 
     async def start(self):
         """Start the service."""
+        logger.info("ScheduledSummarizationService.start() called")
+        logger.info(f"batch_processor.is_running before start: {self.batch_processor.is_running}")
         await self.batch_processor.start()
+        logger.info(f"batch_processor.is_running after start: {self.batch_processor.is_running}")
         logger.info("Scheduled summarization service started")
 
     async def stop(self):
@@ -795,8 +810,12 @@ def get_summarization_service() -> ScheduledSummarizationService:
 
 async def start_summarization_service():
     """Start the global summarization service."""
+    logger.info("start_summarization_service() called")
     service = get_summarization_service()
+    logger.info(f"Got summarization service: {service}")
+    logger.info(f"Service batch_processor: {service.batch_processor}")
     await service.start()
+    logger.info("Service.start() completed")
     return service
 
 
