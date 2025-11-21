@@ -70,48 +70,50 @@ class LocationService {
         return null;
       }
 
-      debugPrint('Attempting to get location with high accuracy...');
+      debugPrint('Attempting to get location...');
 
       Position? position;
 
-      // Try with high accuracy first
+      // Try with high accuracy FIRST (GPS - most accurate for incident reporting)
       try {
+        debugPrint('Attempting location with high accuracy (GPS)...');
         position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 15),
         );
-        debugPrint('Got location with high accuracy: ${position.latitude}, ${position.longitude}');
+        debugPrint('Got location with high accuracy: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
       } catch (e) {
         debugPrint('High accuracy location failed: $e');
 
-        // Fallback to medium accuracy for older devices
+        // Fallback to medium accuracy (mix of network and GPS)
         try {
-          debugPrint('Attempting location with medium accuracy...');
+          debugPrint('Attempting location with medium accuracy (network + GPS)...');
           position = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.medium,
             timeLimit: const Duration(seconds: 20),
           );
-          debugPrint('Got location with medium accuracy: ${position.latitude}, ${position.longitude}');
+          debugPrint('Got location with medium accuracy: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
         } catch (e2) {
           debugPrint('Medium accuracy location failed: $e2');
 
-          // Last resort: try low accuracy
+          // Fallback to low accuracy (network/cell towers - works indoors)
           try {
-            debugPrint('Attempting location with low accuracy...');
+            debugPrint('Attempting location with low accuracy (network-based)...');
             position = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.low,
               timeLimit: const Duration(seconds: 30),
             );
-            debugPrint('Got location with low accuracy: ${position.latitude}, ${position.longitude}');
+            debugPrint('Got location with low accuracy: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
           } catch (e3) {
-            debugPrint('All location accuracy levels failed: $e3');
+            debugPrint('All current location methods failed: $e3');
 
             // Final fallback: try to get last known position
             try {
-              debugPrint('Attempting to get last known position...');
+              debugPrint('Attempting to get last known position (cached)...');
               position = await Geolocator.getLastKnownPosition();
               if (position != null) {
-                debugPrint('Using last known position: ${position.latitude}, ${position.longitude}');
+                final age = DateTime.now().difference(position.timestamp ?? DateTime.now());
+                debugPrint('Last known position found: ${position.latitude}, ${position.longitude} (${age.inMinutes} min old, accuracy: ${position.accuracy}m)');
               } else {
                 debugPrint('No last known position available');
               }
