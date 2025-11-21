@@ -374,7 +374,7 @@ async def upload_image(
 
                     response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
                     await websocket_manager.broadcast_incident(
-                        incident_data=response.dict(),
+                        incident_data=response.model_dump(),
                         event_type='media_upload'
                     )
             except Exception as ws_error:
@@ -500,7 +500,7 @@ async def upload_audio(
 
                     response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
                     await websocket_manager.broadcast_incident(
-                        incident_data=response.dict(),
+                        incident_data=response.model_dump(),
                         event_type='media_upload'
                     )
             except Exception as ws_error:

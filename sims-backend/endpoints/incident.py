@@ -378,7 +378,7 @@ async def create_incident(
         # Broadcast new incident via WebSocket
         try:
             await websocket_manager.broadcast_incident(
-                incident_data=response.dict(),
+                incident_data=response.model_dump(),
                 event_type='incident_new'
             )
             logger.info(f"Broadcasted new incident {incident_id} via WebSocket")
@@ -601,7 +601,7 @@ async def update_incident(
         # Broadcast incident update via WebSocket
         try:
             await websocket_manager.broadcast_incident(
-                incident_data=response.dict(),
+                incident_data=response.model_dump(),
                 event_type='incident_update'
             )
             logger.info(f"Broadcasted incident update {incident_id} via WebSocket")
@@ -664,18 +664,20 @@ async def list_incidents(
             # Use eager-loaded media_files relationship
             if hasattr(inc, 'media_files') and inc.media_files:
                 for media in inc.media_files:
-                    logger.info(f"[DEBUG] Media for {inc.incident_id}: type={media.media_type}, url={media.file_url}, has_transcription={hasattr(media, 'transcription')}")
+                    transcription_value = getattr(media, 'transcription', None)
+                    logger.info(f"[DEBUG] Media for {inc.incident_id}: type={media.media_type}, url={media.file_url}, transcription={transcription_value}")
                     if media.media_type == 'image' and not image_url:
                         image_url = media.file_url
                     elif media.media_type == 'audio' and not audio_url:
                         audio_url = media.file_url
                         # Get transcription from audio media
-                        if hasattr(media, 'transcription') and media.transcription:
-                            audio_transcript = media.transcription
+                        if transcription_value:
+                            audio_transcript = transcription_value
+                            logger.info(f"[DEBUG] Found transcription for {inc.incident_id}: {audio_transcript[:100] if len(audio_transcript) > 100 else audio_transcript}")
 
             # Get chat messages and build description from them
             try:
-                chat_session = get_session_by_incident(inc.id, db)
+                chat_session = get_session_by_incident(db, inc.id)
                 if chat_session:
                     chat = ChatHistory(db, str(chat_session.session_id))
                     messages = chat.get_messages()
@@ -831,7 +833,7 @@ async def assign_incident(
         # Broadcast assignment via WebSocket
         try:
             await websocket_manager.broadcast_incident(
-                incident_data=response.dict(),
+                incident_data=response.model_dump(),
                 event_type='incident_assigned'
             )
             logger.info(f"Broadcasted incident assignment {incident_id} via WebSocket")
@@ -919,7 +921,7 @@ async def unassign_incident(
         # Broadcast unassignment via WebSocket
         try:
             await websocket_manager.broadcast_incident(
-                incident_data=response.dict(),
+                incident_data=response.model_dump(),
                 event_type='incident_unassigned'
             )
             logger.info(f"Broadcasted incident unassignment {incident_id} via WebSocket")
