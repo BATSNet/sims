@@ -233,6 +233,7 @@ class BatchProcessor:
 
             # Update database with transcription
             from db.connection import session as Session
+            from services.chat_history import ChatHistory, get_session_by_incident
             db = Session()
             incident_id = None
             try:
@@ -248,6 +249,17 @@ class BatchProcessor:
                         f"Updated transcription for media {media_id}: "
                         f"{transcription_text[:50]}..."
                     )
+
+                    # Add transcription to chat history
+                    if incident_id:
+                        try:
+                            session_id = get_session_by_incident(db, incident_id)
+                            if session_id:
+                                chat = ChatHistory(db, session_id)
+                                chat.add_message("user", transcription_text)
+                                logger.info(f"Added transcription to chat history for incident {incident_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to add transcription to chat: {e}")
                 else:
                     logger.warning(f"Media record not found: {media_id}")
 
@@ -361,22 +373,52 @@ class BatchProcessor:
                     logger.info(f"Category changed from {old_category} to {classification.category}, triggering re-assignment")
                     await self._reassign_incident(incident, classification, db)
 
-                # Broadcast update via WebSocket
+                # Broadcast update via WebSocket with FULL incident data
                 try:
                     from websocket import websocket_manager
+                    from models.incident_model import IncidentResponse
+                    from services.chat_history import ChatHistory, get_session_by_incident
+
+                    # Update description from chat messages
+                    try:
+                        session_id = get_session_by_incident(db, incident.id)
+                        if session_id:
+                            chat = ChatHistory(db, session_id)
+                            messages = chat.get_messages()
+                            if messages:
+                                user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
+                                if user_messages:
+                                    incident.description = '\n'.join(user_messages)
+                                    db.commit()
+                                    logger.info(f"Updated description for {incident.incident_id} from chat messages")
+                    except Exception as e:
+                        logger.error(f"Failed to update description from chat: {e}")
+
+                    # Get all media for this incident
+                    media_files = db.query(MediaORM).filter(
+                        MediaORM.incident_id == incident.id
+                    ).all()
+
+                    image_url = None
+                    audio_url = None
+                    audio_transcript = None
+                    for m in media_files:
+                        if m.media_type == 'image' and not image_url:
+                            image_url = m.file_url
+                        elif m.media_type == 'audio' and not audio_url:
+                            audio_url = m.file_url
+                            if hasattr(m, 'transcription') and m.transcription:
+                                audio_transcript = m.transcription
+
+                    # Build full incident response
+                    response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
                     await websocket_manager.broadcast_incident(
-                        incident_data={
-                            'incident_id': incident.incident_id,
-                            'category': incident.category,
-                            'priority': incident.priority,
-                            'tags': incident.tags,
-                            'transcription': transcription,
-                            'classification': classification.to_dict()
-                        },
-                        event_type='transcription_complete'
+                        incident_data=response.model_dump(),
+                        event_type='incident_updated'
                     )
+                    logger.info(f"Broadcast incident update for {incident.incident_id} with transcription")
                 except Exception as ws_error:
-                    logger.error(f"Failed to broadcast transcription_complete: {ws_error}")
+                    logger.error(f"Failed to broadcast incident update: {ws_error}")
 
             except Exception as e:
                 logger.error(f"Error re-classifying incident {incident_id}: {e}", exc_info=True)
