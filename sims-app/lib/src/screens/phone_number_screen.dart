@@ -136,6 +136,10 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                           const SizedBox(height: 24),
                           TextFormField(
                             controller: _phoneController,
+                            style: const TextStyle(
+                              color: SimsColors.dark,
+                              fontSize: 16,
+                            ),
                             decoration: InputDecoration(
                               labelText: 'Phone Number',
                               hintText: '+1234567890',
