@@ -414,7 +414,7 @@ class BatchProcessor:
                     response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
                     await websocket_manager.broadcast_incident(
                         incident_data=response.model_dump(),
-                        event_type='incident_updated'
+                        event_type='incident_update'
                     )
                     logger.info(f"Broadcast incident update for {incident.incident_id} with transcription")
                 except Exception as ws_error:
