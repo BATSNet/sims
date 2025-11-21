@@ -78,6 +78,11 @@ async def create_incident(
         user_phone = incident_data.user_phone or incident_data.metadata.get('user_phone')
         logger.info(f"Creating incident with user_phone: {user_phone}")
 
+        # Use "Processing..." as initial description for placeholder text
+        initial_description = incident_data.description
+        if incident_data.description and incident_data.description.lower() in ['incident with photo', 'incident with video', 'incident with audio']:
+            initial_description = 'Processing incident report...'
+
         db_incident = IncidentORM(
             id=incident_uuid,
             incident_id=incident_id,
@@ -87,7 +92,7 @@ async def create_incident(
             longitude=incident_data.longitude,
             heading=incident_data.heading,
             title=incident_data.title,
-            description=incident_data.description,
+            description=initial_description,
             status='processing',  # Start as processing while AI analyzes
             priority='medium',
             category='Unclassified',
