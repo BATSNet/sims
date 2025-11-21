@@ -681,11 +681,14 @@ async def list_incidents(
                 if session_id:
                     chat = ChatHistory(db, session_id)
                     messages = chat.get_messages()
+                    logger.info(f"[DEBUG] Chat messages for {inc.incident_id}: {messages}")
                     if messages:
                         # Build description from user messages only
                         user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
+                        logger.info(f"[DEBUG] User messages for {inc.incident_id}: {user_messages}")
                         if user_messages:
                             inc.description = '\n'.join(user_messages)
+                            logger.info(f"[DEBUG] Updated description for {inc.incident_id}: {inc.description}")
             except Exception as e:
                 logger.error(f"Failed to fetch chat messages for incident {inc.incident_id}: {e}")
 
