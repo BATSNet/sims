@@ -322,6 +322,11 @@ class BatchProcessor:
                 incident.meta_data['classification'] = classification.to_dict()
                 incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
 
+                # Change status from 'processing' to 'open' after classification completes
+                if incident.status == 'processing':
+                    incident.status = 'open'
+                    logger.info(f"Changed incident {incident.incident_id} status from 'processing' to 'open'")
+
                 db.commit()
                 db.refresh(incident)
 

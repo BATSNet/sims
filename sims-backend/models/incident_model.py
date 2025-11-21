@@ -17,6 +17,7 @@ from db.connection import Base
 
 class IncidentStatus(str, Enum):
     """Incident status enum - aligned with Flutter"""
+    PROCESSING = "processing"  # AI processing in progress (transcription, classification)
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
