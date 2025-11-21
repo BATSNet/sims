@@ -945,7 +945,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 
             rows.append({
                 'id': incident['id'],
-                'uuid': incident['uuid'],
+                'uuid': incident.get('uuid', incident.get('id', 'UNKNOWN')),
                 'timestamp': incident['timestamp'].split(' ')[1],  # Just time
                 'category': incident.get('category', 'Unclassified'),
                 'category_raw': incident.get('category_raw', 'unclassified'),
