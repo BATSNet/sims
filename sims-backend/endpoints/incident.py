@@ -88,7 +88,7 @@ async def create_incident(
             heading=incident_data.heading,
             title=incident_data.title,
             description=incident_data.description,
-            status='open',
+            status='processing',  # Start as processing while AI analyzes
             priority='medium',
             category='Unclassified',
             tags=[],
@@ -229,6 +229,11 @@ async def create_incident(
                 db_incident.meta_data = {}
             db_incident.meta_data['classification'] = classification.to_dict()
             db_incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
+
+            # Change status from 'processing' to 'open' after initial classification
+            if db_incident.status == 'processing':
+                db_incident.status = 'open'
+                logger.info(f"Changed incident {incident_id} status from 'processing' to 'open' after initial classification")
 
             logger.info(
                 f"Incident {incident_id} classified as '{classification.category}' "
