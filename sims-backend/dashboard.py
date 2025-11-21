@@ -1424,7 +1424,9 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
     status_filter.on('update:model-value', lambda: update_filters())
     org_filter.on('update:model-value', lambda: update_filters())
 
-    # Return filter refs so dashboard can set container reference
+    # Return filter refs and table object so dashboard can update rows
+    filter_refs['table'] = table
+    filter_refs['incidents'] = incidents
     return filter_refs
 
 
@@ -1453,11 +1455,11 @@ async def dashboard():
         # Set overview container reference for filter updates
         filter_refs['overview_container'] = overview_container
 
-    # Define refresh function that only updates table, not map
+    # Define refresh function that updates table rows in place
     async def refresh_dashboard():
-        """Reload incidents and refresh the table only"""
+        """Reload incidents and update table rows without re-rendering"""
         nonlocal incidents, is_mock_data, filter_refs
-        logger.info("Refreshing dashboard table (not map)")
+        logger.info("Refreshing dashboard table rows in place")
 
         # Reload incidents from API
         all_new_incidents = await load_incidents()
@@ -1471,13 +1473,42 @@ async def dashboard():
             incidents = MOCK_INCIDENTS
             is_mock_data = True
 
-        # Only re-render the table, NOT the map
-        table_container.clear()
+        # Update table rows in place without re-rendering (preserves expanded state)
+        if 'table' in filter_refs:
+            table = filter_refs['table']
 
-        with table_container:
-            new_filter_refs = await render_incident_table(incidents, is_mock_data=is_mock_data)
-            new_filter_refs['overview_container'] = overview_container
-            filter_refs = new_filter_refs
+            # Build new rows from updated incidents
+            new_rows = []
+            for incident in incidents:
+                assigned_org_display = 'Unassigned'
+                if incident.get('assigned_org'):
+                    assigned_org_display = incident['assigned_org']['name']
+
+                new_rows.append({
+                    'id': incident['id'],
+                    'uuid': incident.get('uuid', incident['id']),
+                    'timestamp': incident['timestamp'],
+                    'location': incident['location']['label'],
+                    'latitude': incident['location']['lat'],
+                    'longitude': incident['location']['lon'],
+                    'description': incident['description'],
+                    'priority': incident['priority'].upper(),
+                    'assigned_org': assigned_org_display,
+                    'action': incident['id'],
+                    'reporter': incident.get('reporter', 'Unknown'),
+                    'status': incident.get('status', 'active'),
+                    'type': incident.get('type', 'Incident'),
+                    'imageUrl': incident.get('imageUrl'),
+                    'audioUrl': incident.get('audioUrl'),
+                    'videoUrl': incident.get('videoUrl'),
+                    'audioTranscript': incident.get('audioTranscript'),
+                })
+
+            # Update rows and refresh table
+            table.rows = new_rows
+            table.update()
+            filter_refs['incidents'] = incidents
+            logger.info(f"Updated {len(new_rows)} rows in table without re-rendering")
 
     # Create a button that can be triggered from JavaScript (hidden)
     refresh_button = ui.button('', on_click=refresh_dashboard).classes('hidden')
