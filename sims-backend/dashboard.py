@@ -1149,10 +1149,22 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="mb-4">
                                     <div class="text-xs text-gray-400 uppercase mb-1">Media Analysis / Transcription</div>
                                     <div v-if="props.row.audioTranscript" class="text-white bg-gray-800 p-3 rounded border-2 border-green-700" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">{{ props.row.audioTranscript }}</div>
+                                    <div v-else-if="props.row.status === 'processing'" class="text-blue-400 italic text-xs">
+                                        <i class="fas fa-spinner fa-spin mr-2"></i>Processing audio and analyzing media...
+                                    </div>
                                     <div v-else>
                                         <div class="text-yellow-400 italic text-xs mb-2">No analysis available yet</div>
                                         <div class="text-xs text-gray-500">Run: POST /api/incident/{{ props.row.id }}/analyze-all-media</div>
                                     </div>
+                                </div>
+
+                                <!-- Processing Status Indicator -->
+                                <div v-if="props.row.status === 'processing'" class="mb-4 p-3 bg-blue-900 border-2 border-blue-500 rounded">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-cog fa-spin mr-2 text-blue-400"></i>
+                                        <div class="text-blue-300 text-sm font-semibold">AI Processing in Progress</div>
+                                    </div>
+                                    <div class="text-xs text-blue-400 mt-1">Transcribing audio, analyzing media, and classifying incident...</div>
                                 </div>
                             </div>
                         </div>
