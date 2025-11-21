@@ -379,7 +379,7 @@ class BatchProcessor:
                     from models.incident_model import IncidentResponse
                     from services.chat_history import ChatHistory, get_session_by_incident
 
-                    # Update description from chat messages
+                    # Generate summary description from all content
                     try:
                         session_id = get_session_by_incident(db, incident.id)
                         if session_id:
@@ -388,9 +388,39 @@ class BatchProcessor:
                             if messages:
                                 user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
                                 if user_messages:
-                                    incident.description = '\n'.join(user_messages)
-                                    db.commit()
-                                    logger.info(f"Updated description for {incident.incident_id} from chat messages")
+                                    # Filter out generic placeholder messages
+                                    meaningful_messages = [msg for msg in user_messages if msg and msg.lower() not in ['incident with photo', 'incident with video']]
+
+                                    if meaningful_messages:
+                                        # Generate a concise summary from the messages
+                                        combined_content = ' '.join(meaningful_messages)
+
+                                        # Use LLM to create a brief summary
+                                        try:
+                                            from services.ai_providers.factory import get_provider
+                                            from config import Config
+
+                                            provider = get_provider(Config.CLASSIFICATION_PROVIDER)
+                                            summary_prompt = f"Create a brief 1-2 sentence incident summary from this content:\n\n{combined_content}\n\nProvide ONLY the summary, no other text:"
+
+                                            summary = await provider.generate_text(
+                                                prompt=summary_prompt,
+                                                temperature=0.3,
+                                                max_tokens=100
+                                            )
+
+                                            if summary:
+                                                incident.description = summary.strip()
+                                                db.commit()
+                                                logger.info(f"Generated summary description for {incident.incident_id}: {summary[:50]}...")
+                                            else:
+                                                # Fallback to combined content
+                                                incident.description = combined_content[:200]
+                                                db.commit()
+                                        except Exception as summary_error:
+                                            logger.error(f"Failed to generate summary, using combined content: {summary_error}")
+                                            incident.description = combined_content[:200]
+                                            db.commit()
                     except Exception as e:
                         logger.error(f"Failed to update description from chat: {e}")
 
