@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 from config import Config
 from services.ai_providers.factory import ProviderFactory
 from services.ai_providers.base import Message
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,11 @@ class IncidentClassifier:
                 f"Failed to initialize classification provider: {Config.CLASSIFICATION_PROVIDER}"
             )
 
+        # Format system prompt with language
+        self.system_prompt = Config.CLASSIFICATION_SYSTEM_PROMPT.format(
+            language=i18n.get_language_name()
+        )
+
     async def classify_incident(
         self,
         description: str,
@@ -99,7 +105,7 @@ class IncidentClassifier:
         try:
             # Create messages
             messages = [
-                Message(role="system", content=Config.CLASSIFICATION_SYSTEM_PROMPT),
+                Message(role="system", content=self.system_prompt),
                 Message(role="user", content=prompt)
             ]
 
@@ -159,11 +165,12 @@ class IncidentClassifier:
         if category_hint:
             category_context = f"\n\nNOTE: This incident was previously classified as '{category_hint}'. Consider this context but re-evaluate based on new information."
 
-        # Use template from config.yaml
+        # Use template from config.yaml with language injection
         prompt = Config.CLASSIFICATION_PROMPT_TEMPLATE.format(
             category_context=category_context,
             incident_text=incident_text,
-            categories_list=categories_list
+            categories_list=categories_list,
+            language=i18n.get_language_name()
         )
 
         return prompt

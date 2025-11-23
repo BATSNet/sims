@@ -1,0 +1,74 @@
+# German translations for SIMS backend
+
+ui:
+  dashboard:
+    title: "SIMS Dashboard"
+    incidents: "Vorfälle"
+    no_incidents: "Keine Vorfälle gefunden"
+    failed_load: "Laden der Vorfälle fehlgeschlagen"
+    assigned_success: "Vorfall erfolgreich zugewiesen"
+    assignment_failed: "Zuweisung fehlgeschlagen"
+    unassigned_success: "Organisation erfolgreich entfernt"
+    unassignment_failed: "Entfernung fehlgeschlagen"
+    closed_success: "Vorfall erfolgreich geschlossen"
+    close_failed: "Schließen fehlgeschlagen"
+    token_generated: "Einsatzkräfte-Link generiert"
+    token_failed: "Token-Generierung fehlgeschlagen"
+    no_org_assigned: "Link kann nicht generiert werden: Vorfall keiner Organisation zugewiesen"
+
+  responder:
+    title: "EINSATZKRÄFTE-ZUGANG"
+    token_label: "ZUGRIFFSTOKEN"
+    token_placeholder: "Geben Sie Ihr Organisations-Token ein"
+    access_denied_token: "ZUGRIFF VERWEIGERT: Token erforderlich"
+    access_denied_invalid: "ZUGRIFF VERWEIGERT: Ungültiges oder abgelaufenes Token"
+    connection_error: "VERBINDUNGSFEHLER: Token-Validierung nicht möglich"
+    access_portal: "PORTAL ZUGRIFF"
+    authorized_only: "Nur für autorisierte Organisationen"
+    contact_admin: "Kontaktieren Sie Ihren Systemadministrator für Zugriff"
+    assigned_incidents: "Zugewiesene Vorfälle"
+    no_incidents_assigned: "Keine Vorfälle zugewiesen"
+    unable_to_load: "Vorfälle können nicht geladen werden"
+
+  table:
+    id: "ID"
+    title: "Titel"
+    priority: "Priorität"
+    status: "Status"
+    created: "Erstellt"
+    actions: "Aktionen"
+    description: "Beschreibung"
+    category: "Kategorie"
+    assigned_to: "Zugewiesen an"
+    location: "Standort"
+
+messages:
+  auto_response:
+    org_notified: "Vielen Dank für Ihre Meldung. {org_name} wurde benachrichtigt und wird bei Bedarf reagieren. Sie können die App jetzt schließen."
+    fallback: "Vielen Dank für Ihre Nachricht. Wir analysieren gerade Ihre Meldung. Sie können die App jetzt schließen und werden bei Bedarf kontaktiert."
+
+categories:
+  drone_detection: "Drohnenerkennung"
+  suspicious_vehicle: "Verdächtiges Fahrzeug"
+  suspicious_person: "Verdächtige Person"
+  fire_incident: "Brandvorfall"
+  medical_emergency: "Medizinischer Notfall"
+  infrastructure_damage: "Infrastrukturschaden"
+  cyber_incident: "Cyber-Vorfall"
+  hazmat_incident: "Gefahrgut-Vorfall"
+  natural_disaster: "Naturkatastrophe"
+  airport_incident: "Flughafen-Vorfall"
+  security_breach: "Sicherheitsverstoß"
+  civil_unrest: "Zivile Unruhen"
+  armed_threat: "Bewaffnete Bedrohung"
+  explosion: "Explosion"
+  chemical_biological: "Chemisch/Biologisch"
+  maritime_incident: "Maritimer Vorfall"
+  theft_burglary: "Diebstahl/Einbruch"
+  unclassified: "Nicht klassifiziert"
+
+priorities:
+  critical: "Kritisch"
+  high: "Hoch"
+  medium: "Mittel"
+  low: "Niedrig"

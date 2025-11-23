@@ -22,6 +22,9 @@ class Config:
     # Server Configuration
     PUBLIC_SERVER_URL: Optional[str] = os.getenv("PUBLIC_SERVER_URL", "http://localhost:8000")
 
+    # Language Configuration
+    LANGUAGE: str = os.getenv("LANGUAGE", _yaml_config.get('language', 'en'))
+
     # AI Provider Configuration
     _ai_providers = _yaml_config.get('ai_providers', {})
 

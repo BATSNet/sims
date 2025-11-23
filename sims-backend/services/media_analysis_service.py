@@ -6,6 +6,7 @@ from typing import Optional
 from config import Config
 from services.ai_providers.factory import ProviderFactory
 from services.ai_providers.base import Message
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,11 @@ class MediaAnalysisService:
 
         try:
             # Create messages with the improved prompt from config
+            # Format the media analysis prompt with language
+            formatted_prompt = Config.MEDIA_ANALYSIS_PROMPT.format(
+                language=i18n.get_language_name()
+            )
+
             messages = [
                 Message(
                     role="system",
@@ -51,7 +57,7 @@ class MediaAnalysisService:
                 ),
                 Message(
                     role="user",
-                    content=Config.MEDIA_ANALYSIS_PROMPT
+                    content=formatted_prompt
                 )
             ]
 
