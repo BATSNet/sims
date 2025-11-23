@@ -41,6 +41,15 @@ ui:
     category: "Category"
     assigned_to: "Assigned To"
     location: "Location"
+    name: "Name"
+    type: "Type"
+    city: "City"
+    emergency_phone: "Emergency Phone"
+    action: "Action"
+    responder_link: "Responder Link"
+
+  filter:
+    showing_of: "Showing {count} of {total} incidents"
 
 messages:
   auto_response:

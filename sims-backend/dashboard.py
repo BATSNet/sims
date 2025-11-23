@@ -6,6 +6,7 @@ from nicegui import ui
 from typing import List, Dict, Optional
 import httpx
 import logging
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 API_BASE = "http://localhost:8000/api"
@@ -157,7 +158,7 @@ async def assign_incident_to_org(incident_id: str, organization_id: int, notes: 
             )
             if response.status_code == 200:
                 logger.info(f"Assigned incident {incident_id} to organization {organization_id}")
-                return {'success': True, 'message': 'Incident assigned successfully'}
+                return {'success': True, 'message': i18n.t('ui.dashboard.assigned_success')}
             elif response.status_code == 404:
                 logger.warning(f"Incident {incident_id} not found in database (possibly mock data)")
                 return {'success': False, 'message': f'Incident {incident_id} does not exist in database. This is mock data - create a real incident from the mobile app first.'}
@@ -605,7 +606,7 @@ async def render_map(incidents: List[Dict]):
                 # Load organizations
                 organizations = await load_organizations()
                 if not organizations:
-                    ui.notify('No organizations available', type='warning')
+                    ui.notify(i18n.t('ui.responder.no_incidents_assigned'), type='warning')
                     return
 
                 with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-4 sm:p-6'):
@@ -615,11 +616,11 @@ async def render_map(incidents: List[Dict]):
 
                     # Organization table
                     org_columns = [
-                        {'name': 'name', 'label': 'Name', 'field': 'name', 'align': 'left', 'sortable': True},
-                        {'name': 'type', 'label': 'Type', 'field': 'type', 'align': 'left', 'sortable': True},
-                        {'name': 'city', 'label': 'City', 'field': 'city', 'align': 'left', 'sortable': True},
-                        {'name': 'emergency_phone', 'label': 'Emergency Phone', 'field': 'emergency_phone', 'align': 'left'},
-                        {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
+                        {'name': 'name', 'label': i18n.t('ui.table.name'), 'field': 'name', 'align': 'left', 'sortable': True},
+                        {'name': 'type', 'label': i18n.t('ui.table.type'), 'field': 'type', 'align': 'left', 'sortable': True},
+                        {'name': 'city', 'label': i18n.t('ui.table.city'), 'field': 'city', 'align': 'left', 'sortable': True},
+                        {'name': 'emergency_phone', 'label': i18n.t('ui.table.emergency_phone'), 'field': 'emergency_phone', 'align': 'left'},
+                        {'name': 'action', 'label': i18n.t('ui.table.action'), 'field': 'action', 'align': 'center'},
                     ]
 
                     org_rows = []
@@ -920,15 +921,15 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 
         # Table columns - all sortable
         columns = [
-            {'name': 'id', 'label': 'Incident ID', 'field': 'id', 'align': 'left', 'sortable': True},
-            {'name': 'timestamp', 'label': 'Time', 'field': 'timestamp', 'align': 'left', 'sortable': True},
-            {'name': 'category', 'label': 'Category', 'field': 'category', 'align': 'left', 'sortable': True},
-            {'name': 'location', 'label': 'Location', 'field': 'location', 'align': 'left', 'sortable': True},
-            {'name': 'description', 'label': 'Description', 'field': 'description', 'align': 'left', 'sortable': True, 'style': 'max-width: 300px; white-space: normal; word-wrap: break-word;'},
-            {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left', 'sortable': True},
-            {'name': 'assigned_to', 'label': 'Assigned To', 'field': 'assigned_to', 'align': 'left', 'sortable': False},
-            {'name': 'responder_url', 'label': 'Responder Link', 'field': 'responder_url', 'align': 'center'},
-            {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
+            {'name': 'id', 'label': i18n.t('ui.table.id'), 'field': 'id', 'align': 'left', 'sortable': True},
+            {'name': 'timestamp', 'label': i18n.t('ui.table.created'), 'field': 'timestamp', 'align': 'left', 'sortable': True},
+            {'name': 'category', 'label': i18n.t('ui.table.category'), 'field': 'category', 'align': 'left', 'sortable': True},
+            {'name': 'location', 'label': i18n.t('ui.table.location'), 'field': 'location', 'align': 'left', 'sortable': True},
+            {'name': 'description', 'label': i18n.t('ui.table.description'), 'field': 'description', 'align': 'left', 'sortable': True, 'style': 'max-width: 300px; white-space: normal; word-wrap: break-word;'},
+            {'name': 'priority', 'label': i18n.t('ui.table.priority'), 'field': 'priority', 'align': 'left', 'sortable': True},
+            {'name': 'assigned_to', 'label': i18n.t('ui.table.assigned_to'), 'field': 'assigned_to', 'align': 'left', 'sortable': False},
+            {'name': 'responder_url', 'label': i18n.t('ui.table.responder_link'), 'field': 'responder_url', 'align': 'center'},
+            {'name': 'action', 'label': i18n.t('ui.table.actions'), 'field': 'action', 'align': 'center'},
         ]
 
         # Format incidents for table
@@ -1181,7 +1182,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             # Load organizations
             organizations = await load_organizations()
             if not organizations:
-                ui.notify('No organizations available', type='warning')
+                ui.notify(i18n.t('ui.responder.no_incidents_assigned'), type='warning')
                 return
 
             with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl p-4 sm:p-6'):
@@ -1191,11 +1192,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
 
                 # Organization table
                 org_columns = [
-                    {'name': 'name', 'label': 'Name', 'field': 'name', 'align': 'left', 'sortable': True},
-                    {'name': 'type', 'label': 'Type', 'field': 'type', 'align': 'left', 'sortable': True},
-                    {'name': 'city', 'label': 'City', 'field': 'city', 'align': 'left', 'sortable': True},
-                    {'name': 'emergency_phone', 'label': 'Emergency Phone', 'field': 'emergency_phone', 'align': 'left'},
-                    {'name': 'action', 'label': 'Action', 'field': 'action', 'align': 'center'},
+                    {'name': 'name', 'label': i18n.t('ui.table.name'), 'field': 'name', 'align': 'left', 'sortable': True},
+                    {'name': 'type', 'label': i18n.t('ui.table.type'), 'field': 'type', 'align': 'left', 'sortable': True},
+                    {'name': 'city', 'label': i18n.t('ui.table.city'), 'field': 'city', 'align': 'left', 'sortable': True},
+                    {'name': 'emergency_phone', 'label': i18n.t('ui.table.emergency_phone'), 'field': 'emergency_phone', 'align': 'left'},
+                    {'name': 'action', 'label': i18n.t('ui.table.action'), 'field': 'action', 'align': 'center'},
                 ]
 
                 org_rows = []
@@ -1264,12 +1265,12 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         f"{API_BASE}/incident/{incident_id}/assignment"
                     )
                     if response.status_code == 200:
-                        ui.notify(f'Removed assignment from incident {incident_id}', type='positive')
+                        ui.notify(i18n.t('ui.dashboard.unassigned_success'), type='positive')
                         # Refresh the dashboard to show updated data
                         logger.info(f"Assignment removed from {incident_id}, refreshing...")
                     else:
                         logger.error(f"Failed to remove assignment: {response.status_code}")
-                        ui.notify('Failed to remove assignment', type='negative')
+                        ui.notify(i18n.t('ui.dashboard.unassignment_failed'), type='negative')
             except Exception as error:
                 logger.error(f"Error removing assignment: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
@@ -1284,12 +1285,12 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         json={'status': 'closed'}
                     )
                     if response.status_code == 200:
-                        ui.notify(f'Incident {incident_id} closed', type='positive')
+                        ui.notify(i18n.t('ui.dashboard.closed_success'), type='positive')
                         # Refresh the page to remove closed incident from table
                         ui.navigate.reload()
                     else:
                         logger.error(f"Failed to close incident: {response.status_code}")
-                        ui.notify('Failed to close incident', type='negative')
+                        ui.notify(i18n.t('ui.dashboard.close_failed'), type='negative')
             except Exception as error:
                 logger.error(f"Error closing incident: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
@@ -1300,7 +1301,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             try:
                 # Check if org_id is valid
                 if org_id is None:
-                    ui.notify('Cannot generate link: Incident not assigned to any organization', type='warning')
+                    ui.notify(i18n.t('ui.dashboard.no_org_assigned'), type='warning')
                     return
 
                 from config import Config
@@ -1334,7 +1335,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                     else:
                         error_detail = response.text if response else 'Unknown error'
                         logger.error(f"Failed to generate token: {response.status_code} - {error_detail}")
-                        ui.notify(f'Failed to generate token: {response.status_code}', type='negative')
+                        ui.notify(i18n.t('ui.dashboard.token_failed'), type='negative')
             except Exception as error:
                 logger.error(f"Error generating responder link: {error}", exc_info=True)
                 ui.notify(f'Error: {str(error)}', type='negative')
@@ -1412,7 +1413,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             with filter_refs['overview_container']:
                 await render_overview(filtered_incidents)
 
-        ui.notify(f'Showing {len(filtered_incidents)} of {len(filter_refs["incidents"])} incidents', type='info')
+        ui.notify(i18n.t('ui.filter.showing_of', count=len(filtered_incidents), total=len(filter_refs["incidents"])), type='info')
 
     def clear_filters():
         """Clear all filters and show all incidents"""
