@@ -450,7 +450,7 @@ def inject_custom_css():
             /* Table styling for incident list */
             .q-table thead tr,
             .q-table tbody td {
-                background: #0A1929;
+                background: transparent !important;
             }
 
             .q-table thead th {
@@ -459,7 +459,7 @@ def inject_custom_css():
                 text-transform: uppercase;
                 letter-spacing: 1px;
                 font-weight: 600;
-                background: #071220;
+                background: transparent !important;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             }
 
@@ -470,7 +470,7 @@ def inject_custom_css():
             }
 
             .q-table tbody tr:hover {
-                background: rgba(0, 137, 123, 0.1);
+                background: rgba(0, 137, 123, 0.1) !important;
                 border-left-color: #00897B;
             }
 
