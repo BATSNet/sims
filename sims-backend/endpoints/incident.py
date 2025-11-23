@@ -680,22 +680,8 @@ async def list_incidents(
                             audio_transcript = transcription_value
                             logger.info(f"[DEBUG] Found transcription for {inc.incident_id}: {audio_transcript[:100] if len(audio_transcript) > 100 else audio_transcript}")
 
-            # Get chat messages and build description from them
-            try:
-                session_id = get_session_by_incident(db, inc.id)
-                if session_id:
-                    chat = ChatHistory(db, session_id)
-                    messages = chat.get_messages()
-                    logger.info(f"[DEBUG] Chat messages for {inc.incident_id}: {messages}")
-                    if messages:
-                        # Build description from user messages only
-                        user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
-                        logger.info(f"[DEBUG] User messages for {inc.incident_id}: {user_messages}")
-                        if user_messages:
-                            inc.description = '\n'.join(user_messages)
-                            logger.info(f"[DEBUG] Updated description for {inc.incident_id}: {inc.description}")
-            except Exception as e:
-                logger.error(f"Failed to fetch chat messages for incident {inc.incident_id}: {e}")
+            # Description comes from database (set during creation or updated by summarization service)
+            # Do NOT rebuild it here - it's already a proper summary
 
             result.append(IncidentResponse.from_orm(inc, image_url, audio_url, audio_transcript))
 
