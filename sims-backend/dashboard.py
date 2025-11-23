@@ -685,6 +685,9 @@ async def render_map(incidents: List[Dict]):
         marker_button = ui.button('', on_click=marker_handler).classes('hidden')
         marker_button_id = marker_button.id
 
+        # Get translated label for Forward button
+        forward_button_label = i18n.t('ui.buttons.forward')
+
         # Create marker with custom icon and popup with clickable button using JavaScript
         # Add to cluster group instead of directly to map
         # Wait for cluster group to be ready before adding marker
@@ -730,7 +733,7 @@ async def render_map(incidents: List[Dict]):
                                      'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
                                      'transition: all 0.2s ease;" ' +
                                      'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
-                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">{i18n.t('ui.buttons.forward')}</button>' +
+                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">{forward_button_label}</button>' +
                                      '</div>';
 
                     marker.bindPopup(popupContent, {{
@@ -947,7 +950,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
             rows.append({
                 'id': incident['id'],
                 'uuid': incident.get('uuid', incident.get('id', 'UNKNOWN')),
-                'timestamp': incident['timestamp'].split(' ')[1],  # Just time
+                'timestamp': incident['timestamp'],  # Full timestamp with date
                 'category': incident.get('category', 'Unclassified'),
                 'category_raw': incident.get('category_raw', 'unclassified'),
                 'location': incident['location']['label'],
@@ -982,7 +985,14 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
         ''')
 
         # Add expandable rows in body
-        table.add_slot('body', r'''
+        # Get translated labels
+        forward_label = i18n.t('ui.buttons.forward')
+        close_label = i18n.t('ui.buttons.close')
+        full_timestamp_label = i18n.t('ui.table.full_timestamp')
+        full_description_label = i18n.t('ui.table.full_description')
+        reporter_label = i18n.t('ui.table.reporter')
+
+        table.add_slot('body', f'''
             <q-tr :props="props" @click="props.expand = !props.expand" style="cursor: pointer">
                 <q-td auto-width>
                     <q-btn size="sm" color="white" round dense flat
@@ -990,23 +1000,23 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         :icon="props.expand ? 'remove' : 'add'" />
                 </q-td>
                 <q-td key="id" :props="props">
-                    <span class="cell-id">{{ props.row.id }}</span>
+                    <span class="cell-id">{{{{ props.row.id }}}}</span>
                 </q-td>
                 <q-td key="timestamp" :props="props">
-                    <span class="cell-time">{{ props.row.timestamp }}</span>
+                    <span class="cell-time">{{{{ props.row.timestamp }}}}</span>
                 </q-td>
                 <q-td key="category" :props="props">
                     <span class="cell-category" style="font-size: 13px; color: #a0aec0;">
-                        {{ props.row.category }}
+                        {{{{ props.row.category }}}}
                     </span>
                 </q-td>
                 <q-td key="location" :props="props">
-                    <span class="cell-location">{{ props.row.location }}</span>
+                    <span class="cell-location">{{{{ props.row.location }}}}</span>
                 </q-td>
                 <q-td key="description" :props="props">
                     <div class="flex items-center gap-2">
                         <q-spinner-dots v-if="props.row.description && props.row.description.toLowerCase().includes('processing')" color="white" size="20px" />
-                        <span class="cell-description">{{ props.row.description }}</span>
+                        <span class="cell-description">{{{{ props.row.description }}}}</span>
                         <div class="flex gap-1" v-if="props.row.imageUrl || props.row.audioUrl || props.row.videoUrl">
                             <a v-if="props.row.imageUrl" :href="props.row.imageUrl" target="_blank" class="text-blue-400 hover:text-blue-300" title="View Image">
                                 <q-icon name="image" size="16px" />
@@ -1022,7 +1032,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 </q-td>
                 <q-td key="priority" :props="props">
                     <span :class="'priority-badge priority-' + props.row.priority">
-                        {{ props.row.priority.toUpperCase() }}
+                        {{{{ props.row.priority.toUpperCase() }}}}
                     </span>
                 </q-td>
                 <q-td key="assigned_to" :props="props" @click.stop>
@@ -1061,7 +1071,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             outline
                             dense
                             size="sm"
-                            label="{i18n.t('ui.buttons.forward')}"
+                            label="{forward_label}"
                             color="white"
                             no-caps
                             style="font-size: 13px; padding: 4px 12px"
@@ -1071,7 +1081,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             outline
                             dense
                             size="sm"
-                            label="{i18n.t('ui.buttons.close')}"
+                            label="{close_label}"
                             color="red"
                             no-caps
                             style="font-size: 13px; padding: 4px 12px"
@@ -1086,27 +1096,27 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <div class="text-xs text-gray-400 uppercase mb-1">Incident ID</div>
-                                <div class="text-white font-bold">{{ props.row.id }}</div>
+                                <div class="text-white font-bold">{{{{ props.row.id }}}}</div>
                             </div>
                             <div>
                                 <div class="text-xs text-gray-400 uppercase mb-1">Status</div>
-                                <div class="text-white">{{ props.row.status || 'active' }}</div>
+                                <div class="text-white">{{{{ props.row.status || 'active' }}}}</div>
                             </div>
                             <div>
-                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.full_timestamp')}</div>
-                                <div class="text-white">{{ props.row.timestamp }}</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{full_timestamp_label}</div>
+                                <div class="text-white">{{{{ props.row.timestamp }}}}</div>
                             </div>
                             <div>
                                 <div class="text-xs text-gray-400 uppercase mb-1">Type</div>
-                                <div class="text-white">{{ props.row.type }}</div>
+                                <div class="text-white">{{{{ props.row.type }}}}</div>
                             </div>
                             <div class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.full_description')}</div>
-                                <div class="text-white">{{ props.row.description }}</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{full_description_label}</div>
+                                <div class="text-white">{{{{ props.row.description }}}}</div>
                             </div>
                             <div class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.reporter')}</div>
-                                <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{reporter_label}</div>
+                                <div class="text-white">{{{{ props.row.reporter || 'Unknown' }}}}</div>
                             </div>
 
                             <!-- MEDIA FILES SECTION - ALWAYS VISIBLE -->
@@ -1117,7 +1127,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="mb-4">
                                     <div class="text-xs text-gray-400 uppercase mb-1">Image</div>
                                     <div v-if="props.row.imageUrl">
-                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.imageUrl }}</div>
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{{{ props.row.imageUrl }}}}</div>
                                         <img :src="props.row.imageUrl" class="max-w-full h-auto rounded border-2 border-gray-700" style="max-height: 400px;" />
                                     </div>
                                     <div v-else class="text-gray-500 italic text-xs">No image attached</div>
@@ -1127,7 +1137,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="mb-4">
                                     <div class="text-xs text-gray-400 uppercase mb-1">Audio</div>
                                     <div v-if="props.row.audioUrl">
-                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.audioUrl }}</div>
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{{{ props.row.audioUrl }}}}</div>
                                         <audio controls class="w-full">
                                             <source :src="props.row.audioUrl" />
                                         </audio>
@@ -1139,7 +1149,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="mb-4">
                                     <div class="text-xs text-gray-400 uppercase mb-1">Video</div>
                                     <div v-if="props.row.videoUrl">
-                                        <div class="text-xs text-gray-500 mb-2">URL: {{ props.row.videoUrl }}</div>
+                                        <div class="text-xs text-gray-500 mb-2">URL: {{{{ props.row.videoUrl }}}}</div>
                                         <video controls class="max-w-full h-auto rounded border-2 border-gray-700" style="max-height: 400px;">
                                             <source :src="props.row.videoUrl" />
                                         </video>
@@ -1150,13 +1160,13 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <!-- Media Analysis/Transcription -->
                                 <div class="mb-4">
                                     <div class="text-xs text-gray-400 uppercase mb-1">Media Analysis / Transcription</div>
-                                    <div v-if="props.row.audioTranscript" class="text-white bg-gray-800 p-3 rounded border-2 border-green-700" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">{{ props.row.audioTranscript }}</div>
+                                    <div v-if="props.row.audioTranscript" class="text-white bg-gray-800 p-3 rounded border-2 border-green-700" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">{{{{ props.row.audioTranscript }}}}</div>
                                     <div v-else-if="props.row.status === 'processing'" class="text-blue-400 italic text-xs">
                                         <i class="fas fa-spinner fa-spin mr-2"></i>Processing audio and analyzing media...
                                     </div>
                                     <div v-else>
                                         <div class="text-yellow-400 italic text-xs mb-2">No analysis available yet</div>
-                                        <div class="text-xs text-gray-500">Run: POST /api/incident/{{ props.row.id }}/analyze-all-media</div>
+                                        <div class="text-xs text-gray-500">Run: POST /api/incident/{{{{ props.row.id }}}}/analyze-all-media</div>
                                     </div>
                                 </div>
 
