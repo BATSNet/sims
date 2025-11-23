@@ -128,8 +128,10 @@ async def create_incident(
 
         # Link media if provided
         image_url = None
+        video_url = None
         audio_url = None
         image_media_to_analyze = None
+        video_media_to_analyze = None
         audio_media_to_analyze = None
 
         if incident_data.imageUrl:
@@ -160,6 +162,35 @@ async def create_incident(
                 image_url = incident_data.imageUrl
                 image_media_to_analyze = media
                 logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.imageUrl}")
+
+        if incident_data.videoUrl:
+            # Check if media already exists with this URL
+            existing_media = db.query(MediaORM).filter(
+                MediaORM.file_url == incident_data.videoUrl
+            ).first()
+
+            if existing_media:
+                # Link existing media to this incident
+                existing_media.incident_id = incident_uuid
+                db.flush()
+                video_url = existing_media.file_url
+                video_media_to_analyze = existing_media
+                logger.info(f"Linked existing video media {existing_media.id} to incident {incident_id}")
+            else:
+                # Create new media record (for backward compatibility with old URLs)
+                media = MediaORM(
+                    incident_id=incident_uuid,
+                    file_path=incident_data.videoUrl,
+                    file_url=incident_data.videoUrl,
+                    mime_type='video/mp4',
+                    media_type='video',
+                    metadata={}
+                )
+                db.add(media)
+                db.flush()
+                video_url = incident_data.videoUrl
+                video_media_to_analyze = media
+                logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.videoUrl}")
 
         if incident_data.audioUrl:
             # Check if media already exists with this URL
@@ -377,7 +408,7 @@ async def create_incident(
             # Continue anyway - media analysis failure shouldn't break incident creation
 
         # Prepare response
-        response = IncidentResponse.from_orm(db_incident, image_url, audio_url, transcription)
+        response = IncidentResponse.from_orm(db_incident, image_url, video_url, audio_url, transcription)
         logger.info(f"Incident response user_phone: {response.user_phone}")
 
         # Broadcast new incident via WebSocket
@@ -443,17 +474,20 @@ async def get_incident(
         ).all()
 
         image_url = None
+        video_url = None
         audio_url = None
         audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
                 if hasattr(media, 'transcription') and media.transcription:
                     audio_transcript = media.transcription
 
-        return IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+        return IncidentResponse.from_orm(incident, image_url, video_url, audio_url, audio_transcript)
 
     except HTTPException:
         raise
@@ -590,18 +624,21 @@ async def update_incident(
         ).all()
 
         image_url = None
+        video_url = None
         audio_url = None
         audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
                 if hasattr(media, 'transcription') and media.transcription:
                     audio_transcript = media.transcription
 
         # Prepare response
-        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+        response = IncidentResponse.from_orm(incident, image_url, video_url, audio_url, audio_transcript)
 
         # Broadcast incident update via WebSocket
         try:
@@ -657,6 +694,7 @@ async def list_incidents(
         result = []
         for inc in incidents:
             image_url = None
+            video_url = None
             audio_url = None
             audio_transcript = None
 
@@ -673,6 +711,8 @@ async def list_incidents(
                     logger.info(f"[DEBUG] Media for {inc.incident_id}: type={media.media_type}, url={media.file_url}, transcription={transcription_value}")
                     if media.media_type == 'image' and not image_url:
                         image_url = media.file_url
+                    elif media.media_type == 'video' and not video_url:
+                        video_url = media.file_url
                     elif media.media_type == 'audio' and not audio_url:
                         audio_url = media.file_url
                         # Get transcription from audio media
@@ -752,7 +792,7 @@ Output ONLY the summary:"""
             except Exception as e:
                 logger.error(f"Failed to build summary for {inc.incident_id}: {e}")
 
-            result.append(IncidentResponse.from_orm(inc, image_url, audio_url, audio_transcript))
+            result.append(IncidentResponse.from_orm(inc, image_url, video_url, audio_url, audio_transcript))
 
         return result
 
@@ -880,18 +920,21 @@ async def assign_incident(
         ).all()
 
         image_url = None
+        video_url = None
         audio_url = None
         audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
                 if hasattr(media, 'transcription') and media.transcription:
                     audio_transcript = media.transcription
 
         # Prepare response
-        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+        response = IncidentResponse.from_orm(incident, image_url, video_url, audio_url, audio_transcript)
 
         # Broadcast assignment via WebSocket
         try:
@@ -968,18 +1011,21 @@ async def unassign_incident(
         ).all()
 
         image_url = None
+        video_url = None
         audio_url = None
         audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
                 if hasattr(media, 'transcription') and media.transcription:
                     audio_transcript = media.transcription
 
         # Prepare response
-        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+        response = IncidentResponse.from_orm(incident, image_url, video_url, audio_url, audio_transcript)
 
         # Broadcast unassignment via WebSocket
         try:
@@ -1207,18 +1253,21 @@ async def add_chat_message(
         ).all()
 
         image_url = None
+        video_url = None
         audio_url = None
         audio_transcript = None
         for media in media_files:
             if media.media_type == 'image' and not image_url:
                 image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
             elif media.media_type == 'audio' and not audio_url:
                 audio_url = media.file_url
                 if hasattr(media, 'transcription') and media.transcription:
                     audio_transcript = media.transcription
 
         # Broadcast updated incident
-        response = IncidentResponse.from_orm(incident, image_url, audio_url, audio_transcript)
+        response = IncidentResponse.from_orm(incident, image_url, video_url, audio_url, audio_transcript)
         await websocket_manager.broadcast_incident(
             incident_data=response.dict(),
             event_type='incident_update'
