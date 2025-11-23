@@ -16,6 +16,7 @@ from theme_responder import frame as responder_frame, COLORS
 from models.incident_model import IncidentORM
 from models.organization_model import OrganizationORM
 from services.chat_history import ChatHistory, get_session_by_incident
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ async def responder_login():
             with ui.element('div').classes('max-w-7xl mx-auto px-6 py-4'):
                 with ui.row().classes('items-center gap-4'):
                     ui.image('/static/sims-logo.svg').style('width: 120px; height: auto;')
-                    ui.label('/ RESPONDER ACCESS').classes('text-xl').style('font-family: "Stack Sans Notch"; color: rgba(255, 255, 255, 0.4);')
+                    ui.label(f'/ {i18n.t("ui.responder.title")}').classes('text-xl').style('font-family: "Stack Sans Notch"; color: rgba(255, 255, 255, 0.4);')
 
         # Main content
         with ui.element('div').classes('flex items-center justify-center').style('height: calc(100vh - 80px); padding: 16px;'):
@@ -49,12 +50,12 @@ async def responder_login():
 
                     # Form
                     with ui.element('div').classes('p-8'):
-                        ui.label('ACCESS TOKEN').classes('text-xs mb-2').style(
+                        ui.label(i18n.t('ui.responder.token_label')).classes('text-xs mb-2').style(
                             'color: rgba(255, 255, 255, 0.5); letter-spacing: 1px;'
                         )
 
                         token_input = ui.input(
-                            placeholder='Enter your organization token'
+                            placeholder=i18n.t('ui.responder.token_placeholder')
                         ).props('dark outlined dense').classes('w-full').style(
                             'border-color: rgba(38, 198, 218, 0.3);'
                         )
@@ -66,7 +67,7 @@ async def responder_login():
                             token = token_input.value.strip()
 
                             if not token:
-                                error_label.text = '> ACCESS DENIED: Token required'
+                                error_label.text = f'> {i18n.t("ui.responder.access_denied_token")}'
                                 error_label.visible = True
                                 return
 
@@ -84,15 +85,15 @@ async def responder_login():
                                         # Token valid, redirect to incidents page
                                         ui.navigate.to(f'/responder/incidents?token={token}')
                                     else:
-                                        error_label.text = '> ACCESS DENIED: Invalid or expired token'
+                                        error_label.text = f'> {i18n.t("ui.responder.access_denied_invalid")}'
                                         error_label.visible = True
 
                             except Exception as e:
                                 logger.error(f"Error validating token: {e}")
-                                error_label.text = '> CONNECTION ERROR: Unable to validate token'
+                                error_label.text = f'> {i18n.t("ui.responder.connection_error")}'
                                 error_label.visible = True
 
-                        ui.button('ACCESS PORTAL', on_click=validate_token).props(
+                        ui.button(i18n.t('ui.responder.access_portal'), on_click=validate_token).props(
                             'outline'
                         ).classes('w-full mt-6').style(
                             'border-color: #00897B; color: #00897B; font-family: "Stack Sans Notch"; letter-spacing: 1px; padding: 12px;'
@@ -122,7 +123,7 @@ async def responder_incidents_list():
         ui.navigate.to('/responder')
         return
 
-    async with responder_frame('Assigned Incidents'):
+    async with responder_frame(i18n.t('ui.responder.assigned_incidents')):
         # Fetch incidents from API
         try:
             async with httpx.AsyncClient() as client:
@@ -133,7 +134,7 @@ async def responder_incidents_list():
 
                 if response.status_code != 200:
                     with ui.column().classes('w-full items-center justify-center p-12'):
-                        ui.label('Unable to load incidents').classes('text-xl text-red-500')
+                        ui.label(i18n.t('ui.responder.unable_to_load')).classes('text-xl text-red-500')
                         ui.label('Please check your access token').classes('text-sm text-gray-400 mt-2')
                     return
 
@@ -142,28 +143,28 @@ async def responder_incidents_list():
         except Exception as e:
             logger.error(f"Error fetching incidents: {e}")
             with ui.column().classes('w-full items-center justify-center p-12'):
-                ui.label('Error loading incidents').classes('text-xl text-red-500')
+                ui.label(i18n.t('ui.responder.unable_to_load')).classes('text-xl text-red-500')
             return
 
         # Display incidents in a table
         with ui.element('div').classes('w-full max-w-6xl mx-auto p-6'):
             if not incidents:
                 with ui.column().classes('w-full items-center justify-center p-12'):
-                    ui.label('No incidents assigned').classes('text-xl text-gray-400')
+                    ui.label(i18n.t('ui.responder.no_incidents_assigned')).classes('text-xl text-gray-400')
                     ui.label('Incidents will appear here when assigned to your organization').classes(
-                        'text-sm text-gray-500 mt-2'
+                        'text-sm text-gray-400 mt-2'
                     )
             else:
-                ui.label(f'{len(incidents)} Assigned Incidents').classes('text-2xl font-bold mb-6 title-font').style('color: #fff;')
+                ui.label(f'{len(incidents)} {i18n.t("ui.responder.assigned_incidents")}').classes('text-2xl font-bold mb-6 title-font').style('color: #fff;')
 
                 # Create table data
                 columns = [
-                    {'name': 'incident_id', 'label': 'ID', 'field': 'incident_id', 'align': 'left', 'sortable': True},
-                    {'name': 'title', 'label': 'Title', 'field': 'title', 'align': 'left'},
-                    {'name': 'priority', 'label': 'Priority', 'field': 'priority', 'align': 'left', 'sortable': True},
-                    {'name': 'status', 'label': 'Status', 'field': 'status', 'align': 'left', 'sortable': True},
-                    {'name': 'created_at', 'label': 'Created', 'field': 'created_at', 'align': 'left', 'sortable': True},
-                    {'name': 'actions', 'label': 'Actions', 'field': 'actions', 'align': 'center'},
+                    {'name': 'incident_id', 'label': i18n.t('ui.table.id'), 'field': 'incident_id', 'align': 'left', 'sortable': True},
+                    {'name': 'title', 'label': i18n.t('ui.table.title'), 'field': 'title', 'align': 'left'},
+                    {'name': 'priority', 'label': i18n.t('ui.table.priority'), 'field': 'priority', 'align': 'left', 'sortable': True},
+                    {'name': 'status', 'label': i18n.t('ui.table.status'), 'field': 'status', 'align': 'left', 'sortable': True},
+                    {'name': 'created_at', 'label': i18n.t('ui.table.created'), 'field': 'created_at', 'align': 'left', 'sortable': True},
+                    {'name': 'actions', 'label': i18n.t('ui.table.actions'), 'field': 'actions', 'align': 'center'},
                 ]
 
                 rows = []

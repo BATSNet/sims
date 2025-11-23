@@ -41,6 +41,15 @@ ui:
     category: "Kategorie"
     assigned_to: "Zugewiesen an"
     location: "Standort"
+    name: "Name"
+    type: "Typ"
+    city: "Stadt"
+    emergency_phone: "Notrufnummer"
+    action: "Aktion"
+    responder_link: "Einsatzkräfte-Link"
+
+  filter:
+    showing_of: "Zeige {count} von {total} Vorfällen"
 
 messages:
   auto_response:
