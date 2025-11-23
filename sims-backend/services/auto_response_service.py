@@ -18,6 +18,7 @@ from models.incident_model import IncidentORM
 from models.chat_model import ChatMessageORM
 from models.organization_model import OrganizationORM
 from websocket import websocket_manager
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +149,7 @@ class AutoResponseService:
     ):
         """Send thank you message with organization notification"""
         try:
-            message_text = (
-                f"Thank you for your report. {organization_name} has been notified "
-                "and will respond as needed. You can close the app now."
-            )
+            message_text = i18n.t('messages.auto_response.org_notified', org_name=organization_name)
 
             # Save to database
             chat_message = ChatMessageORM(
@@ -196,10 +194,7 @@ class AutoResponseService:
     ):
         """Send fallback message when no assignment within timeout"""
         try:
-            message_text = (
-                "Thank you for reaching out. We are analyzing your report as we speak. "
-                "You can close the app now and will be contacted if needed."
-            )
+            message_text = i18n.t('messages.auto_response.fallback')
 
             # Save to database
             chat_message = ChatMessageORM(

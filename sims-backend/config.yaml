@@ -2,6 +2,11 @@
 # This file contains all non-sensitive configuration
 # API keys should be stored in .env file
 
+# Language Configuration
+# Default language for LLM responses and UI (can be overridden by LANGUAGE env variable)
+# Options: en (English), de (German)
+language: en
+
 # AI Provider Configuration
 ai_providers:
   # Classification Service - Analyzes and classifies incidents
@@ -60,6 +65,8 @@ prompts:
     Provide a clear, factual, and detailed description in 3-5 sentences.
     Prioritize information most relevant to emergency response and situational awareness.
     Be specific about quantities, colors, positions, and any identifying details.
+
+    IMPORTANT: Provide your response in {language} language.
 
   # Classification System Prompt
   classification_system: |

@@ -1,0 +1,74 @@
+# English translations for SIMS backend
+
+ui:
+  dashboard:
+    title: "SIMS Dashboard"
+    incidents: "Incidents"
+    no_incidents: "No incidents found"
+    failed_load: "Failed to load incidents"
+    assigned_success: "Incident assigned successfully"
+    assignment_failed: "Failed to assign incident"
+    unassigned_success: "Organization unassigned successfully"
+    unassignment_failed: "Failed to unassign organization"
+    closed_success: "Incident closed successfully"
+    close_failed: "Failed to close incident"
+    token_generated: "Responder link generated"
+    token_failed: "Failed to generate token"
+    no_org_assigned: "Cannot generate link: Incident not assigned to any organization"
+
+  responder:
+    title: "RESPONDER ACCESS"
+    token_label: "ACCESS TOKEN"
+    token_placeholder: "Enter your organization token"
+    access_denied_token: "ACCESS DENIED: Token required"
+    access_denied_invalid: "ACCESS DENIED: Invalid or expired token"
+    connection_error: "CONNECTION ERROR: Unable to validate token"
+    access_portal: "ACCESS PORTAL"
+    authorized_only: "Authorized organizations only"
+    contact_admin: "Contact your system administrator for access"
+    assigned_incidents: "Assigned Incidents"
+    no_incidents_assigned: "No incidents assigned"
+    unable_to_load: "Unable to load incidents"
+
+  table:
+    id: "ID"
+    title: "Title"
+    priority: "Priority"
+    status: "Status"
+    created: "Created"
+    actions: "Actions"
+    description: "Description"
+    category: "Category"
+    assigned_to: "Assigned To"
+    location: "Location"
+
+messages:
+  auto_response:
+    org_notified: "Thank you for your report. {org_name} has been notified and will respond as needed. You can close the app now."
+    fallback: "Thank you for reaching out. We are analyzing your report as we speak. You can close the app now and will be contacted if needed."
+
+categories:
+  drone_detection: "Drone Detection"
+  suspicious_vehicle: "Suspicious Vehicle"
+  suspicious_person: "Suspicious Person"
+  fire_incident: "Fire Incident"
+  medical_emergency: "Medical Emergency"
+  infrastructure_damage: "Infrastructure Damage"
+  cyber_incident: "Cyber Incident"
+  hazmat_incident: "Hazmat Incident"
+  natural_disaster: "Natural Disaster"
+  airport_incident: "Airport Incident"
+  security_breach: "Security Breach"
+  civil_unrest: "Civil Unrest"
+  armed_threat: "Armed Threat"
+  explosion: "Explosion"
+  chemical_biological: "Chemical/Biological"
+  maritime_incident: "Maritime Incident"
+  theft_burglary: "Theft/Burglary"
+  unclassified: "Unclassified"
+
+priorities:
+  critical: "Critical"
+  high: "High"
+  medium: "Medium"
+  low: "Low"

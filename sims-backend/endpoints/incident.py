@@ -28,6 +28,7 @@ from services.assignment_service import get_assignment_service
 from services.sedap_service import SEDAPService
 from services.media_analysis_service import get_media_analyzer
 from transcription_service import TranscriptionService
+from i18n import i18n
 from websocket import websocket_manager
 from pydantic import BaseModel
 from config import Config
@@ -771,6 +772,8 @@ Examples:
 - "Unauthorized person accessing server room"
 - "Hacker compromising network infrastructure"
 - "Suspicious equipment near military barracks"
+
+IMPORTANT: Generate the summary in {i18n.get_language_name()} language.
 
 Output ONLY the summary:"""
 
