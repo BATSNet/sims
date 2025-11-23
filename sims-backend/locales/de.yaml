@@ -4,6 +4,12 @@ ui:
   dashboard:
     title: "SIMS Dashboard"
     incidents: "Vorfälle"
+    active_incidents: "Aktive Vorfälle"
+    high_priority: "Hohe Priorität"
+    total_reports: "Gesamte Meldungen"
+    avg_response: "Ø Reaktionszeit"
+    search: "Suche"
+    logout: "Abmelden"
     no_incidents: "Keine Vorfälle gefunden"
     failed_load: "Laden der Vorfälle fehlgeschlagen"
     assigned_success: "Vorfall erfolgreich zugewiesen"
@@ -38,6 +44,7 @@ ui:
     created: "Erstellt"
     actions: "Aktionen"
     description: "Beschreibung"
+    full_description: "Vollständige Beschreibung"
     category: "Kategorie"
     assigned_to: "Zugewiesen an"
     location: "Standort"
@@ -47,9 +54,15 @@ ui:
     emergency_phone: "Notrufnummer"
     action: "Aktion"
     responder_link: "Einsatzkräfte-Link"
+    reporter: "Melder"
+    full_timestamp: "Vollständiger Zeitstempel"
 
   filter:
     showing_of: "Zeige {count} von {total} Vorfällen"
+
+  buttons:
+    forward: "Weiterleiten"
+    close: "Schließen"
 
 messages:
   auto_response:
