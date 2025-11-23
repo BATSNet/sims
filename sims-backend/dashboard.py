@@ -730,7 +730,7 @@ async def render_map(incidents: List[Dict]):
                                      'letter-spacing: 0.5px; cursor: pointer; font-weight: 600; ' +
                                      'transition: all 0.2s ease;" ' +
                                      'onmouseover="this.style.background=\\'#FF4444\\'; this.style.borderColor=\\'#FF4444\\'; this.style.color=\\'#0D2637\\';" ' +
-                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">Forward</button>' +
+                                     'onmouseout="this.style.background=\\'transparent\\'; this.style.borderColor=\\'white\\'; this.style.color=\\'white\\';">{i18n.t('ui.buttons.forward')}</button>' +
                                      '</div>';
 
                     marker.bindPopup(popupContent, {{
@@ -814,19 +814,19 @@ async def render_stats(incidents: List[Dict]):
 
     with ui.element('div').classes('stats-column'):
         with ui.element('div').classes('metric-card'):
-            ui.label('Active Incidents').classes('metric-label')
+            ui.label(i18n.t('ui.dashboard.active_incidents')).classes('metric-label')
             ui.label(str(active_count)).classes('metric-value')
 
         with ui.element('div').classes('metric-card'):
-            ui.label('High Priority').classes('metric-label')
+            ui.label(i18n.t('ui.dashboard.high_priority')).classes('metric-label')
             ui.label(str(high_count)).classes('metric-value')
 
         with ui.element('div').classes('metric-card'):
-            ui.label('Total Reports').classes('metric-label')
+            ui.label(i18n.t('ui.dashboard.total_reports')).classes('metric-label')
             ui.label(str(total_incidents)).classes('metric-value')
 
         with ui.element('div').classes('metric-card'):
-            ui.label('Avg Response').classes('metric-label')
+            ui.label(i18n.t('ui.dashboard.avg_response')).classes('metric-label')
             ui.label('2.3m').classes('metric-value')
 
 
@@ -843,7 +843,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
     """Render the incident table with filters"""
     # Section title in container
     with ui.element('div').classes('content-container'):
-        ui.label('Active Incidents').classes('section-title w-full')
+        ui.label(i18n.t('ui.dashboard.active_incidents')).classes('section-title w-full')
 
     # Filter state
     filter_state = {
@@ -884,7 +884,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
     # Filter section - minimal, no styling
     with ui.row().classes('gap-2 items-center mb-2'):
         search_input = ui.input(
-            placeholder='Search...'
+            placeholder=i18n.t('ui.dashboard.search')
         ).classes('w-64').props('dense dark clearable borderless')
 
         priority_filter = ui.select(
@@ -1061,7 +1061,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             outline
                             dense
                             size="sm"
-                            label="Forward"
+                            label="{i18n.t('ui.buttons.forward')}"
                             color="white"
                             no-caps
                             style="font-size: 13px; padding: 4px 12px"
@@ -1071,7 +1071,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                             outline
                             dense
                             size="sm"
-                            label="Close"
+                            label="{i18n.t('ui.buttons.close')}"
                             color="red"
                             no-caps
                             style="font-size: 13px; padding: 4px 12px"
@@ -1093,7 +1093,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="text-white">{{ props.row.status || 'active' }}</div>
                             </div>
                             <div>
-                                <div class="text-xs text-gray-400 uppercase mb-1">Full Timestamp</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.full_timestamp')}</div>
                                 <div class="text-white">{{ props.row.timestamp }}</div>
                             </div>
                             <div>
@@ -1101,11 +1101,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 <div class="text-white">{{ props.row.type }}</div>
                             </div>
                             <div class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Full Description</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.full_description')}</div>
                                 <div class="text-white">{{ props.row.description }}</div>
                             </div>
                             <div class="col-span-1 sm:col-span-2">
-                                <div class="text-xs text-gray-400 uppercase mb-1">Reporter</div>
+                                <div class="text-xs text-gray-400 uppercase mb-1">{i18n.t('ui.table.reporter')}</div>
                                 <div class="text-white">{{ props.row.reporter || 'Unknown' }}</div>
                             </div>
 
@@ -1329,7 +1329,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                                 ui.button('Copy URL', on_click=lambda: ui.run_javascript(f'navigator.clipboard.writeText("{responder_url}")'))
 
                             with ui.row().classes('gap-2 mt-4'):
-                                ui.button('Close', on_click=dialog.close)
+                                ui.button(i18n.t('ui.buttons.close'), on_click=dialog.close)
 
                         dialog.open()
                     else:
