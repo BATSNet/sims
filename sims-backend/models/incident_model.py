@@ -79,6 +79,7 @@ class IncidentCreate(BaseModel):
     title: str
     description: str
     imageUrl: Optional[str] = None
+    videoUrl: Optional[str] = None
     audioUrl: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -129,6 +130,7 @@ class IncidentResponse(BaseModel):
     longitude: Optional[float] = None
     heading: Optional[float] = None
     imageUrl: Optional[str] = None
+    videoUrl: Optional[str] = None
     audioUrl: Optional[str] = None
     audioTranscript: Optional[str] = None
     category: Optional[str] = None
@@ -159,7 +161,7 @@ class IncidentResponse(BaseModel):
     )
 
     @classmethod
-    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, audio_url: Optional[str] = None, audio_transcript: Optional[str] = None):
+    def from_orm(cls, incident: IncidentORM, image_url: Optional[str] = None, video_url: Optional[str] = None, audio_url: Optional[str] = None, audio_transcript: Optional[str] = None):
         """Create response from ORM model"""
         # Get organization name if assigned
         routed_to_name = None
@@ -183,6 +185,7 @@ class IncidentResponse(BaseModel):
             longitude=incident.longitude,
             heading=incident.heading,
             imageUrl=image_url,
+            videoUrl=video_url,
             audioUrl=audio_url,
             audioTranscript=audio_transcript,
             category=incident.category,
