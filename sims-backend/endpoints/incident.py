@@ -680,8 +680,61 @@ async def list_incidents(
                             audio_transcript = transcription_value
                             logger.info(f"[DEBUG] Found transcription for {inc.incident_id}: {audio_transcript[:100] if len(audio_transcript) > 100 else audio_transcript}")
 
-            # Description comes from database (set during creation or updated by summarization service)
-            # Do NOT rebuild it here - it's already a proper summary
+            # ALWAYS regenerate summary from ALL available information
+            # This ensures first responders see a concise, up-to-date summary
+            try:
+                from services.ai_providers.factory import get_provider
+                from config import Config
+
+                # Collect ALL information sources
+                info_parts = []
+
+                # Get transcription if available
+                if audio_transcript:
+                    info_parts.append(f"Audio: {audio_transcript}")
+
+                # Get image analysis if available
+                if image_url and hasattr(inc, 'meta_data') and inc.meta_data:
+                    image_description = inc.meta_data.get('image_description')
+                    if image_description:
+                        info_parts.append(f"Image: {image_description}")
+
+                # Get chat messages
+                session_id = get_session_by_incident(db, inc.id)
+                if session_id:
+                    chat = ChatHistory(db, session_id)
+                    messages = chat.get_messages()
+                    if messages:
+                        user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
+                        meaningful = [m for m in user_messages if m and m.lower() not in ['incident with photo', 'incident with video', 'incident with audio']]
+                        if meaningful:
+                            info_parts.append(f"Report: {' '.join(meaningful)}")
+
+                # If we have any information, generate a summary
+                if info_parts:
+                    combined = ' | '.join(info_parts)
+
+                    try:
+                        provider = get_provider(Config.CLASSIFICATION_PROVIDER)
+                        summary_prompt = f"Create a brief 5-10 word incident summary for first responders. Combine all this information into ONE concise statement:\n\n{combined}\n\nProvide ONLY the summary (max 10 words):"
+
+                        summary = await provider.generate_text(
+                            prompt=summary_prompt,
+                            temperature=0.3,
+                            max_tokens=50
+                        )
+
+                        if summary:
+                            inc.description = summary.strip()
+                            logger.info(f"[SUMMARY] Generated for {inc.incident_id}: {summary}")
+                        else:
+                            inc.description = combined[:100]
+                    except Exception as e:
+                        logger.error(f"Failed to generate summary: {e}")
+                        inc.description = combined[:100]
+
+            except Exception as e:
+                logger.error(f"Failed to build summary for {inc.incident_id}: {e}")
 
             result.append(IncidentResponse.from_orm(inc, image_url, audio_url, audio_transcript))
 
