@@ -716,12 +716,28 @@ async def list_incidents(
 
                     try:
                         provider = get_provider(Config.CLASSIFICATION_PROVIDER)
-                        summary_prompt = f"Create a brief 5-10 word incident summary for first responders. Combine all this information into ONE concise statement:\n\n{combined}\n\nProvide ONLY the summary (max 10 words):"
+                        summary_prompt = f"""Summarize this incident in EXACTLY 5-8 words using the 5 W's (WER/WHO, WAS/WHAT, WIE/HOW).
+
+Information: {combined}
+
+Rules:
+- MAXIMUM 8 words TOTAL
+- Answer: WHO is doing WHAT and HOW
+- NO complete sentences
+- NO filler words (please, check, I think, something, going on)
+- Use specific nouns and verbs only
+
+Examples:
+- "Unauthorized person accessing server room"
+- "Hacker compromising network infrastructure"
+- "Suspicious equipment near military barracks"
+
+Output ONLY the summary:"""
 
                         summary = await provider.generate_text(
                             prompt=summary_prompt,
-                            temperature=0.3,
-                            max_tokens=50
+                            temperature=0.1,
+                            max_tokens=30
                         )
 
                         if summary:

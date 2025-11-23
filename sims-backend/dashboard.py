@@ -1040,7 +1040,7 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
                 </q-td>
                 <q-td key="responder_url" :props="props" @click.stop>
                     <q-btn
-                        v-if="props.row.assigned_org"
+                        v-if="props.row.assigned_org && props.row.assigned_org.id"
                         outline
                         dense
                         size="sm"
@@ -1298,6 +1298,11 @@ async def render_incident_table(incidents: List[Dict], is_mock_data: bool = Fals
         async def handle_generate_responder_link(e):
             incident_id, org_id = e.args
             try:
+                # Check if org_id is valid
+                if org_id is None:
+                    ui.notify('Cannot generate link: Incident not assigned to any organization', type='warning')
+                    return
+
                 from config import Config
                 async with httpx.AsyncClient() as client:
                     response = await client.post(

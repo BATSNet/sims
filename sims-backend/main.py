@@ -190,9 +190,14 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             try:
                 data = await websocket.receive_json()
-                logger.info(f"WebSocket message from {client_id}: {data}")
 
                 message_type = data.get('type')
+
+                # Only log non-ping messages to avoid spam
+                if message_type != 'ping':
+                    logger.info(f"WebSocket message from {client_id}: {data}")
+                else:
+                    logger.debug(f"WebSocket ping from {client_id}")
 
                 if message_type == 'subscribe':
                     channel = data.get('channel')
