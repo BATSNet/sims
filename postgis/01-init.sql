@@ -219,3 +219,282 @@ CREATE TRIGGER update_incident_updated_at BEFORE UPDATE ON incident
 -- Trigger to auto-update updated_at on organization
 CREATE TRIGGER update_organization_updated_at BEFORE UPDATE ON organization
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- INTEGRATION TEMPLATE TABLE
+-- Admin-managed templates defining available integration types
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS integration_template (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('webhook', 'sedap', 'email', 'sms', 'whatsapp', 'n8n', 'custom')),
+    description TEXT,
+
+    -- Configuration schema defines what fields are required/optional
+    -- Example: {"endpoint_url": {"type": "string", "required": true}, "timeout": {"type": "integer", "default": 30}}
+    config_schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    -- Default payload template (Jinja2 format for webhook, email body, etc.)
+    -- Variables: {{incident.id}}, {{incident.title}}, {{incident.latitude}}, etc.
+    payload_template TEXT,
+
+    -- Authentication configuration
+    auth_type VARCHAR(50) NOT NULL DEFAULT 'none'
+        CHECK (auth_type IN ('none', 'bearer_token', 'api_key', 'basic_auth', 'oauth2', 'custom_header')),
+    auth_schema JSONB DEFAULT '{}'::jsonb,
+
+    -- Delivery settings
+    timeout_seconds BIGINT DEFAULT 30,
+    retry_enabled BOOLEAN DEFAULT false,
+    retry_attempts BIGINT DEFAULT 0,
+
+    -- Metadata
+    active BOOLEAN DEFAULT true,
+    system_template BOOLEAN DEFAULT false,  -- True for built-in templates (SEDAP)
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+-- Integration template indexes
+CREATE INDEX IF NOT EXISTS idx_integration_template_type ON integration_template(type);
+CREATE INDEX IF NOT EXISTS idx_integration_template_active ON integration_template(active);
+
+-- Trigger to auto-update updated_at
+CREATE TRIGGER update_integration_template_updated_at BEFORE UPDATE ON integration_template
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ORGANIZATION INTEGRATION TABLE
+-- Organization-specific integration instances
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS organization_integration (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    template_id BIGINT NOT NULL REFERENCES integration_template(id) ON DELETE CASCADE,
+
+    -- Custom name for this integration instance
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+
+    -- Configuration values (validated against template's config_schema)
+    -- Example: {"endpoint_url": "https://org.example.com/webhook", "timeout": 60}
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    -- Authentication credentials (should be encrypted at rest in production)
+    -- Example: {"token": "encrypted_bearer_token"} or {"username": "user", "password": "encrypted_pass"}
+    auth_credentials JSONB DEFAULT '{}'::jsonb,
+
+    -- Custom payload template override (optional, uses template default if null)
+    custom_payload_template TEXT,
+
+    -- Filters for when to trigger this integration
+    -- Example: {"priorities": ["critical", "high"], "categories": ["Security", "Military"]}
+    trigger_filters JSONB DEFAULT '{}'::jsonb,
+
+    -- Status
+    active BOOLEAN DEFAULT true,
+    last_delivery_at TIMESTAMPTZ,
+    last_delivery_status VARCHAR(20),
+
+    -- Metadata
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+-- Organization integration indexes
+CREATE INDEX IF NOT EXISTS idx_org_integration_org_id ON organization_integration(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_integration_template_id ON organization_integration(template_id);
+CREATE INDEX IF NOT EXISTS idx_org_integration_active ON organization_integration(active);
+
+-- Trigger to auto-update updated_at
+CREATE TRIGGER update_organization_integration_updated_at BEFORE UPDATE ON organization_integration
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- INTEGRATION DELIVERY TABLE
+-- Tracks all delivery attempts for auditing and retry
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS integration_delivery (
+    id BIGSERIAL PRIMARY KEY,
+    incident_id UUID NOT NULL REFERENCES incident(id) ON DELETE CASCADE,
+    organization_id BIGINT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+    integration_id BIGINT REFERENCES organization_integration(id) ON DELETE SET NULL,
+
+    -- Integration details (snapshot at delivery time)
+    integration_type VARCHAR(50) NOT NULL,
+    integration_name VARCHAR(200),
+
+    -- Delivery details
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'success', 'failed', 'timeout', 'retrying')),
+    attempt_number INTEGER DEFAULT 1,
+
+    -- Request/response data
+    request_payload JSONB,
+    request_url TEXT,
+    response_code INTEGER,
+    response_body TEXT,
+    error_message TEXT,
+
+    -- Timing
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER,
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Integration delivery indexes
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_incident_id ON integration_delivery(incident_id);
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_org_id ON integration_delivery(organization_id);
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_integration_id ON integration_delivery(integration_id);
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_status ON integration_delivery(status);
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_started_at ON integration_delivery(started_at);
+
+-- ============================================================================
+-- INBOUND WEBHOOK TABLE
+-- Manages webhook endpoints for receiving external incidents
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS inbound_webhook (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- Webhook identity
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    webhook_token VARCHAR(100) UNIQUE NOT NULL,
+
+    -- Security
+    auth_token VARCHAR(255) NOT NULL,
+    allowed_ips JSONB DEFAULT '[]'::jsonb,
+
+    -- Source information
+    source_name VARCHAR(200),
+    source_type VARCHAR(50),
+
+    -- Payload transformation
+    -- Maps external payload structure to SIMS incident format
+    -- Example: {"title": "$.message.text", "latitude": "$.location.lat", "longitude": "$.location.lng"}
+    field_mapping JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    -- Default values for created incidents
+    default_values JSONB DEFAULT '{}'::jsonb,
+
+    -- Auto-assignment
+    auto_assign_to_org BIGINT REFERENCES organization(id) ON DELETE SET NULL,
+
+    -- Status and metrics
+    active BOOLEAN DEFAULT true,
+    total_received BIGINT DEFAULT 0,
+    last_received_at TIMESTAMPTZ,
+
+    -- Metadata
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+-- Inbound webhook indexes
+CREATE INDEX IF NOT EXISTS idx_inbound_webhook_token ON inbound_webhook(webhook_token);
+CREATE INDEX IF NOT EXISTS idx_inbound_webhook_active ON inbound_webhook(active);
+CREATE INDEX IF NOT EXISTS idx_inbound_webhook_source_type ON inbound_webhook(source_type);
+
+-- Trigger to auto-update updated_at
+CREATE TRIGGER update_inbound_webhook_updated_at BEFORE UPDATE ON inbound_webhook
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- SEED DEFAULT INTEGRATION TEMPLATES
+-- ============================================================================
+
+-- Generic Webhook Template
+INSERT INTO integration_template (name, type, description, config_schema, payload_template, auth_type, system_template, created_by)
+VALUES (
+    'Generic Webhook',
+    'webhook',
+    'Generic HTTP POST webhook that can integrate with any system (Zapier, Make, n8n, custom endpoints)',
+    '{"endpoint_url": {"type": "string", "required": true, "description": "Full webhook URL"}, "timeout": {"type": "integer", "default": 30, "description": "Request timeout in seconds"}, "custom_headers": {"type": "object", "default": {}, "description": "Additional HTTP headers"}}'::jsonb,
+    '{
+  "incident_id": "{{incident.incident_id}}",
+  "title": "{{incident.title}}",
+  "description": "{{incident.description}}",
+  "priority": "{{incident.priority}}",
+  "status": "{{incident.status}}",
+  "category": "{{incident.category}}",
+  "location": {
+    "latitude": {{incident.latitude}},
+    "longitude": {{incident.longitude}},
+    "heading": {{incident.heading}}
+  },
+  "created_at": "{{incident.created_at}}",
+  "user_phone": "{{incident.user_phone}}",
+  "tags": {{incident.tags | tojson}},
+  "media": {
+    "image_url": "{{incident.image_url}}",
+    "video_url": "{{incident.video_url}}",
+    "audio_url": "{{incident.audio_url}}",
+    "audio_transcript": "{{incident.audio_transcript}}"
+  }
+}',
+    'bearer_token',
+    false,
+    'system'
+) ON CONFLICT (name) DO NOTHING;
+
+-- SEDAP Template
+INSERT INTO integration_template (name, type, description, config_schema, payload_template, auth_type, system_template, created_by)
+VALUES (
+    'SEDAP BMS Integration',
+    'sedap',
+    'SEDAP.Express integration for Battle Management Systems (BMS) using CSV over REST',
+    '{"endpoint_url": {"type": "string", "required": true, "description": "SEDAP.Express API endpoint"}, "timeout": {"type": "integer", "default": 30}}'::jsonb,
+    NULL,  -- SEDAP uses custom CSV format, not Jinja2
+    'none',
+    true,
+    'system'
+) ON CONFLICT (name) DO NOTHING;
+
+-- Email Template
+INSERT INTO integration_template (name, type, description, config_schema, payload_template, auth_type, system_template, created_by)
+VALUES (
+    'Email Notification',
+    'email',
+    'Send incident alerts via email',
+    '{"smtp_host": {"type": "string", "required": true}, "smtp_port": {"type": "integer", "default": 587}, "from_email": {"type": "string", "required": true}, "to_emails": {"type": "array", "required": true, "description": "List of recipient email addresses"}}'::jsonb,
+    'Subject: [SIMS] {{incident.priority | upper}} - {{incident.title}}
+
+Incident ID: {{incident.incident_id}}
+Priority: {{incident.priority}}
+Category: {{incident.category}}
+Status: {{incident.status}}
+
+Description:
+{{incident.description}}
+
+Location:
+Latitude: {{incident.latitude}}
+Longitude: {{incident.longitude}}
+Heading: {{incident.heading}}
+
+Reported by: {{incident.user_phone}}
+Reported at: {{incident.created_at}}
+
+{% if incident.image_url %}
+Image: {{incident.image_url}}
+{% endif %}
+{% if incident.audio_url %}
+Audio: {{incident.audio_url}}
+{% endif %}
+{% if incident.audio_transcript %}
+Audio Transcript: {{incident.audio_transcript}}
+{% endif %}
+
+Tags: {{incident.tags | join(", ")}}
+',
+    'basic_auth',
+    false,
+    'system'
+) ON CONFLICT (name) DO NOTHING;

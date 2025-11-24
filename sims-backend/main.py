@@ -17,10 +17,13 @@ from sqlalchemy.orm import Session
 from dashboard import dashboard
 from incident_chat import incident_page
 from organizations import organizations_page
+from integration_dashboard import integration_dashboard_page
 from transcription_service import TranscriptionService
 from endpoints.incident import incident_router
 from endpoints.organization import organization_router
 from endpoints.responder import responder_router
+from endpoints.integration import integration_router
+from endpoints.inbound_webhook import inbound_webhook_router
 from db.connection import get_db
 # Import all models to ensure SQLAlchemy relationships are resolved
 import models
@@ -63,10 +66,15 @@ transcription_service = TranscriptionService()
 app.include_router(incident_router)
 app.include_router(organization_router)
 app.include_router(responder_router)
+app.include_router(integration_router)
+app.include_router(inbound_webhook_router)
 
 # Import responder portal to register NiceGUI routes
 import responder_portal
 responder_portal.init_responder_portal()
+
+# Register integration plugins
+import plugins.register_plugins  # This auto-registers all plugins on import
 
 
 # Startup function
@@ -266,6 +274,13 @@ async def organizations():
     """Organization management page"""
     async with theme.frame('Organizations'):
         await organizations_page()
+
+
+@ui.page('/integrations')
+async def integrations():
+    """Integration management page"""
+    async with theme.frame('Integration Management'):
+        integration_dashboard_page()
 
 
 @ui.page('/health')
