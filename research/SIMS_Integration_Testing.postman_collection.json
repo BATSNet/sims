@@ -1,0 +1,552 @@
+{
+	"info": {
+		"_postman_id": "sims-integration-test-001",
+		"name": "SIMS Integration System - Testing",
+		"description": "Complete test collection for SIMS integration system. Tests webhook creation, incident delivery, and inbound webhooks.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Setup - List Integration Templates",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/template",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"template"
+					]
+				},
+				"description": "List all available integration templates. Should show Generic Webhook, SEDAP BMS, and Email Notification."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Create Webhook Integration",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 201) {",
+							"    var jsonData = pm.response.json();",
+							"    pm.environment.set(\"integration_id\", jsonData.id);",
+							"    pm.environment.set(\"organization_id\", jsonData.organization_id);",
+							"    console.log(\"Integration ID saved: \" + jsonData.id);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Check if webhook_site_url is set",
+							"if (!pm.environment.get(\"webhook_site_url\")) {",
+							"    console.log(\"WARNING: webhook_site_url not set. Visit https://webhook.site and set your unique URL in environment variables.\");",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organization_id\": 1,\n  \"template_id\": 1,\n  \"name\": \"Test Webhook Integration\",\n  \"description\": \"Testing webhook delivery to webhook.site\",\n  \"config\": {\n    \"endpoint_url\": \"{{webhook_site_url}}\",\n    \"timeout\": 30,\n    \"method\": \"POST\",\n    \"custom_headers\": {\n      \"X-Source\": \"SIMS-Test\"\n    }\n  },\n  \"auth_credentials\": {},\n  \"trigger_filters\": {},\n  \"active\": true,\n  \"created_by\": \"postman_test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization"
+					]
+				},
+				"description": "Create a webhook integration for organization 1. Make sure to set your webhook.site URL in the environment variable `webhook_site_url`."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Test Webhook Connection",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization/{{organization_id}}/{{integration_id}}/test",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization",
+						"{{organization_id}}",
+						"{{integration_id}}",
+						"test"
+					]
+				},
+				"description": "Test connection to the webhook. Should return success if webhook.site is reachable."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Create Test Incident (Triggers Delivery)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 201 || pm.response.code === 200) {",
+							"    var jsonData = pm.response.json();",
+							"    pm.environment.set(\"incident_id\", jsonData.id);",
+							"    pm.environment.set(\"incident_formatted_id\", jsonData.incidentId);",
+							"    console.log(\"Incident created: \" + jsonData.incidentId);",
+							"    console.log(\"Check your webhook.site URL for the delivered payload!\");",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Test Security Incident - Webhook Integration\",\n  \"description\": \"This is a test incident to verify webhook delivery is working correctly. Check webhook.site for the payload.\",\n  \"latitude\": 52.520007,\n  \"longitude\": 13.404954,\n  \"heading\": 45.0,\n  \"user_phone\": \"+491234567890\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/incident/create",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"incident",
+						"create"
+					]
+				},
+				"description": "Create a test incident. This will trigger auto-classification and assignment to organization 1, which will then deliver the incident via the webhook integration to webhook.site."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Check Delivery Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/delivery/incident/{{incident_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"delivery",
+						"incident",
+						"{{incident_id}}"
+					]
+				},
+				"description": "Check delivery status for the incident. Shows all delivery attempts, status codes, response bodies, and timing information."
+			},
+			"response": []
+		},
+		{
+			"name": "6. List Organization Integrations",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization/1?active_only=true",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization",
+						"1"
+					],
+					"query": [
+						{
+							"key": "active_only",
+							"value": "true"
+						}
+					]
+				},
+				"description": "List all active integrations for organization 1."
+			},
+			"response": []
+		},
+		{
+			"name": "7. Manually Assign Incident (Trigger Delivery)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organization_id\": 1,\n  \"notes\": \"Manually assigned via Postman test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/incident/{{incident_formatted_id}}/assign",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"incident",
+						"{{incident_formatted_id}}",
+						"assign"
+					]
+				},
+				"description": "Manually assign an incident to organization 1. This will trigger delivery via all active integrations."
+			},
+			"response": []
+		},
+		{
+			"name": "8. Create Inbound Webhook",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 201) {",
+							"    var jsonData = pm.response.json();",
+							"    pm.environment.set(\"inbound_webhook_token\", jsonData.webhook_token);",
+							"    pm.environment.set(\"inbound_auth_token\", jsonData.auth_token);",
+							"    pm.environment.set(\"inbound_webhook_id\", jsonData.id);",
+							"    console.log(\"Inbound webhook created!\");",
+							"    console.log(\"Webhook URL: \" + jsonData.webhook_url);",
+							"    console.log(\"Auth Token: \" + jsonData.auth_token);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Test External Source\",\n  \"description\": \"Testing inbound webhook for external incident sources\",\n  \"source_name\": \"External Test System\",\n  \"source_type\": \"test\",\n  \"field_mapping\": {\n    \"title\": \"$.event.title\",\n    \"description\": \"$.event.description\",\n    \"latitude\": \"$.location.lat\",\n    \"longitude\": \"$.location.lng\",\n    \"user_phone\": \"$.reporter.phone\"\n  },\n  \"default_values\": {\n    \"priority\": \"high\",\n    \"category\": \"External Report\"\n  },\n  \"auto_assign_to_org\": 1,\n  \"allowed_ips\": [],\n  \"active\": true,\n  \"created_by\": \"postman_test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/webhook/inbound",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"webhook",
+						"inbound"
+					]
+				},
+				"description": "Create an inbound webhook endpoint that can receive incidents from external sources. The auth_token in the response is needed to send data to this webhook."
+			},
+			"response": []
+		},
+		{
+			"name": "9. Send Incident to Inbound Webhook",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    var jsonData = pm.response.json();",
+							"    console.log(\"Incident created from webhook: \" + jsonData.incident_id);",
+							"    console.log(\"You can now check the dashboard or use GET /api/incident to see this incident\");",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{inbound_auth_token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"event\": {\n    \"title\": \"Incident from External System\",\n    \"description\": \"This incident was sent via inbound webhook from an external monitoring system. It demonstrates the bidirectional integration capability.\"\n  },\n  \"location\": {\n    \"lat\": 52.520007,\n    \"lng\": 13.404954\n  },\n  \"reporter\": {\n    \"phone\": \"+491234567890\"\n  },\n  \"timestamp\": \"2025-11-24T15:30:00Z\",\n  \"metadata\": {\n    \"external_id\": \"EXT-12345\",\n    \"severity\": \"high\"\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/webhook/inbound/{{inbound_webhook_token}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"webhook",
+						"inbound",
+						"{{inbound_webhook_token}}"
+					]
+				},
+				"description": "Send an incident from an external source to the inbound webhook. This will create a new incident in SIMS and optionally auto-assign it to an organization."
+			},
+			"response": []
+		},
+		{
+			"name": "10. List All Incidents",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/incident/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"incident",
+						""
+					]
+				},
+				"description": "List all incidents to verify both the directly created incident and the one received via inbound webhook."
+			},
+			"response": []
+		},
+		{
+			"name": "11. Get Organization Delivery Stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/delivery/organization/1",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"delivery",
+						"organization",
+						"1"
+					]
+				},
+				"description": "Get all delivery attempts for organization 1. Shows delivery history, success/failure rates, and timing."
+			},
+			"response": []
+		},
+		{
+			"name": "12. Update Integration (Deactivate)",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"active\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization/{{organization_id}}/{{integration_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization",
+						"{{organization_id}}",
+						"{{integration_id}}"
+					]
+				},
+				"description": "Deactivate the webhook integration. Future incidents will not be delivered to this integration."
+			},
+			"response": []
+		},
+		{
+			"name": "13. Delete Integration",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization/{{organization_id}}/{{integration_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization",
+						"{{organization_id}}",
+						"{{integration_id}}"
+					]
+				},
+				"description": "Delete the webhook integration. Use with caution - this cannot be undone."
+			},
+			"response": []
+		},
+		{
+			"name": "Bonus - Create Email Integration",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organization_id\": 1,\n  \"template_id\": 3,\n  \"name\": \"Email Alert Integration\",\n  \"description\": \"Send email notifications for critical incidents\",\n  \"config\": {\n    \"smtp_host\": \"smtp.gmail.com\",\n    \"smtp_port\": 587,\n    \"from_email\": \"your-email@gmail.com\",\n    \"to_emails\": [\"recipient@example.com\"],\n    \"use_tls\": true\n  },\n  \"auth_credentials\": {\n    \"username\": \"your-email@gmail.com\",\n    \"password\": \"your-app-password\"\n  },\n  \"trigger_filters\": {\n    \"priorities\": [\"critical\", \"high\"]\n  },\n  \"active\": true,\n  \"created_by\": \"postman_test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization"
+					]
+				},
+				"description": "Create an email integration. Requires valid SMTP credentials. For Gmail, use an App Password instead of your account password."
+			},
+			"response": []
+		},
+		{
+			"name": "Bonus - Create SEDAP Integration",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organization_id\": 1,\n  \"template_id\": 2,\n  \"name\": \"SEDAP BMS Integration\",\n  \"description\": \"Forward incidents to Battle Management System via SEDAP.Express\",\n  \"config\": {\n    \"endpoint_url\": \"http://10.3.1.127:80/SEDAPEXPRESS\",\n    \"timeout\": 30,\n    \"sender_id\": \"SIMS\",\n    \"classification\": \"U\"\n  },\n  \"auth_credentials\": {},\n  \"active\": true,\n  \"created_by\": \"postman_test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/integration/organization",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"integration",
+						"organization"
+					]
+				},
+				"description": "Create a SEDAP integration for military BMS. Requires SEDAP.Express endpoint to be available."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "webhook_site_url",
+			"value": "https://webhook.site/YOUR-UNIQUE-ID",
+			"type": "string"
+		},
+		{
+			"key": "integration_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "organization_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "incident_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "incident_formatted_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "inbound_webhook_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "inbound_auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "inbound_webhook_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

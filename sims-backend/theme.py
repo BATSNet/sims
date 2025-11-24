@@ -91,6 +91,12 @@ def inject_custom_css():
                 text-decoration: none !important;
             }
 
+            /* Remove tab panel background */
+            .q-tab-panel {
+                background: transparent !important;
+                padding: 0 !important;
+            }
+
             /* Menu labels use title font */
             .q-drawer .q-item__label {
                 font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -138,8 +144,10 @@ def inject_custom_css():
 
             /* Container for table and other content with max width and padding */
             .content-container {
+                min-width: 72rem;
                 max-width: 96rem;
-                margin: 0 auto;
+                margin-left: 0;
+                margin-right: auto;
                 padding-left: 0;
                 padding-right: 0;
             }
@@ -641,6 +649,11 @@ async def frame(title: str = "SIMS Command"):
             with ui.link(target='/organizations').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline w-full'):
                 ui.icon('corporate_fare', size='md')
                 ui.label('Organizations').classes('title-font')
+
+            # Integrations link
+            with ui.link(target='/integrations').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline w-full'):
+                ui.icon('hub', size='md')
+                ui.label('Integrations').classes('title-font')
 
         # Logout button at bottom
         with ui.column().classes('w-full p-6 mt-auto'):
