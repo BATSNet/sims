@@ -654,187 +654,76 @@ def integration_dashboard_page():
 
     def show_template_details(template: Dict):
         """Show detailed template information dialog"""
-        with ui.dialog() as dialog, ui.card().classes('w-full max-w-3xl bg-[#0a1929]'):
-            ui.label(template['name']).classes('text-2xl font-bold mb-2')
-            ui.label(f"Type: {template['type']}").classes('text-sm text-[#63ABFF] mb-6')
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
+            with ui.row().classes('w-full items-center justify-between mb-4'):
+                ui.label(template['name']).classes('text-2xl font-bold')
+                ui.badge(template['type'].upper()).classes('text-sm')
 
             if template.get('description'):
-                ui.label('Description').classes('text-lg font-bold mb-2')
-                ui.label(template['description']).classes('text-gray-400 mb-6')
+                ui.label(template['description']).classes('text-gray-500 mb-6')
 
-            # Configuration schema
-            ui.label('Required Configuration').classes('text-lg font-bold mb-2')
+            template_type = template['type']
+
+            # What it does
+            ui.label('What it does').classes('text-lg font-semibold mb-2')
+            overviews = {
+                'webhook': 'Sends incident data in real-time to external services via HTTP POST.',
+                'sedap': 'Formats incident data as CSV and sends it to military Battle Management Systems.',
+                'email': 'Sends incident alerts via email to configured recipients.'
+            }
+            ui.label(overviews.get(template_type, template.get('description', ''))).classes('text-sm mb-6')
+
+            # How to configure
+            ui.label('How to configure').classes('text-lg font-semibold mb-2')
+
+            with ui.expansion('Step 1: Batch Assign', icon='people').classes('w-full mb-2'):
+                ui.label('Select multiple organizations and click "Assign to Selected" to create integrations for all at once.').classes('text-sm')
+
+            with ui.expansion('Step 2: Configure Each Organization', icon='settings').classes('w-full mb-2'):
+                config_help = {
+                    'webhook': 'Each organization needs its own webhook URL. Go to "Manage Integrations", click EDIT, and enter the webhook endpoint for that organization (e.g., Zapier webhook, n8n endpoint).',
+                    'sedap': 'All organizations share the same SEDAP endpoint (configured in .env). No per-organization configuration needed.',
+                    'email': 'Each organization needs recipient email addresses. Go to "Manage Integrations", click EDIT, and enter the email addresses.'
+                }
+                ui.label(config_help.get(template_type, 'Configure in Manage Integrations section.')).classes('text-sm')
+
+            with ui.expansion('Step 3: Share Config Across Organizations', icon='share').classes('w-full mb-6'):
+                ui.label('If multiple organizations use the same endpoint (e.g., same Zapier account), you can:').classes('text-sm mb-2')
+                ui.label('1. Configure one organization completely').classes('text-sm ml-4')
+                ui.label('2. Copy the config JSON from that organization').classes('text-sm ml-4')
+                ui.label('3. Paste it into other organizations').classes('text-sm ml-4')
+                ui.label('This makes batch configuration fast and consistent.').classes('text-sm ml-4 font-semibold mt-2')
+
+            # Required fields
+            ui.label('Required configuration fields').classes('text-lg font-semibold mb-2')
             config_schema = template.get('config_schema', {})
             if config_schema:
                 with ui.column().classes('w-full gap-2 mb-6'):
                     for field, details in config_schema.items():
-                        field_type = details.get('type', 'string') if isinstance(details, dict) else 'string'
-                        required = details.get('required', False) if isinstance(details, dict) else False
-                        desc = details.get('description', '') if isinstance(details, dict) else ''
-
-                        with ui.element('div').classes('p-3 rounded bg-[#0d2637]'):
-                            with ui.row().classes('items-center gap-2 mb-1'):
-                                ui.label(field).classes('font-bold')
-                                if required:
-                                    ui.badge('Required', color='red').classes('text-xs')
-                                ui.label(f"({field_type})").classes('text-xs text-gray-500')
-                            if desc:
-                                ui.label(desc).classes('text-sm text-gray-400')
+                        with ui.card().classes('w-full'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.label(field).classes('font-semibold')
+                                if isinstance(details, dict):
+                                    if details.get('required'):
+                                        ui.badge('Required', color='red')
+                                    ui.label(f"({details.get('type', 'string')})").classes('text-sm text-gray-500')
+                            if isinstance(details, dict) and details.get('description'):
+                                ui.label(details['description']).classes('text-sm text-gray-600')
             else:
-                ui.label('No specific configuration required').classes('text-gray-400 mb-6')
+                ui.label('No specific configuration required').classes('text-sm text-gray-500 mb-6')
 
-            # Authentication
-            ui.label('Authentication').classes('text-lg font-bold mb-2')
-            auth_type = template.get('auth_type', 'none')
-            auth_schema = template.get('auth_schema', {})
-
-            if auth_type and auth_type != 'none':
-                ui.label(f"Type: {auth_type}").classes('text-gray-400 mb-2')
-                if auth_schema:
-                    with ui.column().classes('w-full gap-2 mb-6'):
-                        for field, details in auth_schema.items():
-                            with ui.element('div').classes('p-3 rounded bg-[#0d2637]'):
-                                ui.label(field).classes('font-bold mb-1')
-                                if isinstance(details, dict) and details.get('description'):
-                                    ui.label(details['description']).classes('text-sm text-gray-400')
-            else:
-                ui.label('No authentication required').classes('text-gray-400 mb-6')
-
-            # Configuration instructions
-            ui.label('How to Use This Template').classes('text-lg font-bold mb-2')
-            template_type = template['type']
-
-            config_instructions = {
-                'webhook': {
-                    'overview': 'Webhooks send incident data in real-time to external services via HTTP POST. When an incident is created, SIMS automatically pushes the data to your configured endpoint.',
-                    'batch_info': 'When batch assigned, the integration uses a default webhook endpoint. You must edit each organization integration to configure the actual webhook URL for that organization.',
-                    'steps': [
-                        '1. BATCH ASSIGN this template to organizations (creates placeholder integration)',
-                        '2. Go to "Manage Integrations" tab',
-                        '3. Find each organization and click EDIT',
-                        '4. Enter the webhook URL in Config section (endpoint_url field)',
-                        '5. Add authentication if required (bearer_token in Auth section)',
-                        '6. Click Update to save'
-                    ],
-                    'config_fields': [
-                        'endpoint_url: The full webhook URL to POST incident data to',
-                        'bearer_token: (Optional) Authentication token for the webhook',
-                        'timeout: (Optional) Request timeout in seconds (default: 30)'
-                    ],
-                    'where': 'Works with: Zapier, Make.com, n8n, webhook.site, custom HTTP endpoints, Discord webhooks, Slack webhooks'
-                },
-                'sedap': {
-                    'overview': 'SEDAP integration formats incident data as CSV and sends it to military Battle Management Systems via the SEDAP.Express API.',
-                    'batch_info': 'Batch assignment is PERFECT for SEDAP. All military organizations use the same SEDAP endpoint configured in your environment variables (SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD). No per-organization configuration needed.',
-                    'steps': [
-                        '1. BATCH ASSIGN this template to all military organizations',
-                        '2. DONE - SEDAP uses shared environment configuration',
-                        '3. All incidents from military orgs automatically forward to BMS',
-                        '4. Ensure SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD are set in .env file'
-                    ],
-                    'config_fields': [
-                        'SEDAP_ENDPOINT: Configured in backend .env file (shared by all orgs)',
-                        'SEDAP_USERNAME: Configured in backend .env file',
-                        'SEDAP_PASSWORD: Configured in backend .env file',
-                        'No per-organization config required - uses environment settings'
-                    ],
-                    'where': 'Required for: Bundeswehr BMS integration, NATO STANAG 4406 systems, military command & control centers'
-                },
-                'email': {
-                    'overview': 'Email notifications send incident alerts via SMTP. Configure SMTP server details and recipient addresses to receive incident reports by email.',
-                    'batch_info': 'Batch assignment creates placeholder integrations. You must edit each organization to specify recipient email addresses and verify SMTP settings.',
-                    'steps': [
-                        '1. BATCH ASSIGN this template to organizations',
-                        '2. Ensure SMTP settings in .env (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)',
-                        '3. Go to "Manage Integrations" tab',
-                        '4. Find each organization and click EDIT',
-                        '5. Add recipient email addresses in Config section (to_email field)',
-                        '6. Update from_email if needed',
-                        '7. Click Update to save'
-                    ],
-                    'config_fields': [
-                        'to_email: Recipient email address(es), comma-separated for multiple',
-                        'from_email: (Optional) Sender email, defaults to SMTP_USER from .env',
-                        'subject_template: (Optional) Custom email subject line',
-                        'SMTP server: Configured in backend .env file (SMTP_HOST, SMTP_PORT, etc.)'
-                    ],
-                    'where': 'Works with: Gmail, Outlook/Office365, SendGrid, Mailgun, Mailtrap, any SMTP server'
-                }
+            # Compatible systems
+            compatible_systems = {
+                'webhook': 'Zapier, Make.com, n8n, webhook.site, Discord, Slack, custom endpoints',
+                'sedap': 'Bundeswehr BMS, NATO STANAG 4406, military command centers',
+                'email': 'Gmail, Outlook, SendGrid, Mailgun, any SMTP server'
             }
+            if template_type in compatible_systems:
+                ui.label('Works with').classes('text-lg font-semibold mb-2')
+                ui.label(compatible_systems[template_type]).classes('text-sm mb-6')
 
-            if template_type in config_instructions:
-                instructions = config_instructions[template_type]
-
-                # Overview
-                with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(99, 171, 255, 0.1); border-left: 3px solid #63ABFF;'):
-                    ui.label(instructions['overview']).classes('text-sm text-gray-300')
-
-                # Batch assignment info
-                ui.label('Batch Assignment').classes('text-md font-bold mb-2 text-[#ffa600]')
-                with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(255, 166, 0, 0.1); border-left: 3px solid #ffa600;'):
-                    ui.label(instructions['batch_info']).classes('text-sm text-gray-300')
-
-                # Steps
-                ui.label('Setup Steps').classes('text-md font-bold mb-2')
-                with ui.column().classes('w-full gap-2 mb-4'):
-                    for step in instructions['steps']:
-                        with ui.row().classes('items-start gap-2'):
-                            ui.label(step.split('.')[0] + '.').classes('text-[#63ABFF] font-bold')
-                            ui.label('.'.join(step.split('.')[1:])).classes('text-gray-400')
-
-                # Configuration fields
-                ui.label('Configuration Fields').classes('text-md font-bold mb-2')
-                with ui.column().classes('w-full gap-1 mb-4'):
-                    for field in instructions['config_fields']:
-                        with ui.row().classes('items-start gap-2'):
-                            ui.label('›').classes('text-[#63ABFF]')
-                            ui.label(field).classes('text-sm text-gray-400')
-
-                # Where to use
-                with ui.element('div').classes('w-full p-3 rounded bg-[#0d2637] border border-[#1e3a4f] mb-6'):
-                    ui.label('Compatible Systems').classes('font-bold text-[#63ABFF] mb-1')
-                    ui.label(instructions['where']).classes('text-sm text-gray-400')
-
-            # Use cases
-            ui.label('Common Use Cases').classes('text-lg font-bold mb-2')
-
-            use_cases = {
-                'webhook': [
-                    'Send incident alerts to Zapier workflows',
-                    'Forward incidents to n8n automation',
-                    'Trigger custom webhooks on incident creation',
-                    'Integrate with Make.com scenarios',
-                    'Connect to custom HTTP endpoints'
-                ],
-                'sedap': [
-                    'Forward incidents to military BMS (Battle Management System)',
-                    'SEDAP.Express integration via CSV format',
-                    'NATO STANAG 4406 compatible messaging',
-                    'Bundeswehr command & control integration'
-                ],
-                'email': [
-                    'Send email notifications to responders',
-                    'Alert on-call teams via email',
-                    'Forward incident reports to distribution lists',
-                    'Automated incident documentation via email'
-                ]
-            }
-
-            if template_type in use_cases:
-                with ui.column().classes('w-full gap-2 mb-6'):
-                    for use_case in use_cases[template_type]:
-                        with ui.row().classes('items-start gap-2'):
-                            ui.label('•').classes('text-[#63ABFF]')
-                            ui.label(use_case).classes('text-gray-400')
-
-            # Example configuration
-            if template.get('payload_template'):
-                ui.label('Payload Template').classes('text-lg font-bold mb-2')
-                ui.label('This is the data structure sent to the endpoint:').classes('text-sm text-gray-400 mb-2')
-                with ui.element('div').classes('w-full p-3 rounded bg-[#0d2637] overflow-x-auto'):
-                    ui.label(template['payload_template'][:500] + ('...' if len(template['payload_template']) > 500 else '')).classes('text-xs font-mono text-gray-300')
-
-            ui.button('Close', on_click=dialog.close).classes('mt-6').props('outline')
+            with ui.row().classes('w-full gap-2'):
+                ui.button('Close', on_click=dialog.close).props('flat')
 
         dialog.open()
 
@@ -857,7 +746,7 @@ def integration_dashboard_page():
                                 'INFO',
                                 on_click=lambda t=template: show_template_details(t),
                                 icon='info'
-                            ).props('flat dense').classes('text-xs font-mono')
+                            ).props('outline').classes('text-white')
             else:
                 ui.label('NO TEMPLATES AVAILABLE').classes('text-xs font-mono text-gray-600')
 
@@ -886,57 +775,82 @@ def integration_dashboard_page():
             return []
 
     def show_integration_config(integration):
-        """Show integration configuration dialog with edit capability"""
+        """Show integration configuration dialog with edit capability and shareable config"""
+        import json
+
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
-            ui.label(f'{integration["name"]} - Configuration').classes('text-lg font-bold mb-4')
+            ui.label(f'{integration["name"]} - {integration["organization_name"]}').classes('text-xl font-bold mb-2')
+            ui.label(integration['template_type'].upper()).classes('text-sm text-gray-500 mb-4')
 
-            # Organization info
-            with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
-                ui.label(f"ORGANIZATION: {integration['organization_name']}").classes('text-sm font-mono text-[#63ABFF]')
-                ui.label(f"TYPE: {integration['template_type'].upper()}").classes('text-xs font-mono text-gray-400')
-
-            # Configuration instructions based on type
-            ui.label('Configuration').classes('text-md font-bold mb-2')
-
+            # Configuration fields based on type
             if integration['template_type'] == 'webhook':
-                ui.label('Webhook Configuration:').classes('text-sm font-mono mb-2')
-                with ui.column().classes('w-full gap-2 mb-4'):
-                    ui.label('1. Enter your webhook endpoint URL below').classes('text-xs text-gray-400')
-                    ui.label('2. Add authentication token if required').classes('text-xs text-gray-400')
-                    ui.label('3. Test the connection').classes('text-xs text-gray-400')
-                    ui.label('4. When an incident is assigned to this organization, SIMS will POST incident data to your webhook URL').classes('text-xs text-gray-400')
+                ui.label('Webhook URL').classes('text-sm font-semibold mb-1')
+                endpoint_input = ui.input(placeholder='https://webhook.site/...', value=integration['config'].get('endpoint_url', '')).classes('w-full mb-3')
 
-                endpoint_input = ui.input('Webhook URL', value=integration['config'].get('endpoint_url', '')).classes('w-full')
-                token_input = ui.input('Bearer Token (optional)', value=integration['auth_credentials'].get('token', '')).classes('w-full')
+                ui.label('Bearer Token (optional)').classes('text-sm font-semibold mb-1')
+                token_input = ui.input(placeholder='Your authentication token', value=integration['auth_credentials'].get('token', ''), password=True, password_toggle_button=True).classes('w-full mb-4')
 
             elif integration['template_type'] == 'sedap':
-                ui.label('SEDAP/BMS Configuration:').classes('text-sm font-mono mb-2')
-                with ui.column().classes('w-full gap-2 mb-4'):
-                    ui.label('SEDAP uses shared environment configuration (SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD)').classes('text-xs text-[#63ABFF]')
-                    ui.label('No per-organization configuration required - incidents automatically forward to BMS').classes('text-xs text-gray-400')
-                ui.label('No configuration needed - integration is ready to use').classes('text-sm font-mono text-green-400')
+                with ui.card().classes('w-full mb-4'):
+                    ui.label('SEDAP uses shared environment configuration').classes('text-sm mb-1')
+                    ui.label('No per-organization configuration needed').classes('text-sm text-gray-500')
                 endpoint_input = None
                 token_input = None
 
             elif integration['template_type'] == 'email':
-                ui.label('Email Configuration:').classes('text-sm font-mono mb-2')
-                with ui.column().classes('w-full gap-2 mb-4'):
-                    ui.label('1. Enter recipient email address(es) below').classes('text-xs text-gray-400')
-                    ui.label('2. Separate multiple emails with commas').classes('text-xs text-gray-400')
-                    ui.label('3. SMTP server is configured in backend environment').classes('text-xs text-gray-400')
-
-                endpoint_input = ui.input('To Email(s)', value=integration['config'].get('to_email', '')).classes('w-full')
+                ui.label('Recipient Email(s)').classes('text-sm font-semibold mb-1')
+                endpoint_input = ui.input(placeholder='email@example.com, another@example.com', value=integration['config'].get('to_email', '')).classes('w-full mb-4')
                 token_input = None
 
-            # Current status
-            ui.label('Status').classes('text-md font-bold mb-2 mt-4')
-            status_color = '#34d399' if integration['active'] else '#FF4444'
-            ui.label(f"Active: {'YES' if integration['active'] else 'NO'}").classes('text-sm font-mono').style(f'color: {status_color};')
+            # Shareable config section
+            if integration['template_type'] != 'sedap':
+                with ui.expansion('Share Configuration', icon='share').classes('w-full mb-4'):
+                    ui.label('Copy this JSON to apply the same config to other organizations:').classes('text-sm mb-2')
 
-            if integration.get('last_delivery_at'):
-                ui.label(f"Last delivery: {integration['last_delivery_at']}").classes('text-xs font-mono text-gray-400')
-                if integration.get('last_delivery_status'):
-                    ui.label(f"Status: {integration['last_delivery_status']}").classes('text-xs font-mono text-gray-400')
+                    # Create shareable config (without org-specific data)
+                    shareable_config = {
+                        'config': integration['config'].copy(),
+                        'auth_credentials': integration['auth_credentials'].copy() if integration['auth_credentials'] else {}
+                    }
+                    config_json = json.dumps(shareable_config, indent=2)
+
+                    config_textarea = ui.textarea(value=config_json).classes('w-full font-mono text-sm').props('rows=8')
+
+                    with ui.row().classes('w-full gap-2'):
+                        def copy_config():
+                            ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(config_json)})')
+                            ui.notify('Config copied to clipboard', type='positive')
+
+                        ui.button('Copy to Clipboard', on_click=copy_config, icon='content_copy').props('size=sm outline')
+
+                        def paste_config():
+                            try:
+                                pasted = json.loads(config_textarea.value)
+                                if endpoint_input and pasted.get('config', {}).get('endpoint_url'):
+                                    endpoint_input.value = pasted['config']['endpoint_url']
+                                if endpoint_input and integration['template_type'] == 'email' and pasted.get('config', {}).get('to_email'):
+                                    endpoint_input.value = pasted['config']['to_email']
+                                if token_input and pasted.get('auth_credentials', {}).get('token'):
+                                    token_input.value = pasted['auth_credentials']['token']
+                                ui.notify('Config pasted successfully', type='positive')
+                            except Exception as e:
+                                ui.notify(f'Invalid JSON: {str(e)}', type='negative')
+
+                        ui.button('Paste from JSON', on_click=paste_config, icon='content_paste').props('size=sm outline')
+
+            # Status
+            with ui.card().classes('w-full mb-4'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.label('Status:').classes('font-semibold')
+                    if integration['active']:
+                        ui.badge('ACTIVE', color='positive')
+                    else:
+                        ui.badge('INACTIVE', color='negative')
+
+                if integration.get('last_delivery_at'):
+                    ui.label(f"Last delivery: {integration['last_delivery_at']}").classes('text-sm text-gray-500')
+                    if integration.get('last_delivery_status'):
+                        ui.label(f"Status: {integration['last_delivery_status']}").classes('text-sm text-gray-500')
 
             # Actions
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
@@ -1046,43 +960,38 @@ def integration_dashboard_page():
             logger.error(f"Error deleting integration: {e}")
             ui.notify(f'Error deleting integration: {str(e)}', type='negative')
 
-    # Main UI - wrap in content container with proper width
-    with ui.element('div').classes('content-container'):
+    # Main UI - centered, full width, clean layout like reddit-observer
+    with ui.column().classes('w-full my-6 gap-8'):
         # Push to Organizations section
         ui.label('PUSH TO ORGANIZATIONS').classes('text-md font-bold mb-4 text-gray-400 tracking-wider')
 
-        # Command bar - tactical overlay style
-        with ui.element('div').classes('w-full mb-4').style('background: rgba(13, 38, 55, 0.6); padding: 1rem;'):
-            with ui.row().classes('w-full gap-4 items-center'):
-                ui.label('FILTER').classes('text-xs font-mono text-gray-400 tracking-wider')
-                search_input = ui.input('', placeholder='SEARCH...').classes('w-64').props('dense outlined')
+        # Command bar
+        with ui.row().classes('w-full gap-4 items-center mb-4'):
+            search_input = ui.input('Search', placeholder='Filter organizations...').classes('flex-1')
 
-                type_filter = ui.select(
-                    label='',
-                    options={
-                        'all': 'ALL',
-                        'military': 'MIL',
-                        'police': 'POL',
-                        'fire': 'FIRE',
-                        'medical': 'MED',
-                        'civil_defense': 'CIV',
-                        'government': 'GOV',
-                        'other': 'OTHER'
-                    },
-                    value='all'
-                ).classes('w-32').props('dense outlined')
+            type_filter = ui.select(
+                label='Type',
+                options={
+                    'all': 'All',
+                    'military': 'Military',
+                    'police': 'Police',
+                    'fire': 'Fire',
+                    'medical': 'Medical',
+                    'civil_defense': 'Civil Defense',
+                    'government': 'Government',
+                    'other': 'Other'
+                },
+                value='all'
+            ).classes('w-48')
 
-                selection_buttons_row = ui.row().classes('gap-1')
+            selection_buttons_row = ui.row().classes('gap-2')
 
-                ui.label('|').classes('text-gray-600')
+            template_select = ui.select(
+                label='Integration Template',
+                options={},
+            ).classes('w-64')
 
-                ui.label('INTEGRATION').classes('text-xs font-mono text-gray-400 tracking-wider')
-                template_select = ui.select(
-                    label='',
-                    options={},
-                ).classes('flex-1')
-
-                assign_button_row = ui.row().classes('gap-2')
+            assign_button_row = ui.row().classes('gap-2')
 
         # Organizations table
         orgs_table_container = ui.column().classes('w-full')
@@ -1099,43 +1008,43 @@ def integration_dashboard_page():
         # Push to SIMS section
         ui.label('PUSH TO SIMS').classes('text-md font-bold mb-4 mt-8 text-gray-400 tracking-wider')
 
-        # Tactical information blocks with icons
+        # Information cards
         with ui.row().classes('w-full gap-4'):
             # Mobile App
-            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
-                with ui.row().classes('w-full items-center gap-3 mb-3'):
-                    ui.icon('smartphone', size='xl').classes('text-[#63ABFF]')
-                    ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 tracking-wider')
-                ui.label('ANDROID').classes('text-sm font-mono text-[#63ABFF] mb-3')
-                with ui.column().classes('gap-1'):
-                    ui.label('› Download and install SIMS APK').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Register with organization code').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Report incidents with photos, voice, location').classes('text-xs font-mono text-gray-300')
-                    ui.label('› iOS version planned').classes('text-xs font-mono text-gray-600 mt-2')
+            with ui.card().classes('flex-1'):
+                with ui.row().classes('w-full items-center gap-2 mb-2'):
+                    ui.icon('smartphone', size='md')
+                    ui.label('Mobile App').classes('text-lg font-semibold')
+                ui.label('Android').classes('text-sm text-gray-500 mb-2')
+                with ui.column().classes('gap-1 text-sm'):
+                    ui.label('• Download and install SIMS APK')
+                    ui.label('• Register with organization code')
+                    ui.label('• Report incidents with photos, voice, location')
+                    ui.label('• iOS version planned').classes('text-gray-500 italic')
 
             # Inbound Webhook
-            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #ffa600;'):
-                with ui.row().classes('w-full items-center gap-3 mb-3'):
-                    ui.icon('webhook', size='xl').classes('text-[#ffa600]')
-                    ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 tracking-wider')
-                ui.label('EXTERNAL SYSTEMS').classes('text-sm font-mono text-[#ffa600] mb-3')
-                with ui.column().classes('gap-1'):
-                    ui.label('› Create webhook endpoint in system').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Configure field mapping (JSONPath)').classes('text-xs font-mono text-gray-300')
-                    ui.label('› External systems POST to webhook URL').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Auto-routes to assigned organization').classes('text-xs font-mono text-gray-300')
+            with ui.card().classes('flex-1'):
+                with ui.row().classes('w-full items-center gap-2 mb-2'):
+                    ui.icon('webhook', size='md')
+                    ui.label('Inbound Webhook').classes('text-lg font-semibold')
+                ui.label('External Systems').classes('text-sm text-gray-500 mb-2')
+                with ui.column().classes('gap-1 text-sm'):
+                    ui.label('• Create webhook endpoint in system')
+                    ui.label('• Configure field mapping (JSONPath)')
+                    ui.label('• External systems POST to webhook URL')
+                    ui.label('• Auto-routes to assigned organization')
 
             # API Direct
-            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #34d399;'):
-                with ui.row().classes('w-full items-center gap-3 mb-3'):
-                    ui.icon('code', size='xl').classes('text-[#34d399]')
-                    ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 tracking-wider')
-                ui.label('POST /api/incident/create').classes('text-sm font-mono text-[#34d399] mb-3')
-                with ui.column().classes('gap-1'):
-                    ui.label('› Send incidents programmatically').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Full control over incident fields').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Supports media file uploads').classes('text-xs font-mono text-gray-300')
-                    ui.label('› Requires authentication token').classes('text-xs font-mono text-gray-300')
+            with ui.card().classes('flex-1'):
+                with ui.row().classes('w-full items-center gap-2 mb-2'):
+                    ui.icon('code', size='md')
+                    ui.label('Direct API').classes('text-lg font-semibold')
+                ui.label('POST /api/incident/create').classes('text-sm text-gray-500 mb-2')
+                with ui.column().classes('gap-1 text-sm'):
+                    ui.label('• Send incidents programmatically')
+                    ui.label('• Full control over incident fields')
+                    ui.label('• Supports media file uploads')
+                    ui.label('• Requires authentication token')
 
     # Organizations table logic
     selected_orgs = set()
@@ -1160,53 +1069,45 @@ def integration_dashboard_page():
         ]
 
         with orgs_table_container:
-            # Tactical table header
-            with ui.element('div').classes('w-full').style('border-left: 2px solid #1e3a4f;'):
-                with ui.row().classes('w-full p-2 font-mono text-xs').style('background: rgba(13, 38, 55, 0.4); border-bottom: 1px solid #1e3a4f;'):
-                    ui.label('SEL').classes('w-12 text-gray-500')
-                    ui.label('ORGANIZATION').classes('flex-1 text-gray-500')
-                    ui.label('TYPE').classes('w-24 text-gray-500')
-                    ui.label('ASSIGNED').classes('flex-1 text-gray-500')
+            # Prepare table data
+            columns = [
+                {'name': 'select', 'label': '', 'field': 'select', 'align': 'left', 'sortable': False},
+                {'name': 'name', 'label': 'Organization', 'field': 'name', 'align': 'left', 'sortable': True},
+                {'name': 'type', 'label': 'Type', 'field': 'type', 'align': 'left', 'sortable': True},
+                {'name': 'integrations', 'label': 'Assigned Integrations', 'field': 'integrations', 'align': 'left', 'sortable': False},
+            ]
 
-                # Table rows - dense, tactical
-                for org in filtered_orgs:
-                    with ui.row().classes('w-full p-2 items-center').style('border-bottom: 1px solid rgba(30, 58, 79, 0.3); transition: background 0.2s;').on('mouseenter', lambda e: e.sender.style('background: rgba(13, 38, 55, 0.3)')).on('mouseleave', lambda e: e.sender.style('background: transparent')):
-                        # Checkbox
-                        checkbox = ui.checkbox('', value=org['id'] in selected_orgs)
-                        checkbox.classes('w-12')
+            rows = []
+            for org in filtered_orgs:
+                # Format integrations
+                if org['integrations']:
+                    integration_names = ', '.join([i['name'] for i in org['integrations']])
+                else:
+                    integration_names = 'None'
 
-                        def make_toggle(org_id, cb):
-                            def toggle():
-                                if cb.value:
-                                    selected_orgs.add(org_id)
-                                else:
-                                    selected_orgs.discard(org_id)
-                            return toggle
+                rows.append({
+                    'id': org['id'],
+                    'name': org['name'],
+                    'type': org['type'].replace('_', ' ').title(),
+                    'integrations': integration_names,
+                    'selected': org['id'] in selected_orgs
+                })
 
-                        checkbox.on_value_change(make_toggle(org['id'], checkbox))
+            # Create table with selection
+            table = ui.table(columns=columns, rows=rows, row_key='id', selection='multiple').props('flat dense').classes('w-full')
+            table.add_slot('body-cell-select', '''
+                <q-td :props="props">
+                    <q-checkbox v-model="props.selected" />
+                </q-td>
+            ''')
 
-                        # Organization name
-                        ui.label(org['name']).classes('flex-1 text-sm font-mono')
+            # Update selected_orgs when selection changes
+            def on_selection_change(e):
+                selected_orgs.clear()
+                for row in e.value:
+                    selected_orgs.add(row['id'])
 
-                        # Type badge - military style
-                        type_codes = {
-                            'military': ('MIL', '#63ABFF'),
-                            'police': ('POL', '#818cf8'),
-                            'fire': ('FIRE', '#FF4444'),
-                            'medical': ('MED', '#34d399'),
-                            'civil_defense': ('CIV', '#ffa600'),
-                            'government': ('GOV', '#9ca3af'),
-                            'other': ('OTH', '#6b7280')
-                        }
-                        code, color = type_codes.get(org['type'], ('OTH', '#6b7280'))
-                        ui.label(code).classes('w-24 text-xs font-mono font-bold').style(f'color: {color};')
-
-                        # Current integrations - compact
-                        if org['integrations']:
-                            integration_names = ', '.join([i['name'] for i in org['integrations']])
-                            ui.label(integration_names).classes('flex-1 text-xs font-mono text-[#63ABFF]')
-                        else:
-                            ui.label('---').classes('flex-1 text-xs font-mono text-gray-600')
+            table.on('selection', on_selection_change)
 
     # Button handlers
     def select_all_orgs():
