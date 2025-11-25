@@ -861,6 +861,191 @@ def integration_dashboard_page():
             else:
                 ui.label('NO TEMPLATES AVAILABLE').classes('text-xs font-mono text-gray-600')
 
+    async def fetch_all_integrations():
+        """Fetch all organization integrations"""
+        try:
+            async with httpx.AsyncClient() as client:
+                # Get all organizations
+                orgs_response = await client.get(f'{BASE_URL}/api/organization/')
+                orgs = orgs_response.json()
+
+                all_integrations = []
+                for org in orgs:
+                    # Get integrations for this org
+                    int_response = await client.get(f'{BASE_URL}/api/integration/organization/{org["id"]}')
+                    integrations = int_response.json()
+
+                    for integration in integrations:
+                        integration['organization_name'] = org['name']
+                        integration['organization_short'] = org.get('short_name', org['name'])
+                        all_integrations.append(integration)
+
+                return all_integrations
+        except Exception as e:
+            logger.error(f"Error fetching integrations: {e}")
+            return []
+
+    def show_integration_config(integration):
+        """Show integration configuration dialog with edit capability"""
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
+            ui.label(f'{integration["name"]} - Configuration').classes('text-lg font-bold mb-4')
+
+            # Organization info
+            with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
+                ui.label(f"ORGANIZATION: {integration['organization_name']}").classes('text-sm font-mono text-[#63ABFF]')
+                ui.label(f"TYPE: {integration['template_type'].upper()}").classes('text-xs font-mono text-gray-400')
+
+            # Configuration instructions based on type
+            ui.label('Configuration').classes('text-md font-bold mb-2')
+
+            if integration['template_type'] == 'webhook':
+                ui.label('Webhook Configuration:').classes('text-sm font-mono mb-2')
+                with ui.column().classes('w-full gap-2 mb-4'):
+                    ui.label('1. Enter your webhook endpoint URL below').classes('text-xs text-gray-400')
+                    ui.label('2. Add authentication token if required').classes('text-xs text-gray-400')
+                    ui.label('3. Test the connection').classes('text-xs text-gray-400')
+                    ui.label('4. When an incident is assigned to this organization, SIMS will POST incident data to your webhook URL').classes('text-xs text-gray-400')
+
+                endpoint_input = ui.input('Webhook URL', value=integration['config'].get('endpoint_url', '')).classes('w-full')
+                token_input = ui.input('Bearer Token (optional)', value=integration['auth_credentials'].get('token', '')).classes('w-full')
+
+            elif integration['template_type'] == 'sedap':
+                ui.label('SEDAP/BMS Configuration:').classes('text-sm font-mono mb-2')
+                with ui.column().classes('w-full gap-2 mb-4'):
+                    ui.label('SEDAP uses shared environment configuration (SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD)').classes('text-xs text-[#63ABFF]')
+                    ui.label('No per-organization configuration required - incidents automatically forward to BMS').classes('text-xs text-gray-400')
+                ui.label('No configuration needed - integration is ready to use').classes('text-sm font-mono text-green-400')
+                endpoint_input = None
+                token_input = None
+
+            elif integration['template_type'] == 'email':
+                ui.label('Email Configuration:').classes('text-sm font-mono mb-2')
+                with ui.column().classes('w-full gap-2 mb-4'):
+                    ui.label('1. Enter recipient email address(es) below').classes('text-xs text-gray-400')
+                    ui.label('2. Separate multiple emails with commas').classes('text-xs text-gray-400')
+                    ui.label('3. SMTP server is configured in backend environment').classes('text-xs text-gray-400')
+
+                endpoint_input = ui.input('To Email(s)', value=integration['config'].get('to_email', '')).classes('w-full')
+                token_input = None
+
+            # Current status
+            ui.label('Status').classes('text-md font-bold mb-2 mt-4')
+            status_color = '#34d399' if integration['active'] else '#FF4444'
+            ui.label(f"Active: {'YES' if integration['active'] else 'NO'}").classes('text-sm font-mono').style(f'color: {status_color};')
+
+            if integration.get('last_delivery_at'):
+                ui.label(f"Last delivery: {integration['last_delivery_at']}").classes('text-xs font-mono text-gray-400')
+                if integration.get('last_delivery_status'):
+                    ui.label(f"Status: {integration['last_delivery_status']}").classes('text-xs font-mono text-gray-400')
+
+            # Actions
+            with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                ui.button('Close', on_click=dialog.close).props('flat')
+
+                async def save_config():
+                    try:
+                        # Build update payload
+                        update_data = {
+                            'name': integration['name'],
+                            'description': integration.get('description', ''),
+                            'config': integration['config'].copy(),
+                            'auth_credentials': integration['auth_credentials'].copy() if integration['auth_credentials'] else {},
+                            'trigger_filters': integration.get('trigger_filters', {}),
+                            'active': integration['active']
+                        }
+
+                        # Update config based on type
+                        if endpoint_input:
+                            if integration['template_type'] == 'webhook':
+                                update_data['config']['endpoint_url'] = endpoint_input.value
+                            elif integration['template_type'] == 'email':
+                                update_data['config']['to_email'] = endpoint_input.value
+
+                        if token_input and token_input.value:
+                            update_data['auth_credentials']['token'] = token_input.value
+                            update_data['auth_credentials']['auth_type'] = 'bearer_token'
+
+                        # Save via API
+                        async with httpx.AsyncClient() as client:
+                            response = await client.put(
+                                f'{BASE_URL}/api/integration/organization/{integration["id"]}',
+                                json=update_data
+                            )
+                            response.raise_for_status()
+
+                        ui.notify('Configuration saved successfully', type='positive')
+                        dialog.close()
+                        await render_manage_integrations()
+                    except Exception as e:
+                        logger.error(f"Error saving integration config: {e}")
+                        ui.notify(f'Error saving configuration: {str(e)}', type='negative')
+
+                if integration['template_type'] != 'sedap':
+                    ui.button('Save Configuration', on_click=save_config, icon='save').props('color=primary')
+
+        dialog.open()
+
+    async def render_manage_integrations():
+        """Render all integrations with edit/delete actions"""
+        manage_integrations_container.clear()
+
+        all_integrations = await fetch_all_integrations()
+
+        with manage_integrations_container:
+            if all_integrations:
+                for integration in all_integrations:
+                    # Tactical integration card
+                    with ui.element('div').classes('w-full mb-2 p-3').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #1e3a4f;'):
+                        with ui.row().classes('w-full items-center gap-4'):
+                            # Integration info
+                            with ui.column().classes('flex-grow gap-1'):
+                                ui.label(f"{integration['organization_short']} - {integration['name']}").classes('text-sm font-mono font-bold')
+                                ui.label(f"TYPE: {integration['template_type'].upper()}").classes('text-xs font-mono text-[#63ABFF]')
+
+                                # Show config status
+                                if integration['template_type'] == 'webhook':
+                                    has_url = bool(integration['config'].get('endpoint_url'))
+                                    status = 'CONFIGURED' if has_url else 'NEEDS CONFIGURATION'
+                                    color = '#34d399' if has_url else '#ffa600'
+                                    ui.label(status).classes('text-xs font-mono').style(f'color: {color};')
+                                elif integration['template_type'] == 'email':
+                                    has_email = bool(integration['config'].get('to_email'))
+                                    status = 'CONFIGURED' if has_email else 'NEEDS CONFIGURATION'
+                                    color = '#34d399' if has_email else '#ffa600'
+                                    ui.label(status).classes('text-xs font-mono').style(f'color: {color};')
+                                else:
+                                    ui.label('READY').classes('text-xs font-mono text-green-400')
+
+                            # Actions
+                            with ui.row().classes('gap-1'):
+                                ui.button(
+                                    'EDIT',
+                                    on_click=lambda i=integration: show_integration_config(i),
+                                    icon='edit'
+                                ).props('flat dense').classes('text-xs font-mono')
+
+                                ui.button(
+                                    'DELETE',
+                                    on_click=lambda i=integration: delete_integration(i),
+                                    icon='delete'
+                                ).props('flat dense').classes('text-xs font-mono')
+            else:
+                ui.label('NO INTEGRATIONS CONFIGURED').classes('text-xs font-mono text-gray-600')
+
+    async def delete_integration(integration):
+        """Delete an integration"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(f'{BASE_URL}/api/integration/organization/{integration["id"]}')
+                response.raise_for_status()
+
+            ui.notify(f'Deleted integration for {integration["organization_short"]}', type='positive')
+            await render_manage_integrations()
+            await load_orgs_table()
+        except Exception as e:
+            logger.error(f"Error deleting integration: {e}")
+            ui.notify(f'Error deleting integration: {str(e)}', type='negative')
+
     # Main UI - wrap in content container with proper width
     with ui.element('div').classes('content-container'):
         # Push to Organizations section
@@ -901,6 +1086,11 @@ def integration_dashboard_page():
 
         # Organizations table
         orgs_table_container = ui.column().classes('w-full')
+
+        # Manage Integrations section
+        ui.label('MANAGE INTEGRATIONS').classes('text-md font-bold mb-4 mt-8 text-gray-400 tracking-wider')
+        ui.label('Configure, test, and manage all active integrations. Click EDIT to set webhook URLs, email recipients, or other required settings.').classes('text-xs font-mono text-gray-400 mb-4')
+        manage_integrations_container = ui.column().classes('w-full')
 
         # Templates section
         ui.label('AVAILABLE TEMPLATES').classes('text-md font-bold mb-4 mt-8 text-gray-400 tracking-wider')
@@ -1088,7 +1278,8 @@ def integration_dashboard_page():
         else:
             ui.notify(f'Successfully assigned {success_count} integrations', type='positive')
 
-        # Reload table
+        # Reload tables
+        await render_manage_integrations()
         await load_orgs_table()
 
     # Create buttons now that handlers are defined - tactical style
@@ -1112,6 +1303,7 @@ def integration_dashboard_page():
             template_select.options = {t['id']: t['name'] for t in templates}
             template_select.update()
         render_templates()
+        await render_manage_integrations()
         await load_orgs_table()
 
     ui.timer(0.1, initial_load, once=True)
