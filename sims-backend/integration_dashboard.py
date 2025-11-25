@@ -1074,6 +1074,7 @@ def integration_dashboard_page():
                 {'name': 'name', 'label': 'Organization', 'field': 'name', 'align': 'left', 'sortable': True},
                 {'name': 'type', 'label': 'Type', 'field': 'type', 'align': 'left', 'sortable': True},
                 {'name': 'integrations', 'label': 'Assigned Integrations', 'field': 'integrations', 'align': 'left', 'sortable': False},
+                {'name': 'actions', 'label': 'Actions', 'field': 'actions', 'align': 'center', 'sortable': False},
             ]
 
             rows = []
@@ -1089,6 +1090,7 @@ def integration_dashboard_page():
                     'name': org['name'],
                     'type': org['type'].replace('_', ' ').title(),
                     'integrations': integration_names,
+                    'org_data': org,  # Store full org data for actions
                 })
 
             # Create table - selection='multiple' adds ONE checkbox column automatically
@@ -1098,6 +1100,30 @@ def integration_dashboard_page():
                 row_key='id',
                 selection='multiple'
             ).props('flat dense').classes('w-full')
+
+            # Add actions column with configure buttons
+            table.add_slot('body-cell-actions', '''
+                <q-td :props="props" auto-width>
+                    <q-btn v-if="props.row.integrations !== 'None'"
+                           flat dense
+                           icon="settings"
+                           size="sm"
+                           @click="$parent.$emit('configure', props.row.id)">
+                        <q-tooltip>Configure Integrations</q-tooltip>
+                    </q-btn>
+                </q-td>
+            ''')
+
+            # Handle configure button clicks
+            async def handle_configure(e):
+                org_id = e.args
+                # Find the org and its integrations
+                org = next((o for o in filtered_orgs if o['id'] == org_id), None)
+                if org and org['integrations']:
+                    # Show config for first integration (or show list if multiple)
+                    show_integration_config(org['integrations'][0])
+
+            table.on('configure', handle_configure)
 
             # Bind selection to our selected_orgs set
             def update_selection(e):
