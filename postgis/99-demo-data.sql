@@ -55,3 +55,25 @@ INSERT INTO organization (name, short_name, type, contact_person, phone, email, 
 ('Flughafen Berlin Brandenburg', 'BER', 'other', 'Sicherheitsdirektor Schwarz', '+49 30 609170', 'info@berlin-airport.de', '+49 30 609170-112', 'Willy-Brandt-Platz', 'Schonefeld', 'Germany', ST_SetSRID(ST_MakePoint(13.5033, 52.3667), 4326), ARRAY['airport_security', 'fire_fighting', 'medical'], 'Berlin Airport', true, 'Berlin Brandenburg Airport Authority', false, NULL),
 
 ('Flughafen Frankfurt', 'FRA', 'other', 'Leiter Werkfeuerwehr Keller', '+49 69 690-0', 'security@fraport.de', '+49 69 690-77110', 'Frankfurt Airport', 'Frankfurt', 'Germany', ST_SetSRID(ST_MakePoint(8.5622, 50.0379), 4326), ARRAY['airport_security', 'fire_fighting', 'hazmat', 'medical'], 'Frankfurt Airport', true, 'Frankfurt Airport Authority', false, NULL);
+
+-- ============================================================================
+-- DEMO INTEGRATIONS - Auto-assign BMS to Bundeswehr Organizations
+-- ============================================================================
+
+-- Assign SEDAP BMS Integration to all military organizations
+INSERT INTO organization_integration (organization_id, template_id, name, description, config, auth_credentials, trigger_filters, active, created_by)
+SELECT
+    o.id,
+    t.id,
+    'BMS Integration',
+    'Automatic SEDAP integration for Battle Management System',
+    '{"endpoint_url": "https://sedap.example.com/api/incidents", "timeout": 30}'::jsonb,
+    '{}'::jsonb,
+    '{"priorities": ["critical", "high"]}'::jsonb,
+    true,
+    'demo_seed'
+FROM organization o
+CROSS JOIN integration_template t
+WHERE o.type = 'military'
+AND t.name = 'SEDAP BMS Integration'
+ON CONFLICT DO NOTHING;

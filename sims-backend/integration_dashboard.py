@@ -53,6 +53,25 @@ async def fetch_organization_integrations(org_id: Optional[int] = None) -> List[
         return []
 
 
+async def fetch_all_organizations_with_integrations() -> List[Dict]:
+    """Fetch all organizations with their integrations"""
+    try:
+        orgs = await fetch_organizations()
+        result = []
+        for org in orgs:
+            org_integrations = await fetch_organization_integrations(org['id'])
+            result.append({
+                'id': org['id'],
+                'name': org['name'],
+                'type': org['type'],
+                'integrations': org_integrations
+            })
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching organization integrations: {e}")
+        return []
+
+
 async def create_organization_integration(data: Dict) -> Optional[Dict]:
     """Create a new organization integration"""
     try:
@@ -452,64 +471,134 @@ def integration_dashboard_page():
         selected_org_name = org['name'] if org else ''
         await refresh_integrations()
 
-    def show_batch_assign_dialog():
+    async def show_batch_assign_dialog():
         """Show dialog for batch assigning organizations to an integration"""
         if not templates:
             ui.notify('No integration templates available', type='warning')
             return
 
-        with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl bg-[#0a1929]'):
-            ui.label('Batch Assign Integration').classes('text-2xl font-bold mb-6')
+        # Fetch all organizations with their integrations
+        orgs_with_integrations = await fetch_all_organizations_with_integrations()
+
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-6xl bg-[#0a1929]'):
+            ui.label('Batch Assign Integration').classes('text-2xl font-bold mb-4')
             ui.label('Create the same integration for multiple organizations at once').classes('text-gray-400 mb-6')
 
             # Template selection
-            template_select = ui.select(
-                label='Integration Type',
-                options={t['id']: f"{t['name']}" for t in templates},
-                value=templates[0]['id'] if templates else None
-            ).classes('w-full mb-4')
+            with ui.row().classes('w-full gap-4 mb-6'):
+                template_select = ui.select(
+                    label='Integration Type',
+                    options={t['id']: f"{t['name']}" for t in templates},
+                    value=templates[0]['id'] if templates else None
+                ).classes('flex-1')
 
             # Basic info
-            ui.label('Basic Information').classes('text-lg font-bold mt-4 mb-2')
-            name_input = ui.input('Name', placeholder='My Integration').classes('w-full')
-            desc_input = ui.textarea('Description (optional)', placeholder='Describe this integration').classes('w-full')
-
-            # Config
-            ui.label('Configuration').classes('text-lg font-bold mt-4 mb-2')
-            endpoint_input = ui.input('Endpoint URL', placeholder='https://webhook.site/...').classes('w-full')
-            timeout_input = ui.number('Timeout (seconds)', value=30, min=5, max=300).classes('w-full')
-
-            # Auth
-            ui.label('Authentication').classes('text-lg font-bold mt-4 mb-2')
-            auth_token_input = ui.input('Bearer Token / API Key (optional)', password=True, password_toggle_button=True).classes('w-full')
-
-            # Filters
-            ui.label('Trigger Filters (optional)').classes('text-lg font-bold mt-4 mb-2')
+            ui.label('Integration Configuration').classes('text-lg font-bold mb-2')
             with ui.row().classes('w-full gap-4'):
-                priorities_input = ui.input('Priorities', placeholder='critical,high').classes('flex-1')
-                categories_input = ui.input('Categories', placeholder='Security,Military').classes('flex-1')
+                name_input = ui.input('Name', placeholder='My Integration').classes('flex-1')
+                endpoint_input = ui.input('Endpoint URL', placeholder='https://webhook.site/...').classes('flex-1')
 
-            active_switch = ui.switch('Active', value=True).classes('mt-4')
+            with ui.row().classes('w-full gap-4 mb-4'):
+                timeout_input = ui.number('Timeout (seconds)', value=30, min=5, max=300).classes('flex-1')
+                auth_token_input = ui.input('Bearer Token / API Key (optional)', password=True, password_toggle_button=True).classes('flex-1')
 
-            # Organization selection
+            # Organization selection with table
             ui.label('Select Organizations').classes('text-lg font-bold mt-6 mb-2')
-            ui.label('Choose which organizations should receive this integration').classes('text-sm text-gray-400 mb-3')
 
-            # Create checkboxes for organizations
-            org_checkboxes = {}
-            with ui.column().classes('w-full gap-2 max-h-60 overflow-y-auto'):
-                for org in organizations:
-                    org_checkboxes[org['id']] = ui.checkbox(org['name'], value=False)
+            # Search/filter
+            search_input = ui.input('Search organizations', placeholder='Filter by name or type...').classes('w-full mb-4')
 
-            with ui.row().classes('w-full gap-2 mt-4'):
-                ui.button('Select All', on_click=lambda: [cb.set_value(True) for cb in org_checkboxes.values()]).props('flat size=sm')
-                ui.button('Deselect All', on_click=lambda: [cb.set_value(False) for cb in org_checkboxes.values()]).props('flat size=sm')
+            # Table container
+            table_container = ui.column().classes('w-full')
+
+            selected_orgs = set()
+
+            def render_org_table():
+                table_container.clear()
+
+                # Filter organizations
+                search_term = search_input.value.lower() if search_input.value else ''
+                filtered_orgs = [
+                    org for org in orgs_with_integrations
+                    if search_term in org['name'].lower() or search_term in org['type'].lower()
+                ]
+
+                with table_container:
+                    # Table header
+                    with ui.element('div').classes('w-full border border-[#1e3a4f] rounded'):
+                        with ui.row().classes('w-full bg-[#0d2637] p-3 font-bold border-b border-[#1e3a4f]'):
+                            ui.label('Select').classes('w-20')
+                            ui.label('Organization').classes('flex-1')
+                            ui.label('Type').classes('w-32')
+                            ui.label('Current Integrations').classes('flex-1')
+
+                        # Table rows
+                        for org in filtered_orgs:
+                            with ui.row().classes('w-full p-3 border-b border-[#1e3a4f] items-center hover:bg-[#0d2637]'):
+                                # Checkbox
+                                checkbox = ui.checkbox('', value=org['id'] in selected_orgs)
+                                checkbox.classes('w-20')
+
+                                def make_toggle(org_id, cb):
+                                    def toggle():
+                                        if cb.value:
+                                            selected_orgs.add(org_id)
+                                        else:
+                                            selected_orgs.discard(org_id)
+                                    return toggle
+
+                                checkbox.on_value_change(make_toggle(org['id'], checkbox))
+
+                                # Organization name
+                                ui.label(org['name']).classes('flex-1')
+
+                                # Type
+                                type_colors = {
+                                    'military': 'bg-blue-900 text-blue-300',
+                                    'police': 'bg-indigo-900 text-indigo-300',
+                                    'fire': 'bg-red-900 text-red-300',
+                                    'medical': 'bg-green-900 text-green-300',
+                                    'civil_defense': 'bg-yellow-900 text-yellow-300',
+                                }
+                                color_class = type_colors.get(org['type'], 'bg-gray-800 text-gray-300')
+                                ui.label(org['type'].replace('_', ' ').title()).classes(f'w-32 px-2 py-1 rounded text-xs {color_class}')
+
+                                # Current integrations
+                                if org['integrations']:
+                                    integration_names = ', '.join([i['name'] for i in org['integrations']])
+                                    ui.label(integration_names).classes('flex-1 text-sm text-[#63ABFF]')
+                                else:
+                                    ui.label('None').classes('flex-1 text-sm text-gray-500')
+
+            # Update table on search
+            search_input.on_value_change(lambda: render_org_table())
+
+            # Button actions
+            def select_all_orgs():
+                selected_orgs.clear()
+                selected_orgs.update([org['id'] for org in orgs_with_integrations])
+                render_org_table()
+
+            def deselect_all_orgs():
+                selected_orgs.clear()
+                render_org_table()
+
+            def select_military():
+                selected_orgs.clear()
+                selected_orgs.update([org['id'] for org in orgs_with_integrations if org['type'] == 'military'])
+                render_org_table()
+
+            # Selection controls (must be after function definitions)
+            with ui.row().classes('w-full gap-2 mb-4'):
+                ui.button('Select All', icon='check_box', on_click=select_all_orgs).props('flat size=sm')
+                ui.button('Deselect All', icon='check_box_outline_blank', on_click=deselect_all_orgs).props('flat size=sm')
+                ui.button('Select Military', icon='shield', on_click=select_military).props('flat size=sm color=blue')
+
+            # Render initial table
+            render_org_table()
 
             async def batch_create():
                 try:
-                    # Get selected organizations
-                    selected_orgs = [org_id for org_id, checkbox in org_checkboxes.items() if checkbox.value]
-
                     if not selected_orgs:
                         ui.notify('Please select at least one organization', type='warning')
                         return
@@ -524,12 +613,6 @@ def integration_dashboard_page():
                     if auth_token_input.value:
                         auth_credentials['token'] = auth_token_input.value
 
-                    trigger_filters = {}
-                    if priorities_input.value:
-                        trigger_filters['priorities'] = [p.strip() for p in priorities_input.value.split(',')]
-                    if categories_input.value:
-                        trigger_filters['categories'] = [c.strip() for c in categories_input.value.split(',')]
-
                     # Create integration for each selected organization
                     success_count = 0
                     error_count = 0
@@ -540,11 +623,11 @@ def integration_dashboard_page():
                                 'organization_id': org_id,
                                 'template_id': template_select.value,
                                 'name': name_input.value,
-                                'description': desc_input.value,
+                                'description': '',
                                 'config': config,
                                 'auth_credentials': auth_credentials,
-                                'trigger_filters': trigger_filters if trigger_filters else None,
-                                'active': active_switch.value,
+                                'trigger_filters': None,
+                                'active': True,
                                 'created_by': 'dashboard_batch'
                             }
                             await create_organization_integration(data)
@@ -713,34 +796,34 @@ def integration_dashboard_page():
         dialog.open()
 
     def render_templates():
-        """Render templates list"""
+        """Render templates list - tactical style"""
         templates_container.clear()
         with templates_container:
             if templates:
                 for template in templates:
-                    with ui.element('div').classes('w-full mb-3 p-4 rounded border border-[#1e3a4f] hover:bg-[#0d2637] transition-all cursor-pointer'):
+                    # Tactical template card
+                    with ui.element('div').classes('w-full mb-2 p-3').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #1e3a4f; transition: all 0.2s;').on('mouseenter', lambda e: e.sender.style('background: rgba(13, 38, 55, 0.5); border-left: 2px solid #63ABFF;')).on('mouseleave', lambda e: e.sender.style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #1e3a4f;')):
                         with ui.row().classes('w-full items-center gap-4'):
-                            with ui.column().classes('flex-grow'):
-                                with ui.row().classes('items-center gap-2 mb-1'):
-                                    ui.label(template['name']).classes('text-lg font-bold')
-                                    ui.label(f"({template['type']})").classes('text-sm text-[#63ABFF]')
+                            with ui.column().classes('flex-grow gap-1'):
+                                ui.label(template['name'].upper()).classes('text-sm font-mono font-bold')
+                                ui.label(f"TYPE: {template['type'].upper()}").classes('text-xs font-mono text-[#63ABFF]')
                                 if template.get('description'):
-                                    ui.label(template['description']).classes('text-sm text-gray-400')
+                                    ui.label(template['description']).classes('text-xs font-mono text-gray-400')
 
                             ui.button(
-                                'View Details',
+                                'INFO',
                                 on_click=lambda t=template: show_template_details(t),
                                 icon='info'
-                            ).props('flat color=blue')
+                            ).props('flat dense').classes('text-xs font-mono')
             else:
-                ui.label('No templates available').classes('text-gray-400')
+                ui.label('NO TEMPLATES AVAILABLE').classes('text-xs font-mono text-gray-600')
 
     # Main UI - wrap in content container with proper width
     with ui.element('div').classes('content-container'):
         ui.label('Integration Management').classes('section-title')
 
         # Tabs
-        with ui.tabs().classes('w-full mb-4') as tabs:
+        with ui.tabs().classes('w-full mb-4 bg-transparent') as tabs:
             tab_integrations = ui.tab('Push to Organizations').classes('w-full')
             tab_templates = ui.tab('View Templates').classes('w-full')
             tab_connect = ui.tab('Push to SIMS').classes('w-full')
@@ -748,81 +831,246 @@ def integration_dashboard_page():
         with ui.tab_panels(tabs, value=tab_integrations).classes('w-full'):
             # Integrations tab
             with ui.tab_panel(tab_integrations).classes('w-full'):
-                # Organization selector
-                with ui.row().classes('w-full items-end gap-4 mb-6'):
-                    org_select = ui.select(
-                        label='Organization',
-                        options={},
-                        on_change=on_org_selected
-                    ).classes('flex-1')
+                # Command bar - tactical overlay style
+                with ui.element('div').classes('w-full mb-4').style('background: rgba(13, 38, 55, 0.6); padding: 1rem;'):
+                    with ui.row().classes('w-full gap-4 items-center'):
+                        ui.label('FILTER').classes('text-xs font-mono text-gray-400 tracking-wider')
+                        search_input = ui.input('', placeholder='SEARCH...').classes('w-64').props('dense outlined')
 
-                    ui.button(
-                        'Batch Assign',
-                        on_click=show_batch_assign_dialog,
-                        icon='group_add'
-                    ).props('outline')
+                        type_filter = ui.select(
+                            label='',
+                            options={
+                                'all': 'ALL',
+                                'military': 'MIL',
+                                'police': 'POL',
+                                'fire': 'FIRE',
+                                'medical': 'MED',
+                                'civil_defense': 'CIV',
+                                'government': 'GOV',
+                                'other': 'OTHER'
+                            },
+                            value='all'
+                        ).classes('w-32').props('dense outlined')
 
-                    ui.button(
-                        'New Integration',
-                        on_click=show_create_dialog,
-                        icon='add'
-                    ).props('color=primary')
+                        selection_buttons_row = ui.row().classes('gap-1')
 
-                # Stats section
-                stats_container = ui.column().classes('w-full mb-6')
+                        ui.label('|').classes('text-gray-600')
 
-                # Integrations list
-                integration_container = ui.column().classes('w-full')
+                        ui.label('INTEGRATION').classes('text-xs font-mono text-gray-400 tracking-wider')
+                        template_select = ui.select(
+                            label='',
+                            options={},
+                        ).classes('flex-1')
+
+                        assign_button_row = ui.row().classes('gap-2')
+
+                # Organizations table
+                orgs_table_container = ui.column().classes('w-full')
 
             # Templates tab
             with ui.tab_panel(tab_templates).classes('w-full'):
-                ui.label('Available Integration Templates').classes('text-xl font-bold mb-4')
-                ui.label('These are the types of integrations you can configure').classes('text-gray-400 mb-6')
                 templates_container = ui.column().classes('w-full')
 
             # Connect to SIMS tab
             with ui.tab_panel(tab_connect).classes('w-full'):
-                ui.label('How to Connect TO SIMS').classes('text-xl font-bold mb-2')
-                ui.label('Ways to send incidents into the SIMS system').classes('text-gray-400 mb-6')
-
+                # Tactical information blocks
                 with ui.row().classes('w-full gap-4'):
                     # Mobile App
-                    with ui.element('div').classes('flex-1 p-4 rounded border border-[#1e3a4f]'):
-                        ui.label('Mobile App').classes('text-lg font-bold mb-2')
-                        ui.label('Android').classes('text-sm text-[#63ABFF] mb-2')
-                        with ui.column().classes('gap-2'):
-                            ui.label('• Download and install SIMS APK').classes('text-sm text-gray-400')
-                            ui.label('• Register with organization code').classes('text-sm text-gray-400')
-                            ui.label('• Report incidents with photos, voice, location').classes('text-sm text-gray-400')
-                            ui.label('• iOS version planned for future release').classes('text-xs text-gray-500 mt-2')
+                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
+                        ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        ui.label('ANDROID').classes('text-sm font-mono text-[#63ABFF] mb-3')
+                        with ui.column().classes('gap-1'):
+                            ui.label('› Download and install SIMS APK').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Register with organization code').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Report incidents with photos, voice, location').classes('text-xs font-mono text-gray-300')
+                            ui.label('› iOS version planned').classes('text-xs font-mono text-gray-600 mt-2')
 
                     # Inbound Webhook
-                    with ui.element('div').classes('flex-1 p-4 rounded border border-[#1e3a4f]'):
-                        ui.label('Inbound Webhook').classes('text-lg font-bold mb-2')
-                        ui.label('Receive from external systems').classes('text-sm text-[#63ABFF] mb-2')
-                        with ui.column().classes('gap-2'):
-                            ui.label('• Create webhook endpoint in system').classes('text-sm text-gray-400')
-                            ui.label('• Configure field mapping (JSONPath)').classes('text-sm text-gray-400')
-                            ui.label('• External systems POST incidents to webhook URL').classes('text-sm text-gray-400')
-                            ui.label('• Auto-routes to assigned organization').classes('text-sm text-gray-400')
+                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #ffa600;'):
+                        ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        ui.label('EXTERNAL SYSTEMS').classes('text-sm font-mono text-[#ffa600] mb-3')
+                        with ui.column().classes('gap-1'):
+                            ui.label('› Create webhook endpoint in system').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Configure field mapping (JSONPath)').classes('text-xs font-mono text-gray-300')
+                            ui.label('› External systems POST to webhook URL').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Auto-routes to assigned organization').classes('text-xs font-mono text-gray-300')
 
                     # API Direct
-                    with ui.element('div').classes('flex-1 p-4 rounded border border-[#1e3a4f]'):
-                        ui.label('Direct API').classes('text-lg font-bold mb-2')
-                        ui.label('POST /api/incident/create').classes('text-sm text-[#63ABFF] mb-2')
-                        with ui.column().classes('gap-2'):
-                            ui.label('• Send incidents programmatically').classes('text-sm text-gray-400')
-                            ui.label('• Full control over incident fields').classes('text-sm text-gray-400')
-                            ui.label('• Supports media file uploads').classes('text-sm text-gray-400')
-                            ui.label('• Requires authentication token').classes('text-sm text-gray-400')
+                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #34d399;'):
+                        ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        ui.label('POST /api/incident/create').classes('text-sm font-mono text-[#34d399] mb-3')
+                        with ui.column().classes('gap-1'):
+                            ui.label('› Send incidents programmatically').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Full control over incident fields').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Supports media file uploads').classes('text-xs font-mono text-gray-300')
+                            ui.label('› Requires authentication token').classes('text-xs font-mono text-gray-300')
+
+    # Organizations table logic
+    selected_orgs = set()
+    orgs_with_integrations = []
+
+    async def load_orgs_table():
+        nonlocal orgs_with_integrations
+        orgs_with_integrations = await fetch_all_organizations_with_integrations()
+        render_orgs_table()
+
+    def render_orgs_table():
+        orgs_table_container.clear()
+
+        # Filter organizations
+        search_term = search_input.value.lower() if search_input.value else ''
+        type_filter_value = type_filter.value if type_filter.value else 'all'
+
+        filtered_orgs = [
+            org for org in orgs_with_integrations
+            if (search_term in org['name'].lower() or search_term in org['type'].lower())
+            and (type_filter_value == 'all' or org['type'] == type_filter_value)
+        ]
+
+        with orgs_table_container:
+            # Tactical table header
+            with ui.element('div').classes('w-full').style('border-left: 2px solid #1e3a4f;'):
+                with ui.row().classes('w-full p-2 font-mono text-xs').style('background: rgba(13, 38, 55, 0.4); border-bottom: 1px solid #1e3a4f;'):
+                    ui.label('SEL').classes('w-12 text-gray-500')
+                    ui.label('ORGANIZATION').classes('flex-1 text-gray-500')
+                    ui.label('TYPE').classes('w-24 text-gray-500')
+                    ui.label('ASSIGNED').classes('flex-1 text-gray-500')
+
+                # Table rows - dense, tactical
+                for org in filtered_orgs:
+                    with ui.row().classes('w-full p-2 items-center').style('border-bottom: 1px solid rgba(30, 58, 79, 0.3); transition: background 0.2s;').on('mouseenter', lambda e: e.sender.style('background: rgba(13, 38, 55, 0.3)')).on('mouseleave', lambda e: e.sender.style('background: transparent')):
+                        # Checkbox
+                        checkbox = ui.checkbox('', value=org['id'] in selected_orgs)
+                        checkbox.classes('w-12')
+
+                        def make_toggle(org_id, cb):
+                            def toggle():
+                                if cb.value:
+                                    selected_orgs.add(org_id)
+                                else:
+                                    selected_orgs.discard(org_id)
+                            return toggle
+
+                        checkbox.on_value_change(make_toggle(org['id'], checkbox))
+
+                        # Organization name
+                        ui.label(org['name']).classes('flex-1 text-sm font-mono')
+
+                        # Type badge - military style
+                        type_codes = {
+                            'military': ('MIL', '#63ABFF'),
+                            'police': ('POL', '#818cf8'),
+                            'fire': ('FIRE', '#FF4444'),
+                            'medical': ('MED', '#34d399'),
+                            'civil_defense': ('CIV', '#ffa600'),
+                            'government': ('GOV', '#9ca3af'),
+                            'other': ('OTH', '#6b7280')
+                        }
+                        code, color = type_codes.get(org['type'], ('OTH', '#6b7280'))
+                        ui.label(code).classes('w-24 text-xs font-mono font-bold').style(f'color: {color};')
+
+                        # Current integrations - compact
+                        if org['integrations']:
+                            integration_names = ', '.join([i['name'] for i in org['integrations']])
+                            ui.label(integration_names).classes('flex-1 text-xs font-mono text-[#63ABFF]')
+                        else:
+                            ui.label('---').classes('flex-1 text-xs font-mono text-gray-600')
+
+    # Button handlers
+    def select_all_orgs():
+        selected_orgs.clear()
+        selected_orgs.update([org['id'] for org in orgs_with_integrations])
+        render_orgs_table()
+
+    def deselect_all_orgs():
+        selected_orgs.clear()
+        render_orgs_table()
+
+    def select_filtered():
+        # Select only the currently filtered organizations
+        search_term = search_input.value.lower() if search_input.value else ''
+        type_filter_value = type_filter.value if type_filter.value else 'all'
+
+        filtered_org_ids = [
+            org['id'] for org in orgs_with_integrations
+            if (search_term in org['name'].lower() or search_term in org['type'].lower())
+            and (type_filter_value == 'all' or org['type'] == type_filter_value)
+        ]
+
+        selected_orgs.clear()
+        selected_orgs.update(filtered_org_ids)
+        render_orgs_table()
+
+    async def assign_to_selected():
+        if not selected_orgs:
+            ui.notify('Please select at least one organization', type='warning')
+            return
+
+        if not template_select.value:
+            ui.notify('Please select an integration type', type='warning')
+            return
+
+        # Get template info
+        template = next((t for t in templates if t['id'] == template_select.value), None)
+        if not template:
+            ui.notify('Invalid integration template', type='negative')
+            return
+
+        # Create integration for each selected organization
+        success_count = 0
+        error_count = 0
+
+        for org_id in selected_orgs:
+            try:
+                # Get the template config - use defaults for now
+                # Webhook/SEDAP/Email configs are handled by the template
+                data = {
+                    'organization_id': org_id,
+                    'template_id': template_select.value,
+                    'name': f'{template["name"]}',
+                    'description': f'Auto-assigned {template["name"]}',
+                    'config': {},  # Empty config, uses template defaults
+                    'auth_credentials': {},
+                    'trigger_filters': None,
+                    'active': True,
+                    'created_by': 'dashboard_batch'
+                }
+                await create_organization_integration(data)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"Error creating integration for org {org_id}: {e}")
+                error_count += 1
+
+        if error_count > 0:
+            ui.notify(f'Assigned {success_count} integrations, {error_count} failed', type='warning')
+        else:
+            ui.notify(f'Successfully assigned {success_count} integrations', type='positive')
+
+        # Reload table
+        await load_orgs_table()
+
+    # Create buttons now that handlers are defined - tactical style
+    with selection_buttons_row:
+        ui.button('ALL', on_click=select_all_orgs).props('flat dense').classes('text-xs font-mono')
+        ui.button('FLTRD', on_click=select_filtered).props('flat dense').classes('text-xs font-mono')
+        ui.button('NONE', on_click=deselect_all_orgs).props('flat dense').classes('text-xs font-mono')
+
+    # Add the assign button to top row - styled like logout button
+    with assign_button_row:
+        ui.button('Assign Selected', icon='send', on_click=assign_to_selected).props('outline color=white').classes('logout-btn')
+
+    # Wire up search and type filter
+    search_input.on_value_change(lambda: render_orgs_table())
+    type_filter.on_value_change(lambda: render_orgs_table())
 
     # Initial data load
     async def initial_load():
         await refresh_data()
-        if organizations:
-            org_select.options = {org['id']: org['name'] for org in organizations}
-            org_select.update()
+        if templates:
+            template_select.options = {t['id']: t['name'] for t in templates}
+            template_select.update()
         render_templates()
+        await load_orgs_table()
 
     ui.timer(0.1, initial_load, once=True)
 
