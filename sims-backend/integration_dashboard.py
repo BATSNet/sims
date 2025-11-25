@@ -869,7 +869,6 @@ def integration_dashboard_page():
         with ui.tabs().classes('w-full mb-4 bg-transparent') as tabs:
             tab_integrations = ui.tab('Push to Organizations').classes('w-full')
             tab_templates = ui.tab('View Templates').classes('w-full')
-            tab_connect = ui.tab('Push to SIMS').classes('w-full')
 
         with ui.tab_panels(tabs, value=tab_integrations).classes('w-full'):
             # Integrations tab
@@ -914,13 +913,16 @@ def integration_dashboard_page():
             with ui.tab_panel(tab_templates).classes('w-full'):
                 templates_container = ui.column().classes('w-full')
 
-            # Connect to SIMS tab
-            with ui.tab_panel(tab_connect).classes('w-full'):
-                # Tactical information blocks
+                # Push to SIMS section
+                ui.label('PUSH TO SIMS').classes('text-md font-bold mb-4 mt-6 text-gray-400 tracking-wider')
+
+                # Tactical information blocks with icons
                 with ui.row().classes('w-full gap-4'):
                     # Mobile App
                     with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
-                        ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        with ui.row().classes('w-full items-center gap-3 mb-3'):
+                            ui.icon('smartphone', size='xl').classes('text-[#63ABFF]')
+                            ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 tracking-wider')
                         ui.label('ANDROID').classes('text-sm font-mono text-[#63ABFF] mb-3')
                         with ui.column().classes('gap-1'):
                             ui.label('› Download and install SIMS APK').classes('text-xs font-mono text-gray-300')
@@ -930,7 +932,9 @@ def integration_dashboard_page():
 
                     # Inbound Webhook
                     with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #ffa600;'):
-                        ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        with ui.row().classes('w-full items-center gap-3 mb-3'):
+                            ui.icon('webhook', size='xl').classes('text-[#ffa600]')
+                            ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 tracking-wider')
                         ui.label('EXTERNAL SYSTEMS').classes('text-sm font-mono text-[#ffa600] mb-3')
                         with ui.column().classes('gap-1'):
                             ui.label('› Create webhook endpoint in system').classes('text-xs font-mono text-gray-300')
@@ -940,7 +944,9 @@ def integration_dashboard_page():
 
                     # API Direct
                     with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #34d399;'):
-                        ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 mb-3 tracking-wider')
+                        with ui.row().classes('w-full items-center gap-3 mb-3'):
+                            ui.icon('code', size='xl').classes('text-[#34d399]')
+                            ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 tracking-wider')
                         ui.label('POST /api/incident/create').classes('text-sm font-mono text-[#34d399] mb-3')
                         with ui.column().classes('gap-1'):
                             ui.label('› Send incidents programmatically').classes('text-xs font-mono text-gray-300')
