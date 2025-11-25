@@ -863,94 +863,89 @@ def integration_dashboard_page():
 
     # Main UI - wrap in content container with proper width
     with ui.element('div').classes('content-container'):
-        # Tabs
-        with ui.tabs().classes('w-full mb-4 bg-transparent') as tabs:
-            tab_integrations = ui.tab('Push to Organizations').classes('w-full')
-            tab_templates = ui.tab('View Templates').classes('w-full')
+        # Push to Organizations section
+        ui.label('PUSH TO ORGANIZATIONS').classes('text-md font-bold mb-4 text-gray-400 tracking-wider')
 
-        with ui.tab_panels(tabs, value=tab_integrations).classes('w-full'):
-            # Integrations tab
-            with ui.tab_panel(tab_integrations).classes('w-full'):
-                # Command bar - tactical overlay style
-                with ui.element('div').classes('w-full mb-4').style('background: rgba(13, 38, 55, 0.6); padding: 1rem;'):
-                    with ui.row().classes('w-full gap-4 items-center'):
-                        ui.label('FILTER').classes('text-xs font-mono text-gray-400 tracking-wider')
-                        search_input = ui.input('', placeholder='SEARCH...').classes('w-64').props('dense outlined')
+        # Command bar - tactical overlay style
+        with ui.element('div').classes('w-full mb-4').style('background: rgba(13, 38, 55, 0.6); padding: 1rem;'):
+            with ui.row().classes('w-full gap-4 items-center'):
+                ui.label('FILTER').classes('text-xs font-mono text-gray-400 tracking-wider')
+                search_input = ui.input('', placeholder='SEARCH...').classes('w-64').props('dense outlined')
 
-                        type_filter = ui.select(
-                            label='',
-                            options={
-                                'all': 'ALL',
-                                'military': 'MIL',
-                                'police': 'POL',
-                                'fire': 'FIRE',
-                                'medical': 'MED',
-                                'civil_defense': 'CIV',
-                                'government': 'GOV',
-                                'other': 'OTHER'
-                            },
-                            value='all'
-                        ).classes('w-32').props('dense outlined')
+                type_filter = ui.select(
+                    label='',
+                    options={
+                        'all': 'ALL',
+                        'military': 'MIL',
+                        'police': 'POL',
+                        'fire': 'FIRE',
+                        'medical': 'MED',
+                        'civil_defense': 'CIV',
+                        'government': 'GOV',
+                        'other': 'OTHER'
+                    },
+                    value='all'
+                ).classes('w-32').props('dense outlined')
 
-                        selection_buttons_row = ui.row().classes('gap-1')
+                selection_buttons_row = ui.row().classes('gap-1')
 
-                        ui.label('|').classes('text-gray-600')
+                ui.label('|').classes('text-gray-600')
 
-                        ui.label('INTEGRATION').classes('text-xs font-mono text-gray-400 tracking-wider')
-                        template_select = ui.select(
-                            label='',
-                            options={},
-                        ).classes('flex-1')
+                ui.label('INTEGRATION').classes('text-xs font-mono text-gray-400 tracking-wider')
+                template_select = ui.select(
+                    label='',
+                    options={},
+                ).classes('flex-1')
 
-                        assign_button_row = ui.row().classes('gap-2')
+                assign_button_row = ui.row().classes('gap-2')
 
-                # Organizations table
-                orgs_table_container = ui.column().classes('w-full')
+        # Organizations table
+        orgs_table_container = ui.column().classes('w-full')
 
-            # Templates tab
-            with ui.tab_panel(tab_templates).classes('w-full'):
-                templates_container = ui.column().classes('w-full')
+        # Templates section
+        ui.label('AVAILABLE TEMPLATES').classes('text-md font-bold mb-4 mt-8 text-gray-400 tracking-wider')
+        templates_container = ui.column().classes('w-full')
 
-                # Push to SIMS section
-                ui.label('PUSH TO SIMS').classes('text-md font-bold mb-4 mt-6 text-gray-400 tracking-wider')
+        # Push to SIMS section
+        ui.label('PUSH TO SIMS').classes('text-md font-bold mb-4 mt-8 text-gray-400 tracking-wider')
 
-                # Tactical information blocks with icons
-                with ui.row().classes('w-full gap-4'):
-                    # Mobile App
-                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
-                        with ui.row().classes('w-full items-center gap-3 mb-3'):
-                            ui.icon('smartphone', size='xl').classes('text-[#63ABFF]')
-                            ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 tracking-wider')
-                        ui.label('ANDROID').classes('text-sm font-mono text-[#63ABFF] mb-3')
-                        with ui.column().classes('gap-1'):
-                            ui.label('› Download and install SIMS APK').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Register with organization code').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Report incidents with photos, voice, location').classes('text-xs font-mono text-gray-300')
-                            ui.label('› iOS version planned').classes('text-xs font-mono text-gray-600 mt-2')
+        # Tactical information blocks with icons
+        with ui.row().classes('w-full gap-4'):
+            # Mobile App
+            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #63ABFF;'):
+                with ui.row().classes('w-full items-center gap-3 mb-3'):
+                    ui.icon('smartphone', size='xl').classes('text-[#63ABFF]')
+                    ui.label('MOBILE APP').classes('text-xs font-mono text-gray-400 tracking-wider')
+                ui.label('ANDROID').classes('text-sm font-mono text-[#63ABFF] mb-3')
+                with ui.column().classes('gap-1'):
+                    ui.label('› Download and install SIMS APK').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Register with organization code').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Report incidents with photos, voice, location').classes('text-xs font-mono text-gray-300')
+                    ui.label('› iOS version planned').classes('text-xs font-mono text-gray-600 mt-2')
 
-                    # Inbound Webhook
-                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #ffa600;'):
-                        with ui.row().classes('w-full items-center gap-3 mb-3'):
-                            ui.icon('webhook', size='xl').classes('text-[#ffa600]')
-                            ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 tracking-wider')
-                        ui.label('EXTERNAL SYSTEMS').classes('text-sm font-mono text-[#ffa600] mb-3')
-                        with ui.column().classes('gap-1'):
-                            ui.label('› Create webhook endpoint in system').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Configure field mapping (JSONPath)').classes('text-xs font-mono text-gray-300')
-                            ui.label('› External systems POST to webhook URL').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Auto-routes to assigned organization').classes('text-xs font-mono text-gray-300')
+            # Inbound Webhook
+            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #ffa600;'):
+                with ui.row().classes('w-full items-center gap-3 mb-3'):
+                    ui.icon('webhook', size='xl').classes('text-[#ffa600]')
+                    ui.label('INBOUND WEBHOOK').classes('text-xs font-mono text-gray-400 tracking-wider')
+                ui.label('EXTERNAL SYSTEMS').classes('text-sm font-mono text-[#ffa600] mb-3')
+                with ui.column().classes('gap-1'):
+                    ui.label('› Create webhook endpoint in system').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Configure field mapping (JSONPath)').classes('text-xs font-mono text-gray-300')
+                    ui.label('› External systems POST to webhook URL').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Auto-routes to assigned organization').classes('text-xs font-mono text-gray-300')
 
-                    # API Direct
-                    with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #34d399;'):
-                        with ui.row().classes('w-full items-center gap-3 mb-3'):
-                            ui.icon('code', size='xl').classes('text-[#34d399]')
-                            ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 tracking-wider')
-                        ui.label('POST /api/incident/create').classes('text-sm font-mono text-[#34d399] mb-3')
-                        with ui.column().classes('gap-1'):
-                            ui.label('› Send incidents programmatically').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Full control over incident fields').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Supports media file uploads').classes('text-xs font-mono text-gray-300')
-                            ui.label('› Requires authentication token').classes('text-xs font-mono text-gray-300')
+            # API Direct
+            with ui.element('div').classes('flex-1 p-4').style('background: rgba(13, 38, 55, 0.3); border-left: 2px solid #34d399;'):
+                with ui.row().classes('w-full items-center gap-3 mb-3'):
+                    ui.icon('code', size='xl').classes('text-[#34d399]')
+                    ui.label('DIRECT API').classes('text-xs font-mono text-gray-400 tracking-wider')
+                ui.label('POST /api/incident/create').classes('text-sm font-mono text-[#34d399] mb-3')
+                with ui.column().classes('gap-1'):
+                    ui.label('› Send incidents programmatically').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Full control over incident fields').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Supports media file uploads').classes('text-xs font-mono text-gray-300')
+                    ui.label('› Requires authentication token').classes('text-xs font-mono text-gray-300')
 
     # Organizations table logic
     selected_orgs = set()
