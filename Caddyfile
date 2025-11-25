@@ -1,4 +1,4 @@
-:80 {
+simsdemo.aivory.net {
     encode gzip
 
     reverse_proxy backend:8000 {

@@ -701,39 +701,62 @@ def integration_dashboard_page():
                 ui.label('No authentication required').classes('text-gray-400 mb-6')
 
             # Configuration instructions
-            ui.label('How to Configure').classes('text-lg font-bold mb-2')
+            ui.label('How to Use This Template').classes('text-lg font-bold mb-2')
             template_type = template['type']
 
             config_instructions = {
                 'webhook': {
+                    'overview': 'Webhooks send incident data in real-time to external services via HTTP POST. When an incident is created, SIMS automatically pushes the data to your configured endpoint.',
+                    'batch_info': 'When batch assigned, the integration uses a default webhook endpoint. You must edit each organization integration to configure the actual webhook URL for that organization.',
                     'steps': [
-                        '1. Get your webhook URL from your service (Zapier, n8n, Make.com, webhook.site, etc.)',
-                        '2. Copy the webhook URL to the "Endpoint URL" field',
-                        '3. If your service requires authentication, add the Bearer token or API key',
-                        '4. Set trigger filters if you only want specific incident types',
-                        '5. Click "Test Connection" to verify it works'
+                        '1. BATCH ASSIGN this template to organizations (creates placeholder integration)',
+                        '2. Go to "Manage Integrations" tab',
+                        '3. Find each organization and click EDIT',
+                        '4. Enter the webhook URL in Config section (endpoint_url field)',
+                        '5. Add authentication if required (bearer_token in Auth section)',
+                        '6. Click Update to save'
+                    ],
+                    'config_fields': [
+                        'endpoint_url: The full webhook URL to POST incident data to',
+                        'bearer_token: (Optional) Authentication token for the webhook',
+                        'timeout: (Optional) Request timeout in seconds (default: 30)'
                     ],
                     'where': 'Works with: Zapier, Make.com, n8n, webhook.site, custom HTTP endpoints, Discord webhooks, Slack webhooks'
                 },
                 'sedap': {
+                    'overview': 'SEDAP integration formats incident data as CSV and sends it to military Battle Management Systems via the SEDAP.Express API.',
+                    'batch_info': 'Batch assignment is PERFECT for SEDAP. All military organizations use the same SEDAP endpoint configured in your environment variables (SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD). No per-organization configuration needed.',
                     'steps': [
-                        '1. Obtain SEDAP.Express API endpoint from your BMS administrator',
-                        '2. Get authentication credentials (username/password or API key)',
-                        '3. Enter the SEDAP endpoint URL in "Endpoint URL" field',
-                        '4. Add authentication credentials in the Auth section',
-                        '5. Configure message format settings (CSV format, CONTACT/TEXT types)',
-                        '6. Test connection before activating'
+                        '1. BATCH ASSIGN this template to all military organizations',
+                        '2. DONE - SEDAP uses shared environment configuration',
+                        '3. All incidents from military orgs automatically forward to BMS',
+                        '4. Ensure SEDAP_ENDPOINT, SEDAP_USERNAME, SEDAP_PASSWORD are set in .env file'
+                    ],
+                    'config_fields': [
+                        'SEDAP_ENDPOINT: Configured in backend .env file (shared by all orgs)',
+                        'SEDAP_USERNAME: Configured in backend .env file',
+                        'SEDAP_PASSWORD: Configured in backend .env file',
+                        'No per-organization config required - uses environment settings'
                     ],
                     'where': 'Required for: Bundeswehr BMS integration, NATO STANAG 4406 systems, military command & control centers'
                 },
                 'email': {
+                    'overview': 'Email notifications send incident alerts via SMTP. Configure SMTP server details and recipient addresses to receive incident reports by email.',
+                    'batch_info': 'Batch assignment creates placeholder integrations. You must edit each organization to specify recipient email addresses and verify SMTP settings.',
                     'steps': [
-                        '1. Configure SMTP server settings (host, port)',
-                        '2. For Gmail: Use smtp.gmail.com:587 and App Password (not regular password)',
-                        '3. For SendGrid/Mailgun: Use their SMTP credentials',
-                        '4. Enter sender email address (from_email)',
-                        '5. Add recipient email addresses (comma-separated for multiple)',
-                        '6. Test email delivery before activating'
+                        '1. BATCH ASSIGN this template to organizations',
+                        '2. Ensure SMTP settings in .env (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)',
+                        '3. Go to "Manage Integrations" tab',
+                        '4. Find each organization and click EDIT',
+                        '5. Add recipient email addresses in Config section (to_email field)',
+                        '6. Update from_email if needed',
+                        '7. Click Update to save'
+                    ],
+                    'config_fields': [
+                        'to_email: Recipient email address(es), comma-separated for multiple',
+                        'from_email: (Optional) Sender email, defaults to SMTP_USER from .env',
+                        'subject_template: (Optional) Custom email subject line',
+                        'SMTP server: Configured in backend .env file (SMTP_HOST, SMTP_PORT, etc.)'
                     ],
                     'where': 'Works with: Gmail, Outlook/Office365, SendGrid, Mailgun, Mailtrap, any SMTP server'
                 }
@@ -742,14 +765,34 @@ def integration_dashboard_page():
             if template_type in config_instructions:
                 instructions = config_instructions[template_type]
 
+                # Overview
+                with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(99, 171, 255, 0.1); border-left: 3px solid #63ABFF;'):
+                    ui.label(instructions['overview']).classes('text-sm text-gray-300')
+
+                # Batch assignment info
+                ui.label('Batch Assignment').classes('text-md font-bold mb-2 text-[#ffa600]')
+                with ui.element('div').classes('w-full p-3 mb-4').style('background: rgba(255, 166, 0, 0.1); border-left: 3px solid #ffa600;'):
+                    ui.label(instructions['batch_info']).classes('text-sm text-gray-300')
+
+                # Steps
+                ui.label('Setup Steps').classes('text-md font-bold mb-2')
                 with ui.column().classes('w-full gap-2 mb-4'):
                     for step in instructions['steps']:
                         with ui.row().classes('items-start gap-2'):
                             ui.label(step.split('.')[0] + '.').classes('text-[#63ABFF] font-bold')
                             ui.label('.'.join(step.split('.')[1:])).classes('text-gray-400')
 
+                # Configuration fields
+                ui.label('Configuration Fields').classes('text-md font-bold mb-2')
+                with ui.column().classes('w-full gap-1 mb-4'):
+                    for field in instructions['config_fields']:
+                        with ui.row().classes('items-start gap-2'):
+                            ui.label('›').classes('text-[#63ABFF]')
+                            ui.label(field).classes('text-sm text-gray-400')
+
+                # Where to use
                 with ui.element('div').classes('w-full p-3 rounded bg-[#0d2637] border border-[#1e3a4f] mb-6'):
-                    ui.label('Where to use this:').classes('font-bold text-[#63ABFF] mb-1')
+                    ui.label('Compatible Systems').classes('font-bold text-[#63ABFF] mb-1')
                     ui.label(instructions['where']).classes('text-sm text-gray-400')
 
             # Use cases
@@ -1031,7 +1074,7 @@ def integration_dashboard_page():
                     'description': f'Auto-assigned {template["name"]}',
                     'config': {},  # Empty config, uses template defaults
                     'auth_credentials': {},
-                    'trigger_filters': None,
+                    'trigger_filters': {},  # Empty dict, not None
                     'active': True,
                     'created_by': 'dashboard_batch'
                 }
