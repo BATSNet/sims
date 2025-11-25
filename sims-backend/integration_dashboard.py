@@ -863,8 +863,6 @@ def integration_dashboard_page():
 
     # Main UI - wrap in content container with proper width
     with ui.element('div').classes('content-container'):
-        ui.label('Integration Management').classes('section-title')
-
         # Tabs
         with ui.tabs().classes('w-full mb-4 bg-transparent') as tabs:
             tab_integrations = ui.tab('Push to Organizations').classes('w-full')
