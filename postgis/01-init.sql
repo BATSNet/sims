@@ -419,30 +419,30 @@ VALUES (
     '{"endpoint_url": {"type": "string", "required": true, "description": "Full webhook URL"}, "timeout": {"type": "integer", "default": 30, "description": "Request timeout in seconds"}, "custom_headers": {"type": "object", "default": {}, "description": "Additional HTTP headers"}}'::jsonb,
     '{
   "incident_id": "{{incident.incident_id}}",
-  "title": "{{incident.title}}",
-  "description": "{{incident.description}}",
+  "title": "{{incident.title | default('''')}}",
+  "description": "{{incident.description | default('''')}}",
   "priority": "{{incident.priority}}",
   "status": "{{incident.status}}",
   "category": "{{incident.category}}",
   "location": {
-    "latitude": {{incident.latitude}},
-    "longitude": {{incident.longitude}},
-    "heading": {{incident.heading}}
+    "latitude": {{incident.latitude | default(''null'')}},
+    "longitude": {{incident.longitude | default(''null'')}},
+    "heading": {{incident.heading | default(''null'')}}
   },
   "created_at": "{{incident.created_at}}",
-  "user_phone": "{{incident.user_phone}}",
+  "user_phone": "{{incident.user_phone | default('''')}}",
   "tags": {{incident.tags | tojson}},
   "media": {
-    "image_url": "{{incident.image_url}}",
-    "video_url": "{{incident.video_url}}",
-    "audio_url": "{{incident.audio_url}}",
-    "audio_transcript": "{{incident.audio_transcript}}"
+    "image_url": "{{incident.image_url | default('''')}}",
+    "video_url": "{{incident.video_url | default('''')}}",
+    "audio_url": "{{incident.audio_url | default('''')}}",
+    "audio_transcript": "{{incident.audio_transcript | default('''')}}"
   }
 }',
     'bearer_token',
     false,
     'system'
-) ON CONFLICT (name) DO NOTHING;
+) ON CONFLICT (name) DO UPDATE SET payload_template = EXCLUDED.payload_template;
 
 -- SEDAP Template
 INSERT INTO integration_template (name, type, description, config_schema, payload_template, auth_type, system_template, created_by)
