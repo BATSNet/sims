@@ -755,13 +755,13 @@ def integration_dashboard_page():
         try:
             async with httpx.AsyncClient() as client:
                 # Get all organizations
-                orgs_response = await client.get(f'{BASE_URL}/api/organization/')
+                orgs_response = await client.get(f'{API_BASE}/organization/')
                 orgs = orgs_response.json()
 
                 all_integrations = []
                 for org in orgs:
                     # Get integrations for this org
-                    int_response = await client.get(f'{BASE_URL}/api/integration/organization/{org["id"]}')
+                    int_response = await client.get(f'{API_BASE}/integration/organization/{org["id"]}')
                     integrations = int_response.json()
 
                     for integration in integrations:
@@ -882,7 +882,7 @@ def integration_dashboard_page():
                         # Save via API
                         async with httpx.AsyncClient() as client:
                             response = await client.put(
-                                f'{BASE_URL}/api/integration/organization/{integration["id"]}',
+                                f'{API_BASE}/integration/organization/{integration["id"]}',
                                 json=update_data
                             )
                             response.raise_for_status()
@@ -950,7 +950,7 @@ def integration_dashboard_page():
         """Delete an integration"""
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.delete(f'{BASE_URL}/api/integration/organization/{integration["id"]}')
+                response = await client.delete(f'{API_BASE}/integration/organization/{integration["id"]}')
                 response.raise_for_status()
 
             ui.notify(f'Deleted integration for {integration["organization_short"]}', type='positive')
@@ -1069,9 +1069,8 @@ def integration_dashboard_page():
         ]
 
         with orgs_table_container:
-            # Prepare table data
+            # Prepare table data - NO selection column, we'll use NiceGUI built-in
             columns = [
-                {'name': 'select', 'label': '', 'field': 'select', 'align': 'left', 'sortable': False},
                 {'name': 'name', 'label': 'Organization', 'field': 'name', 'align': 'left', 'sortable': True},
                 {'name': 'type', 'label': 'Type', 'field': 'type', 'align': 'left', 'sortable': True},
                 {'name': 'integrations', 'label': 'Assigned Integrations', 'field': 'integrations', 'align': 'left', 'sortable': False},
@@ -1090,24 +1089,23 @@ def integration_dashboard_page():
                     'name': org['name'],
                     'type': org['type'].replace('_', ' ').title(),
                     'integrations': integration_names,
-                    'selected': org['id'] in selected_orgs
                 })
 
-            # Create table with selection
-            table = ui.table(columns=columns, rows=rows, row_key='id', selection='multiple').props('flat dense').classes('w-full')
-            table.add_slot('body-cell-select', '''
-                <q-td :props="props">
-                    <q-checkbox v-model="props.selected" />
-                </q-td>
-            ''')
+            # Create table - selection='multiple' adds ONE checkbox column automatically
+            table = ui.table(
+                columns=columns,
+                rows=rows,
+                row_key='id',
+                selection='multiple'
+            ).props('flat dense').classes('w-full')
 
-            # Update selected_orgs when selection changes
-            def on_selection_change(e):
+            # Bind selection to our selected_orgs set
+            def update_selection(e):
                 selected_orgs.clear()
-                for row in e.value:
+                for row in table.selected:
                     selected_orgs.add(row['id'])
 
-            table.on('selection', on_selection_change)
+            table.on('update:selected', update_selection)
 
     # Button handlers
     def select_all_orgs():
