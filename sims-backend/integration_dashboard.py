@@ -1113,13 +1113,15 @@ def integration_dashboard_page():
                     </q-btn>
                 </q-td>
             '''):
-                def configure(e):
-                    org_id = e.args['id']
-                    # Find the org and its integrations
-                    org = next((o for o in filtered_orgs if o['id'] == org_id), None)
-                    if org and org['integrations']:
-                        # Show config for first integration (or show list if multiple)
-                        show_integration_config(org['integrations'][0])
+                table.on('configure', lambda e: handle_configure_click(e.args))
+
+            def handle_configure_click(row_data):
+                org_id = row_data['id']
+                # Find the org and its integrations
+                org = next((o for o in filtered_orgs if o['id'] == org_id), None)
+                if org and org['integrations']:
+                    # Show config for first integration (or show list if multiple)
+                    show_integration_config(org['integrations'][0])
 
             # Bind selection to our selected_orgs set
             def update_selection(e):
