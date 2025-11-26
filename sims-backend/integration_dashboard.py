@@ -1108,13 +1108,13 @@ def integration_dashboard_page():
                            flat dense
                            icon="settings"
                            size="sm"
-                           @click="$parent.$emit('configure', props.row.id)">
+                           @click="$parent.$emit('configure', props.row)">
                         <q-tooltip>Configure Integrations</q-tooltip>
                     </q-btn>
                 </q-td>
             '''):
-                async def handle_configure(e):
-                    org_id = e.args
+                def configure(e):
+                    org_id = e.args['id']
                     # Find the org and its integrations
                     org = next((o for o in filtered_orgs if o['id'] == org_id), None)
                     if org and org['integrations']:
