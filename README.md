@@ -115,10 +115,10 @@ Edit the backend server address in `sims-app/lib/src/config/app_config.dart`:
 
 ```dart
 // For Android Emulator (emulator uses 10.0.2.2 to access host machine)
-static const String devBaseUrl = 'http://10.0.2.2:8080';
+static const String devBaseUrl = 'http://10.0.2.2:8000';
 
 // For Physical Device (use your computer's local network IP)
-static const String devBaseUrlPhysical = 'http://192.168.1.100:8080';
+static const String devBaseUrlPhysical = 'http://192.168.1.100:8000';
 
 // Set development mode
 static const bool isDevelopment = true;
@@ -204,170 +204,23 @@ docker-compose ps
 ```
 
 **Services:**
-- **Backend API**: http://localhost:80 (or port 8000 if accessing directly)
-- **Operator Dashboard**: http://localhost:80/dashboard
+- **Backend API**: http://localhost (via Caddy reverse proxy)
+- **Operator Dashboard**: http://localhost/
 - **Database**: localhost:5433 (PostgreSQL with PostGIS)
 
 #### 2.3 Verify Backend is Running
 
 ```bash
 # Test API health endpoint
-curl http://localhost:80/health
+curl http://localhost/api/health
 
-# Or visit in browser
-# http://localhost:80/docs (API documentation)
+# Or visit the dashboard in browser
+# http://localhost/
 ```
 
-### Step 3: Setup Organizations and Integrations
+### Step 3: Access the Dashboard
 
-Organizations are the entities that receive incident reports. Each organization can have multiple integration methods configured.
-
-#### 3.1 Access the Operator Dashboard
-
-Navigate to `http://localhost:80/dashboard` in your web browser.
-
-#### 3.2 Create an Organization
-
-Use the API or dashboard to create an organization:
-
-```bash
-# Example: Create organization via API
-curl -X POST http://localhost:80/api/organizations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "City Emergency Services",
-    "short_name": "CES",
-    "type": "emergency",
-    "email": "dispatch@city-emergency.gov",
-    "phone": "+49-123-456789",
-    "latitude": 52.520008,
-    "longitude": 13.404954,
-    "active": true
-  }'
-```
-
-#### 3.3 Create Integration Templates (Admin)
-
-Integration templates define how the system connects to external services. Built-in templates include:
-
-- **Webhook**: Generic HTTP webhook for any REST API
-- **SEDAP**: Military BMS integration (SEDAP.Express)
-- **Email**: Email notifications
-- **SMS**: SMS alerts
-- **n8n**: n8n workflow automation
-- **Custom**: Custom integration logic
-
-**Create a Webhook Template:**
-
-```bash
-curl -X POST http://localhost:80/api/integration-templates \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Generic Webhook",
-    "type": "webhook",
-    "description": "Send incident data to external webhook endpoint",
-    "auth_type": "bearer_token",
-    "config_schema": {
-      "endpoint_url": {
-        "type": "string",
-        "required": true,
-        "description": "Target webhook URL"
-      },
-      "timeout": {
-        "type": "integer",
-        "default": 30,
-        "description": "Request timeout in seconds"
-      }
-    },
-    "payload_template": "{\"incident_id\": \"{{incident.id}}\", \"title\": \"{{incident.title}}\", \"location\": {\"lat\": {{incident.latitude}}, \"lon\": {{incident.longitude}}}, \"timestamp\": \"{{incident.created_at}}\"}",
-    "timeout_seconds": 30,
-    "retry_enabled": true,
-    "retry_attempts": 3
-  }'
-```
-
-#### 3.4 Configure Organization Integration
-
-Link an organization to an integration template with specific configuration:
-
-```bash
-# Example: Add webhook integration to organization
-curl -X POST http://localhost:80/api/organization-integrations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "organization_id": 1,
-    "template_id": 1,
-    "name": "Emergency Dispatch Webhook",
-    "config": {
-      "endpoint_url": "https://dispatch.city-emergency.gov/api/incidents",
-      "timeout": 60
-    },
-    "auth_credentials": {
-      "token": "your_bearer_token_here"
-    },
-    "trigger_filters": {
-      "priorities": ["critical", "high"],
-      "categories": ["Emergency", "Security"]
-    },
-    "active": true
-  }'
-```
-
-**Integration Flow:**
-1. Incident is reported via mobile app or other input channel
-2. System processes and classifies the incident
-3. Matching organizations are identified based on location and type
-4. For each organization, active integrations are triggered
-5. Incident data is formatted using the payload template
-6. Data is sent to configured endpoints (webhook, SEDAP, email, etc.)
-
-#### 3.5 SEDAP Integration (Military BMS)
-
-For military Battle Management Systems, use the built-in SEDAP integration:
-
-```bash
-# Create SEDAP integration template (if not exists)
-curl -X POST http://localhost:80/api/integration-templates \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "SEDAP Express",
-    "type": "sedap",
-    "description": "SEDAP.Express integration for BMS",
-    "system_template": true,
-    "config_schema": {
-      "sedap_url": {
-        "type": "string",
-        "required": true
-      },
-      "sender_id": {
-        "type": "string",
-        "default": "SIMS"
-      },
-      "classification": {
-        "type": "string",
-        "default": "U",
-        "enum": ["P", "U", "R", "C", "S", "T"]
-      }
-    }
-  }'
-
-# Configure organization to use SEDAP
-curl -X POST http://localhost:80/api/organization-integrations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "organization_id": 2,
-    "template_id": 2,
-    "name": "Battalion BMS Integration",
-    "config": {
-      "sedap_url": "http://bms.military.local:8080/SEDAPEXPRESS",
-      "sender_id": "SIMS",
-      "classification": "U"
-    },
-    "active": true
-  }'
-```
-
-See `documents/SEDAP_DEMO_GUIDE.md` for detailed SEDAP setup instructions.
+Navigate to `http://localhost/` to access the operator dashboard. From there you can manage organizations, integrations, and monitor incidents.
 
 ### Alternative: Local Backend Development (Without Docker)
 
@@ -385,11 +238,12 @@ pip install -r requirements.txt
 # Create database: createdb sims
 # Enable PostGIS: psql sims -c "CREATE EXTENSION postgis;"
 
-# Run migrations
-alembic upgrade head
+# Set environment variables (copy from .env.example)
+cp ../.env.example ../.env
+# Edit .env with your database credentials
 
-# Start development server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Start development server (NiceGUI app)
+python main.py
 ```
 
 ## Project Structure
@@ -436,84 +290,49 @@ sims-bw/
 ### Integration Format
 JSON schema standardized against SEDAP.Express format for BMS compatibility.
 
-## Integration System
+## Webhooks
 
-SIMS features a flexible, template-based integration system that allows organizations to connect with external services through configurable input and output channels.
+### Push Incidents IN
 
-### Integration Architecture
+Incidents can be submitted via:
+- **Mobile App**: Android/iOS app with camera, voice, and GPS
+- **Inbound Webhooks**: From Zapier, n8n, WhatsApp, or any external system
 
-**Integration Templates** (Admin-managed)
-- Define the type and behavior of integrations (webhook, SEDAP, email, SMS, etc.)
-- Specify configuration schema (required fields, validation rules)
-- Define authentication methods (bearer token, API key, OAuth2, etc.)
-- Provide default payload templates (Jinja2 format)
-- Configure retry logic and timeout settings
+To create an inbound webhook:
 
-**Organization Integrations** (Per-organization instances)
-- Link organizations to integration templates
-- Provide organization-specific configuration (endpoints, credentials)
-- Define trigger filters (priority levels, categories, geographic areas)
-- Customize payload templates if needed
-- Enable/disable integrations per organization
+```bash
+# 1. Create inbound webhook (returns webhook_token and auth_token)
+curl -X POST http://localhost/api/webhook/inbound \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My External Source",
+    "field_mapping": {
+      "title": "$.title",
+      "description": "$.description",
+      "latitude": "$.lat",
+      "longitude": "$.lng"
+    }
+  }'
 
-### Supported Integration Types
-
-#### Input Channels
-- **Mobile App**: Primary reporting interface (iOS/Android)
-- **Webhook**: Receive incidents from external systems
-- **Email**: Email-to-incident conversion
-- **SMS**: Text message reporting
-- **WhatsApp**: WhatsApp Business API integration
-- **Custom**: Extensible for additional input sources
-
-#### Output Channels
-- **Webhook**: Generic HTTP webhooks to any REST API
-- **SEDAP**: Military BMS integration (SEDAP.Express)
-- **n8n**: Workflow automation platform
-- **Email**: Email notifications
-- **SMS**: Text alerts
-- **WhatsApp**: WhatsApp notifications
-- **Custom**: Extensible for additional output destinations
-
-### SEDAP.Express (Military BMS)
-
-Built-in SEDAP integration forwards classified incidents to Battle Management Systems via SEDAP-Express REST API. Incidents are sent as CONTACT and TEXT messages in STANAG-compatible format.
-
-**Configuration Example:**
-```json
-{
-  "sedap_url": "http://bms.military.local:8080/SEDAPEXPRESS",
-  "sender_id": "SIMS",
-  "classification": "U"
-}
+# 2. Send incidents to the webhook
+curl -X POST http://localhost/api/webhook/inbound/{webhook_token} \
+  -H "Authorization: Bearer {auth_token}" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Drone sighting", "description": "Drone near airport", "lat": 52.52, "lng": 13.40}'
 ```
 
-**Classifications:** P (public), U (unclassified), R (restricted), C (confidential), S (secret), T (top secret)
+The `field_mapping` uses JSONPath to extract fields from your payload format.
 
-See `documents/SEDAP_DEMO_GUIDE.md` for detailed setup and testing instructions.
+### Receive Incidents OUT (to your systems)
 
-### AI Services
+When incidents are assigned to an organization, SIMS automatically pushes them to configured endpoints. Configure these via the dashboard under **Integrations**:
 
-- **Featherless AI**: Text summarization, classification, object description
-- **DeepInfra**: Automatic speech recognition (voice-to-text)
+- **Webhook**: Send to Zapier, n8n, Make, or any HTTP endpoint
+- **Email**: Email notifications
+- **SEDAP/BMS**: Military Battle Management Systems (STANAG-compatible)
+- **Responder Dashboard**: One-time secure link for responders to view/chat about the incident
 
-### Adding New Integrations
-
-To add a new integration type:
-
-1. Create integration template via API or dashboard
-2. Define configuration schema and authentication requirements
-3. Create payload template using Jinja2 syntax
-4. Implement integration handler in `sims-backend/integrations/`
-5. Register handler in integration dispatcher
-
-Variables available in payload templates:
-- `{{incident.id}}`, `{{incident.title}}`, `{{incident.description}}`
-- `{{incident.latitude}}`, `{{incident.longitude}}`
-- `{{incident.priority}}`, `{{incident.category}}`
-- `{{incident.created_at}}`, `{{incident.updated_at}}`
-- `{{incident.reporter.*}}` (reporter details)
-- `{{organization.*}}` (organization details)
+Each organization can have multiple integrations. Webhook payloads use Jinja2 templates with variables like `{{incident.title}}`, `{{incident.latitude}}`, `{{incident.longitude}}`, etc.
 
 ## Security Considerations
 
