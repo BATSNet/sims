@@ -382,7 +382,7 @@ This project is developed by:
 - **Paul Piper** - [aivory.net](https://aivory.net) | [paul-piper.de](https://paul-piper.de) | [ilscipio.com](https://ilscipio.com)
 - **Patrick Schult** - [reporta.ai](https://reporta.ai)
 - **Tim Engelmann** - [adesso.de](https://adesso.de)
-- **Oleksandr Serbin**
+- **Oleksandr Serbin** - [LinkedIn](https://www.linkedin.com/in/inserblexo/)
 
 ## Special Thanks
 
