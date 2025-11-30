@@ -16,6 +16,7 @@ ai_providers:
     temperature: 0.3
     max_tokens: 1000
     timeout: 120
+    # api_base: http://ollama:11434 # custom API base for Ollama (local or remote)
     # Model options by provider:
     # - openai: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
     # - anthropic: claude-3-5-sonnet-20241022, claude-3-opus-20240229, claude-3-sonnet-20240229
@@ -23,6 +24,7 @@ ai_providers:
     # - deepinfra: meta-llama/Meta-Llama-3.1-70B-Instruct, etc.
     # - featherai: Various open-source models
     # - google: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash
+    # - ollama: gpt-oss, qwen3, gemma3, llama3.1
 
   # Transcription Service - Converts audio to text
   transcription:
