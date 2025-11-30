@@ -63,6 +63,8 @@ services:
   ollama:
     image: ollama/ollama
     container_name: sims-ollama
+    profiles:
+      - ollama-local
     ports:
       - "11434:11434"
     volumes:
