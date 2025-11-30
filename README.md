@@ -23,7 +23,7 @@ Traditional reporting chains are too slow for real-time situational awareness. P
 - **Fast Reporting**: Submit incidents in under a few seconds via mobile apps (Android / iOS), or per webhook (could be used to send from whatsapp to server using [Zapier](https://zapier.com) or similar)
 - **Configurable Integrations**: Flexible input and output methods via integration templates
   - Multiple input channels: Mobile app, webhooks, email, SMS, WhatsApp
-  - Multiple output channels: Webhooks, SEDAP, n8n, email, SMS, custom APIs
+  - Multiple output channels: Webhooks, SEDAP (BMS/Mese), n8n, email, SMS, custom APIs
   - Organization-specific routing and filtering
   - Template-based payload customization
 - **Operator Dashboard**: Real-time visualization and alert management
@@ -55,7 +55,7 @@ Traditional reporting chains are too slow for real-time situational awareness. P
 
 * sims-backend:
   * **Screens**: Dashboard, Organization, and Integration views implemented. Supports organization management, webhook configuration, and real-time incident monitoring.
-  * **APIs**: WebSocket, Webhook, and Email integrations available. SEDAP (BMS) implemented; further testing required.
+  * **APIs**: WebSocket, Webhook, and Email integrations available. SEDAP (BMS/Mese) implemented; further testing required.
   * **LLM Support**: Integrated providers include Anthropic, DeepInfra, FeatherlessAI, Google, Mistral, and OpenAI.  
     *Outstanding*: Ollama and additional self-hosted LLMs.
   * **Docker**: Docker Compose configuration available with example setups.
@@ -79,7 +79,7 @@ Python-based backend with FastAPI:
 - LLM summarization and classification
 - PostGIS database for geospatial data
 - NiceGUI operator dashboard
-- SEDAP.Express integration for BMS forwarding
+- SEDAP.Express integration for BMS/Mese forwarding
 
 ### Infrastructure
 - PostgreSQL with PostGIS extension
