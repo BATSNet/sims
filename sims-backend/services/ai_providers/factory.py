@@ -10,6 +10,8 @@ from .anthropic_provider import AnthropicProvider
 from .mistral_provider import MistralProvider
 from .deepinfra_provider import DeepInfraProvider, DeepInfraTranscriptionProvider
 from .featherai_provider import FeatherAIProvider
+from .ollama_provider import OllamaProvider
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +25,11 @@ class ProviderFactory:
         'anthropic': 'ANTHROPIC_API_KEY',
         'mistral': 'MISTRAL_API_KEY',
         'deepinfra': 'DEEPINFRA_API_KEY',
-        'featherai': 'FEATHERLESS_API_KEY'
+        'featherai': 'FEATHERLESS_API_KEY',
+        'ollama': 'OLLAMA_API_KEY'
     }
+
+    MAYBE_LOCAL = {'ollama'}
 
     @staticmethod
     def create_llm_provider(
@@ -36,7 +41,7 @@ class ProviderFactory:
         Create an LLM provider instance.
 
         Args:
-            provider_name: Name of the provider (openai, anthropic, mistral, deepinfra, featherai)
+            provider_name: Name of the provider (openai, anthropic, mistral, deepinfra, featherai, ollama)
             model: Model identifier
             **kwargs: Additional configuration (temperature, max_tokens, timeout, etc.)
 
@@ -52,7 +57,7 @@ class ProviderFactory:
             return None
 
         api_key = os.getenv(api_key_env)
-        if not api_key:
+        if not api_key and (provider_name not in ProviderFactory.MAYBE_LOCAL):
             logger.error(f"API key not found for {provider_name} (env var: {api_key_env})")
             return None
 
@@ -68,6 +73,8 @@ class ProviderFactory:
                 return DeepInfraProvider(api_key, model, **kwargs)
             elif provider_name == 'featherai':
                 return FeatherAIProvider(api_key, model, **kwargs)
+            elif provider_name == 'ollama':
+                return OllamaProvider(api_key, model, **kwargs)
             else:
                 logger.error(f"Unsupported LLM provider: {provider_name}")
                 return None
