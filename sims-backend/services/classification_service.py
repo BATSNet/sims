@@ -52,7 +52,8 @@ class IncidentClassifier:
             model=Config.CLASSIFICATION_MODEL,
             temperature=Config.CLASSIFICATION_TEMPERATURE,
             max_tokens=Config.CLASSIFICATION_MAX_TOKENS,
-            timeout=Config.CLASSIFICATION_TIMEOUT
+            timeout=Config.CLASSIFICATION_TIMEOUT,
+            api_base=Config.CLASSIFICATION_API_BASE
         )
 
         if not self.provider:

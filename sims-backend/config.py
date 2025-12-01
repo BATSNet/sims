@@ -34,6 +34,7 @@ class Config:
     CLASSIFICATION_TEMPERATURE: float = _ai_providers.get('classification', {}).get('temperature', 0.3)
     CLASSIFICATION_MAX_TOKENS: int = _ai_providers.get('classification', {}).get('max_tokens', 1000)
     CLASSIFICATION_TIMEOUT: int = _ai_providers.get('classification', {}).get('timeout', 120)
+    CLASSIFICATION_API_BASE: str = _ai_providers.get('classification', {}).get('api_base', None)
 
     # Transcription Provider Config
     TRANSCRIPTION_PROVIDER: str = _ai_providers.get('transcription', {}).get('provider', 'deepinfra')
