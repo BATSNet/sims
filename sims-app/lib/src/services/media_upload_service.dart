@@ -30,7 +30,7 @@ class UploadResult {
 }
 
 class MediaUploadService {
-  final String baseUrl = AppConfig.baseUrl;
+  String get baseUrl => AppConfig.baseUrl;
 
   Future<UploadResult> uploadImage(File imageFile, {String? incidentId}) async {
     try {
