@@ -39,6 +39,61 @@ logger = logging.getLogger(__name__)
 incident_router = APIRouter(prefix="/api/incident", tags=["incident"])
 
 
+async def _deliver_to_organization(
+    db: Session,
+    incident: IncidentORM,
+    org,
+    chat: ChatHistory,
+    incident_id: str
+):
+    """
+    Helper function to deliver incident to a single organization via integrations.
+
+    Args:
+        db: Database session
+        incident: Incident to deliver
+        org: Target organization
+        chat: Chat history for confirmation messages
+        incident_id: Formatted incident ID for logging
+    """
+    logger.info(f"Delivering incident {incident_id} to {org.name} via integrations")
+
+    try:
+        # Deliver via all active integrations
+        deliveries = await IntegrationDeliveryService.deliver_incident(
+            db=db,
+            incident=incident,
+            organization=org
+        )
+
+        # Count successful deliveries
+        successful = sum(1 for d in deliveries if d.status == 'success')
+        failed = sum(1 for d in deliveries if d.status == 'failed')
+
+        # Add chat message confirming delivery
+        if successful > 0:
+            confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
+            chat.add_message("system", confirmation_msg)
+            logger.info(
+                f"Successfully delivered incident {incident_id} to {org.name}: "
+                f"{successful} successful, {failed} failed"
+            )
+        elif deliveries:
+            logger.error(
+                f"All delivery attempts failed for incident {incident_id} to {org.name}"
+            )
+        else:
+            logger.warning(
+                f"No active integrations configured for organization {org.name}"
+            )
+
+    except Exception as delivery_error:
+        logger.error(
+            f"Error delivering incident {incident_id} to {org.name}: {delivery_error}",
+            exc_info=True
+        )
+
+
 @incident_router.post("/create", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     incident_data: IncidentCreate,
@@ -223,157 +278,234 @@ async def create_incident(
                 audio_media_to_analyze = media
                 logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.audioUrl}")
 
-        # Auto-classify incident using LLM
-        try:
-            logger.info(f"Classifying incident {incident_id} with description: {incident_data.description[:100]}...")
-            classifier = get_classifier()
+        # Auto-classify incident using LLM (if categorization enabled)
+        classification = None
+        if Config.CATEGORIZATION_ENABLED:
+            try:
+                logger.info(f"Classifying incident {incident_id} with description: {incident_data.description[:100]}...")
+                classifier = get_classifier()
 
-            # Get transcription from audio media if available
-            transcription = None
-            if incident_data.audioUrl:
-                audio_media = db.query(MediaORM).filter(
-                    MediaORM.incident_id == incident_uuid,
-                    MediaORM.media_type == 'audio'
-                ).first()
-                if audio_media and hasattr(audio_media, 'transcription'):
-                    transcription = audio_media.transcription
-                    logger.info(f"Found transcription for incident {incident_id}: {transcription[:100]}...")
+                # Get transcription from audio media if available
+                transcription = None
+                if incident_data.audioUrl:
+                    audio_media = db.query(MediaORM).filter(
+                        MediaORM.incident_id == incident_uuid,
+                        MediaORM.media_type == 'audio'
+                    ).first()
+                    if audio_media and hasattr(audio_media, 'transcription'):
+                        transcription = audio_media.transcription
+                        logger.info(f"Found transcription for incident {incident_id}: {transcription[:100]}...")
 
-            # Classify the incident (with image analysis if available)
-            classification = await classifier.classify_incident(
-                description=incident_data.description,
-                transcription=transcription,
-                image_url=image_url,
-                latitude=incident_data.latitude,
-                longitude=incident_data.longitude,
-                heading=incident_data.heading
-            )
-
-            # Update incident with classification results
-            db_incident.category = classification.category
-            db_incident.priority = classification.priority
-            db_incident.tags = classification.tags
-
-            logger.info(
-                f"Classification result for {incident_id}: "
-                f"category={classification.category}, "
-                f"priority={classification.priority}, "
-                f"tags={classification.tags}, "
-                f"confidence={classification.confidence:.2f}"
-            )
-
-            # Store classification details in metadata
-            if not db_incident.meta_data:
-                db_incident.meta_data = {}
-            db_incident.meta_data['classification'] = classification.to_dict()
-            db_incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
-
-            # Change status from 'processing' to 'open' after initial classification
-            if db_incident.status == 'processing':
-                db_incident.status = 'open'
-                logger.info(f"Changed incident {incident_id} status from 'processing' to 'open' after initial classification")
-
-            logger.info(
-                f"Incident {incident_id} classified as '{classification.category}' "
-                f"with priority '{classification.priority}' (confidence: {classification.confidence:.2f})"
-            )
-
-            # Auto-assign to organization if confidence is high enough
-            if Config.AUTO_ASSIGN_ENABLED and classification.confidence >= Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:
-                logger.info(f"Auto-assigning incident {incident_id} (confidence threshold met)")
-                assignment_service = get_assignment_service()
-
-                assignment = await assignment_service.assign_incident(
-                    incident=db_incident,
-                    classification=classification,
-                    db=db
+                # Classify the incident (with image analysis if available)
+                classification = await classifier.classify_incident(
+                    description=incident_data.description,
+                    transcription=transcription,
+                    image_url=image_url,
+                    latitude=incident_data.latitude,
+                    longitude=incident_data.longitude,
+                    heading=incident_data.heading
                 )
 
-                if assignment.organization_id:
-                    # Assign incident to organization
-                    db_incident.routed_to = assignment.organization_id
-                    db_incident.status = 'in_progress'
+                # Update incident with classification results
+                db_incident.category = classification.category
+                db_incident.priority = classification.priority
+                db_incident.tags = classification.tags
 
-                    # Store assignment details in metadata
-                    if 'assignment_history' not in db_incident.meta_data:
-                        db_incident.meta_data['assignment_history'] = []
+                logger.info(
+                    f"Classification result for {incident_id}: "
+                    f"category={classification.category}, "
+                    f"priority={classification.priority}, "
+                    f"tags={classification.tags}, "
+                    f"confidence={classification.confidence:.2f}"
+                )
 
-                    db_incident.meta_data['assignment_history'].append({
-                        'organization_id': assignment.organization_id,
-                        'organization_name': assignment.organization_name,
-                        'assigned_at': datetime.utcnow().isoformat(),
-                        'assigned_by': 'auto_assignment',
-                        'auto_assigned': True,
-                        'confidence': assignment.confidence,
-                        'reasoning': assignment.reasoning
-                    })
+                # Store classification details in metadata
+                if not db_incident.meta_data:
+                    db_incident.meta_data = {}
+                db_incident.meta_data['classification'] = classification.to_dict()
+                db_incident.meta_data['classification_timestamp'] = datetime.utcnow().isoformat()
 
-                    logger.info(
-                        f"Incident {incident_id} auto-assigned to {assignment.organization_name} "
-                        f"(confidence: {assignment.confidence:.2f})"
+                # Change status from 'processing' to 'open' after initial classification
+                if db_incident.status == 'processing':
+                    db_incident.status = 'open'
+                    logger.info(f"Changed incident {incident_id} status from 'processing' to 'open' after initial classification")
+
+                logger.info(
+                    f"Incident {incident_id} classified as '{classification.category}' "
+                    f"with priority '{classification.priority}' (confidence: {classification.confidence:.2f})"
+                )
+
+            except Exception as classify_error:
+                logger.error(f"Classification failed for {incident_id}: {classify_error}", exc_info=True)
+                # Continue with incident creation even if classification fails
+                if not db_incident.meta_data:
+                    db_incident.meta_data = {}
+                db_incident.meta_data['classification_error'] = str(classify_error)
+                # Keep default values (already set in incident creation)
+        else:
+            # Categorization disabled - use configured defaults
+            logger.info(f"Categorization disabled, using defaults for incident {incident_id}")
+            db_incident.category = Config.DEFAULT_CATEGORY
+            db_incident.priority = Config.DEFAULT_PRIORITY
+            db_incident.tags = []
+
+            # Store in metadata to indicate manual defaults were used
+            if not db_incident.meta_data:
+                db_incident.meta_data = {}
+            db_incident.meta_data['classification'] = {
+                'category': Config.DEFAULT_CATEGORY,
+                'priority': Config.DEFAULT_PRIORITY,
+                'tags': [],
+                'confidence': 0.0,
+                'reasoning': 'AI categorization disabled - using default values'
+            }
+
+            # Change status from 'processing' to 'open' immediately
+            if db_incident.status == 'processing':
+                db_incident.status = 'open'
+                logger.info(f"Changed incident {incident_id} status from 'processing' to 'open' (AI disabled)")
+
+        # Auto-forward incident to organization(s)
+        # Two modes:
+        #   1. Categorization ENABLED: Use smart assignment based on classification
+        #   2. Categorization DISABLED: Forward to ALL configured default organizations
+        try:
+            if Config.CATEGORIZATION_ENABLED and Config.AUTO_FORWARDING_ENABLED and classification:
+                # SMART ASSIGNMENT MODE: Use AI classification to route to best organization
+                if classification.confidence >= Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:
+                    logger.info(f"Auto-assigning incident {incident_id} (confidence threshold met)")
+                    assignment_service = get_assignment_service()
+
+                    assignment = await assignment_service.assign_incident(
+                        incident=db_incident,
+                        classification=classification,
+                        db=db
                     )
 
-                    # Forward to external API if organization has it enabled
-                    from models.organization_model import OrganizationORM
-                    org = db.query(OrganizationORM).filter(
-                        OrganizationORM.id == assignment.organization_id
-                    ).first()
+                    if assignment.organization_id:
+                        # Assign incident to organization
+                        db_incident.routed_to = assignment.organization_id
+                        db_incident.status = 'in_progress'
 
-                    # Deliver to organization via configured integrations
-                    if org:
-                        logger.info(f"Delivering incident {incident_id} to {org.name} via integrations")
+                        # Store assignment details in metadata
+                        if 'assignment_history' not in db_incident.meta_data:
+                            db_incident.meta_data['assignment_history'] = []
 
-                        try:
-                            # Deliver via all active integrations
-                            deliveries = await IntegrationDeliveryService.deliver_incident(
-                                db=db,
-                                incident=db_incident,
-                                organization=org
-                            )
+                        db_incident.meta_data['assignment_history'].append({
+                            'organization_id': assignment.organization_id,
+                            'organization_name': assignment.organization_name,
+                            'assigned_at': datetime.utcnow().isoformat(),
+                            'assigned_by': 'auto_assignment',
+                            'auto_assigned': True,
+                            'confidence': assignment.confidence,
+                            'reasoning': assignment.reasoning
+                        })
 
-                            # Count successful deliveries
-                            successful = sum(1 for d in deliveries if d.status == 'success')
-                            failed = sum(1 for d in deliveries if d.status == 'failed')
+                        logger.info(
+                            f"Incident {incident_id} auto-assigned to {assignment.organization_name} "
+                            f"(confidence: {assignment.confidence:.2f})"
+                        )
 
-                            # Add chat message confirming delivery
-                            if successful > 0:
-                                confirmation_msg = f"Thank you! We forwarded the information to {org.name} who are taking action as we speak."
-                                chat.add_message("system", confirmation_msg)
-                                logger.info(
-                                    f"Successfully delivered incident {incident_id} to {org.name}: "
-                                    f"{successful} successful, {failed} failed"
-                                )
-                            elif deliveries:
-                                logger.error(
-                                    f"All delivery attempts failed for incident {incident_id} to {org.name}"
-                                )
-                            else:
-                                logger.warning(
-                                    f"No active integrations configured for organization {org.name}"
-                                )
+                        # Deliver to assigned organization via integrations
+                        from models.organization_model import OrganizationORM
+                        org = db.query(OrganizationORM).filter(
+                            OrganizationORM.id == assignment.organization_id
+                        ).first()
 
-                        except Exception as delivery_error:
-                            logger.error(
-                                f"Error delivering incident {incident_id} to {org.name}: {delivery_error}",
-                                exc_info=True
-                            )
-                else:
-                    logger.warning(
-                        f"Could not auto-assign incident {incident_id}: {assignment.reasoning}"
-                    )
-            else:
-                if not Config.AUTO_ASSIGN_ENABLED:
-                    logger.info(f"Auto-assignment disabled, skipping for incident {incident_id}")
+                        if org:
+                            await _deliver_to_organization(db, db_incident, org, chat, incident_id)
+                    else:
+                        logger.warning(
+                            f"Could not auto-assign incident {incident_id}: {assignment.reasoning}"
+                        )
                 else:
                     logger.info(
                         f"Incident {incident_id} confidence {classification.confidence:.2f} "
                         f"below threshold {Config.AUTO_ASSIGN_CONFIDENCE_THRESHOLD:.2f}, skipping auto-assignment"
                     )
 
-        except Exception as classify_error:
-            logger.error(f"Classification/assignment failed for {incident_id}: {classify_error}", exc_info=True)
-            # Continue with incident creation even if classification fails
-            db_incident.meta_data['classification_error'] = str(classify_error)
+            elif not Config.CATEGORIZATION_ENABLED and Config.AUTO_FORWARDING_ENABLED:
+                # DEFAULT ORGANIZATION MODE: Forward to ALL default organizations
+                if Config.DEFAULT_ORGANIZATIONS:
+                    logger.info(
+                        f"Categorization disabled, forwarding incident {incident_id} to "
+                        f"{len(Config.DEFAULT_ORGANIZATIONS)} default organization(s)"
+                    )
+
+                    from models.organization_model import OrganizationORM
+                    default_orgs = db.query(OrganizationORM).filter(
+                        OrganizationORM.id.in_(Config.DEFAULT_ORGANIZATIONS),
+                        OrganizationORM.active == True
+                    ).all()
+
+                    if not default_orgs:
+                        logger.warning(
+                            f"No active default organizations found for IDs: {Config.DEFAULT_ORGANIZATIONS}"
+                        )
+                    else:
+                        # Deliver to each default organization
+                        successful_deliveries = []
+                        failed_deliveries = []
+
+                        for org in default_orgs:
+                            try:
+                                deliveries = await IntegrationDeliveryService.deliver_incident(
+                                    db=db,
+                                    incident=db_incident,
+                                    organization=org
+                                )
+
+                                # Count successes
+                                successful = sum(1 for d in deliveries if d.status == 'success')
+                                if successful > 0:
+                                    successful_deliveries.append(org.name)
+                                else:
+                                    failed_deliveries.append(org.name)
+
+                            except Exception as delivery_error:
+                                logger.error(
+                                    f"Error delivering to default org {org.name}: {delivery_error}",
+                                    exc_info=True
+                                )
+                                failed_deliveries.append(org.name)
+
+                        # Set status and store delivery metadata
+                        db_incident.status = 'in_progress'
+                        if not db_incident.meta_data:
+                            db_incident.meta_data = {}
+                        db_incident.meta_data['default_forwarding'] = {
+                            'forwarded_at': datetime.utcnow().isoformat(),
+                            'organizations': [org.id for org in default_orgs],
+                            'successful': successful_deliveries,
+                            'failed': failed_deliveries
+                        }
+
+                        # Add confirmation message to chat
+                        if successful_deliveries:
+                            confirmation_msg = (
+                                f"Thank you! We forwarded the information to "
+                                f"{', '.join(successful_deliveries)}."
+                            )
+                            chat.add_message("system", confirmation_msg)
+                            logger.info(
+                                f"Successfully forwarded incident {incident_id} to "
+                                f"default organizations: {', '.join(successful_deliveries)}"
+                            )
+                else:
+                    logger.info(
+                        f"No default organizations configured, incident {incident_id} "
+                        f"will remain unassigned"
+                    )
+
+            elif not Config.AUTO_FORWARDING_ENABLED:
+                logger.info(f"Auto-forwarding disabled, skipping for incident {incident_id}")
+
+        except Exception as assign_error:
+            logger.error(f"Auto-forwarding failed for {incident_id}: {assign_error}", exc_info=True)
+            # Continue with incident creation even if forwarding fails
+            if not db_incident.meta_data:
+                db_incident.meta_data = {}
+            db_incident.meta_data['forwarding_error'] = str(assign_error)
 
         db.commit()
 
@@ -381,7 +513,8 @@ async def create_incident(
 
         # Analyze media AFTER commit (in background, don't block response)
         try:
-            if image_media_to_analyze:
+            # Analyze image if enabled
+            if Config.MEDIA_ANALYSIS_ENABLED and image_media_to_analyze:
                 logger.info(f"Analyzing image for incident {incident_id}")
                 media_analyzer = get_media_analyzer()
                 image_description = await media_analyzer.analyze_image(image_media_to_analyze.file_url)
@@ -389,8 +522,11 @@ async def create_incident(
                     image_media_to_analyze.transcription = image_description
                     db.commit()
                     logger.info(f"Successfully analyzed image for incident {incident_id}")
+            elif not Config.MEDIA_ANALYSIS_ENABLED and image_media_to_analyze:
+                logger.info(f"Image analysis disabled, skipping for incident {incident_id}")
 
-            if audio_media_to_analyze:
+            # Transcribe audio if enabled
+            if Config.TRANSCRIPTION_ENABLED and audio_media_to_analyze:
                 logger.info(f"Transcribing audio for incident {incident_id}")
                 transcription_service = TranscriptionService()
                 transcription_text = await transcription_service.transcribe_and_get_text(audio_media_to_analyze.file_url)
@@ -399,6 +535,8 @@ async def create_incident(
                     transcription = transcription_text  # Update for response
                     db.commit()
                     logger.info(f"Successfully transcribed audio for incident {incident_id}")
+            elif not Config.TRANSCRIPTION_ENABLED and audio_media_to_analyze:
+                logger.info(f"Audio transcription disabled, skipping for incident {incident_id}")
         except Exception as media_error:
             logger.error(f"Error analyzing media (non-critical): {media_error}", exc_info=True)
             # Continue anyway - media analysis failure shouldn't break incident creation
