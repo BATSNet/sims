@@ -68,6 +68,17 @@ class Config:
     # Category to Organization Type Mapping
     CATEGORY_TO_ORG_TYPE: Dict[str, List[str]] = _yaml_config.get('category_to_org_type', {})
 
+    # AI Processing Control
+    _ai_processing = _yaml_config.get('ai_processing', {})
+    TRANSCRIPTION_ENABLED: bool = _ai_processing.get('transcription_enabled', True)
+    CATEGORIZATION_ENABLED: bool = _ai_processing.get('categorization_enabled', True)
+    MEDIA_ANALYSIS_ENABLED: bool = _ai_processing.get('media_analysis_enabled', True)
+    AUTO_FORWARDING_ENABLED: bool = _ai_processing.get('auto_forwarding_enabled', True)
+
+    DEFAULT_ORGANIZATIONS: List[int] = _ai_processing.get('default_organizations', [])
+    DEFAULT_PRIORITY: str = _ai_processing.get('default_priority', 'medium')
+    DEFAULT_CATEGORY: str = _ai_processing.get('default_category', 'Unclassified')
+
     # External API Integration Settings (kept from original config)
     API_ENDPOINTS = {
         "SEDAP": {
@@ -128,6 +139,17 @@ class Config:
         if provider_warnings:
             for warning in provider_warnings:
                 print(f"Warning: {warning}")
+
+        # Validate default priority/category values
+        if cls.DEFAULT_PRIORITY not in cls.PRIORITY_LEVELS:
+            raise ValueError(f"DEFAULT_PRIORITY '{cls.DEFAULT_PRIORITY}' not in PRIORITY_LEVELS")
+        if cls.DEFAULT_CATEGORY not in cls.INCIDENT_CATEGORIES:
+            raise ValueError(f"DEFAULT_CATEGORY '{cls.DEFAULT_CATEGORY}' not in INCIDENT_CATEGORIES")
+
+        # Warn if categorization is disabled but default_organizations is empty
+        if not cls.CATEGORIZATION_ENABLED and not cls.DEFAULT_ORGANIZATIONS:
+            print("Warning: categorization_enabled is false but default_organizations is empty. "
+                  "Incidents will not be auto-forwarded.")
 
         return True
 
