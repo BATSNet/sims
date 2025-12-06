@@ -7,6 +7,7 @@ import '../screens/incident_overview_screen.dart';
 import '../screens/incident_chat_screen.dart';
 import '../screens/camera_capture_screen.dart';
 import '../screens/permission_screen.dart';
+import '../screens/settings_screen.dart';
 
 class AppRoutesNotifier extends ChangeNotifier {
   UserRepository? _userRepository;
@@ -123,6 +124,11 @@ class AppRoutes {
             final incidentId = state.pathParameters['incidentId']!;
             return IncidentChatScreen(incidentId: incidentId);
           },
+        ),
+        GoRoute(
+          path: '/settings',
+          name: 'settings',
+          builder: (context, state) => const SettingsScreen(),
         ),
       ],
       errorBuilder: (context, state) => Scaffold(

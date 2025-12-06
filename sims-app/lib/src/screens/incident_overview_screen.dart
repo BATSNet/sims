@@ -23,6 +23,18 @@ class IncidentOverviewScreen extends StatelessWidget {
         ),
         backgroundColor: SimsColors.blue,
         actions: [
+          // Settings icon button
+          IconButton(
+            icon: const Icon(
+              Icons.settings,
+              color: SimsColors.white,
+            ),
+            onPressed: () {
+              context.push('/settings');
+            },
+            tooltip: 'Settings',
+          ),
+          // Connection status indicator
           BlocBuilder<WebSocketBloc, WebSocketState>(
             builder: (context, state) {
               return Padding(
