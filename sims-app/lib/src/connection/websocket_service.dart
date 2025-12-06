@@ -35,6 +35,14 @@ class WebSocketService {
   List<Incident> get incidents => List.unmodifiable(_incidents);
   Map<String, dynamic> get stats => Map.unmodifiable(_stats);
 
+  // Force reconnect with new URL (call after settings change)
+  Future<void> reconnect() async {
+    debugPrint('Reconnecting WebSocket with new URL...');
+    disconnect();
+    await Future.delayed(const Duration(milliseconds: 500));
+    await connect();
+  }
+
   Future<void> connect({String? token}) async {
     if (_isConnected) {
       debugPrint('WebSocket already connected');

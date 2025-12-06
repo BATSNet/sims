@@ -25,6 +25,7 @@ class WebSocketBloc extends Bloc<WebSocketEvent, WebSocketState> {
     on<UnsubscribeFromIncidents>(_onUnsubscribeFromIncidents);
     on<LoadInitialIncidents>(_onLoadInitialIncidents);
     on<InitialIncidentsLoaded>(_onInitialIncidentsLoaded);
+    on<ReconnectWebSocket>(_onReconnect);
 
     _setupListeners();
   }
@@ -201,6 +202,19 @@ class WebSocketBloc extends Bloc<WebSocketEvent, WebSocketState> {
     Emitter<WebSocketState> emit,
   ) {
     _webSocketService.unsubscribeFromIncidents();
+  }
+
+  Future<void> _onReconnect(
+    ReconnectWebSocket event,
+    Emitter<WebSocketState> emit,
+  ) async {
+    debugPrint('Reconnecting WebSocket with new URL...');
+    try {
+      await _webSocketService.reconnect();
+    } catch (e) {
+      debugPrint('Error reconnecting to WebSocket: $e');
+      emit(state.copyWith(error: e.toString()));
+    }
   }
 
   @override

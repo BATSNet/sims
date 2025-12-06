@@ -86,3 +86,7 @@ class InitialIncidentsLoaded extends WebSocketEvent {
   @override
   List<Object?> get props => [incidents];
 }
+
+class ReconnectWebSocket extends WebSocketEvent {
+  const ReconnectWebSocket();
+}
