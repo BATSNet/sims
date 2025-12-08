@@ -15,8 +15,8 @@ class AppConfig {
   // This now checks SettingsRepository first for custom URL
   static String get baseUrl {
     // Try to get from settings repository if available
-    if (SettingsRepository._instance != null) {
-      return SettingsRepository._instance!.getBackendUrlSync(
+    if (SettingsRepository.isInitialized) {
+      return SettingsRepository.instance!.getBackendUrlSync(
         isDevelopment: isDevelopment,
       );
     }
