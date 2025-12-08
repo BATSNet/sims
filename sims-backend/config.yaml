@@ -66,7 +66,7 @@ ai_processing:
   # Priority/category fallback values when AI classification is disabled
   # Must be valid values from priority_levels and incident_categories below
   default_priority: "medium"
-  default_category: "Unclassified"
+  default_category: "unclassified"
 
 # Prompts for AI Services
 prompts:
