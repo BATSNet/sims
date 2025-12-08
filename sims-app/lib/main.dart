@@ -6,8 +6,15 @@ import 'src/connection/bloc/websocket_bloc.dart';
 import 'src/connection/bloc/websocket_event.dart';
 import 'src/routes/app_routes.dart';
 import 'src/utils/sims_colors.dart';
+import 'src/repositories/settings_repository.dart';
 
-void main() {
+void main() async {
+  // Ensure Flutter bindings are initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize SettingsRepository before app starts
+  await SettingsRepository.getInstance();
+
   // Suppress visual overflow indicators for minor rendering overflows
   FlutterError.onError = (FlutterErrorDetails details) {
     final exception = details.exception;

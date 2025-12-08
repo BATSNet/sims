@@ -23,6 +23,12 @@ class SettingsRepository {
     return _instance!;
   }
 
+  // Check if instance is initialized (public accessor)
+  static bool get isInitialized => _instance != null;
+
+  // Get instance synchronously (only if already initialized)
+  static SettingsRepository? get instance => _instance;
+
   // Check if custom URL is enabled
   bool isCustomUrlEnabled() {
     return _prefs.getBool(_useCustomUrlKey) ?? false;
