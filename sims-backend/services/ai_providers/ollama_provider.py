@@ -11,11 +11,18 @@ logger = logging.getLogger(__name__)
 class OllamaProvider(BaseLLMProvider):
 
     def __init__(self, api_key: str, model: str, **kwargs):
-        super().__init__(model, **kwargs)
+        super().__init__(api_key, model, **kwargs)
         assert 'api_base' in kwargs, 'OllamaProvider requires \'api_base\' parameter.'
         self.api_base = kwargs['api_base']
         self.api_key = api_key
         self.model = model
+
+    async def health(self):
+        """ Send a request to list models and use it for the health check. """
+        url = f"{self.api_base}/api/tags"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(url)
+            return response
 
     async def chat_completion(
         self,
@@ -41,6 +48,7 @@ class OllamaProvider(BaseLLMProvider):
         payload = {
             "model": self.model,
             "messages": ollama_messages,
+            "stream": kwargs.get("stream", False)
         }
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -54,3 +62,6 @@ class OllamaProvider(BaseLLMProvider):
                 content=content,
                 model=data["model"],
             )
+
+    async def chat_completion_with_vision(self, *args, **kwargs):
+        pass
