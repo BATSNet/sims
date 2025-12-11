@@ -280,6 +280,7 @@ async def create_incident(
 
         # Auto-classify incident using LLM (if categorization enabled)
         classification = None
+        transcription = None
         if Config.CATEGORIZATION_ENABLED:
             try:
                 logger.info(f"Classifying incident {incident_id} with description: {incident_data.description[:100]}...")
