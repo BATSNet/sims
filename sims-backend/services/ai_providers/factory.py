@@ -16,6 +16,17 @@ from .ollama_provider import OllamaProvider
 logger = logging.getLogger(__name__)
 
 
+def get_provider(provider_name: str, model: str = None, **kwargs) -> Optional[BaseLLMProvider]:
+    """
+    Convenience function to get an LLM provider.
+    If model is not specified, uses default from config.
+    """
+    from config import Config
+    if model is None:
+        model = Config.CLASSIFICATION_MODEL
+    return ProviderFactory.create_llm_provider(provider_name, model, **kwargs)
+
+
 class ProviderFactory:
     """Factory for creating AI provider instances."""
 
