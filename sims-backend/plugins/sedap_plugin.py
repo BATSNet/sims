@@ -4,6 +4,7 @@ SEDAP Integration Plugin
 Implements SEDAP.Express integration for Battle Management Systems (BMS).
 Formats incidents as SEDAP CONTACT and TEXT messages per ICD v1.0 specification.
 """
+import base64
 import time
 import httpx
 from typing import Dict, Any, Optional, Tuple
@@ -70,7 +71,8 @@ class SEDAPPlugin(IntegrationPlugin):
 
         # Contact metadata
         name = incident.get('title', 'Unknown Incident')
-        comment = incident.get('description', '')
+        comment_raw = incident.get('description', '')
+        comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii') if comment_raw else ''
 
         # Build CONTACT message per spec
         parts = [
