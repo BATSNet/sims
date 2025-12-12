@@ -62,29 +62,37 @@ class SEDAPPlugin(IntegrationPlugin):
         """
         counter = self._get_next_counter("CONTACT")
         timestamp = self._get_timestamp()
-        contact_id = format(hash(incident.get('incident_id', '')) & 0xFFFF, 'X')
+        contact_id = incident.get('incident_id', 'UNKNOWN')
 
         # Extract location data
         lat = incident.get('latitude', 0.0)
         lon = incident.get('longitude', 0.0)
         heading = incident.get('heading', 0.0)
 
+        # Get reporter phone as sender identifier
+        reporter = incident.get('user_phone', '') or incident.get('reporter', '') or self.sender_id
+
         # Contact metadata
         name = incident.get('title', 'Unknown Incident')
-        comment_raw = incident.get('description', '')
-        comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii') if comment_raw else ''
+        comment_raw = incident.get('description', '') or 'SIMS'
+        comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii')
+
+        # Get image data if available (BASE64 encoded)
+        image_data = ''
+        if incident.get('image_base64'):
+            image_data = incident.get('image_base64')
 
         # Build CONTACT message per spec
         parts = [
             "CONTACT",
             counter,              # Number (7-bit counter)
             timestamp,            # Time (64-bit Unix timestamp in hex)
-            self.sender_id,       # Sender ID
+            reporter,             # Sender ID (phone number of reporter)
             self.classification,  # Classification (U, R, C, S, T)
-            "FALSE",              # Acknowledgement
+            "",                   # Acknowledgement (empty = FALSE)
             "",                   # MAC (Message Authentication Code)
             contact_id,           # ContactID (mandatory)
-            "FALSE",              # DeleteFlag (FALSE=current, TRUE=remove)
+            "",                   # DeleteFlag (empty = FALSE = current)
             str(lat),             # Latitude in decimal degrees
             str(lon),             # Longitude in decimal degrees
             "0",                  # Altitude in meters
@@ -101,11 +109,11 @@ class SEDAPPlugin(IntegrationPlugin):
             "",                   # Height in meters
             name,                 # Name of contact
             "M",                  # Source (M=Manual, R=Radar, O=Optical, etc.)
-            "",                   # SIDC code
+            "SUGP------",         # SIDC code (MIL-STD-2525: Suspect Unknown Ground Person)
             "",                   # MMSI (Maritime Mobile Service Identity)
             "",                   # ICAO (aviation identifier)
-            "",                   # Image (BASE64 encoded JPG/PNG)
-            comment               # Comment (free text)
+            image_data,           # Image (BASE64 encoded JPG/PNG)
+            comment               # Comment (BASE64 encoded free text)
         ]
 
         # Message MUST end with \n (0x0A) per SEDAP ICD v1.0 section III.1
@@ -114,7 +122,7 @@ class SEDAPPlugin(IntegrationPlugin):
     def _format_text_message(
         self,
         message: str,
-        alert_type: str = "01"  # 01=Alert, 02=Warning, 03=Notice, 04=Chat
+        alert_type: str = "1"  # 1=Alert, 2=Warning, 3=Notice, 4=Chat
     ) -> str:
         """
         Format text as SEDAP TEXT message per ICD v1.0 specification.
@@ -135,7 +143,7 @@ class SEDAPPlugin(IntegrationPlugin):
             "FALSE",              # Acknowledgement
             "",                   # MAC (Message Authentication Code)
             "",                   # Recipient (empty = broadcast)
-            alert_type,           # Type (01=Alert, 02=Warning, 03=Notice, 04=Chat)
+            alert_type,           # Type (1=Alert, 2=Warning, 3=Notice, 4=Chat)
             "NONE",               # Encoding (NONE=not encoded, BASE64=encoded)
             f'"{message}"'        # Text (quoted if contains special chars)
         ]
@@ -168,7 +176,7 @@ class SEDAPPlugin(IntegrationPlugin):
 
             # Format TEXT message for alert
             alert_text = f"New incident: {incident.get('title', 'Untitled')}"
-            text_msg = self._format_text_message(alert_text, alert_type="01")
+            text_msg = self._format_text_message(alert_text, alert_type="1")
 
             # Build JSON payload for REST API
             payload = {
