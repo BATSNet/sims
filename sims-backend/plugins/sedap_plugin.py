@@ -85,14 +85,14 @@ class SEDAPPlugin(IntegrationPlugin):
         # Build CONTACT message per spec
         parts = [
             "CONTACT",
-            counter,              # Number (7-bit counter)
+            "",                   # Number (empty per example)
             timestamp,            # Time (64-bit Unix timestamp in hex)
             reporter,             # Sender ID (phone number of reporter)
             self.classification,  # Classification (U, R, C, S, T)
             "",                   # Acknowledgement (empty = FALSE)
             "",                   # MAC (Message Authentication Code)
             contact_id,           # ContactID (mandatory)
-            "",                   # DeleteFlag (empty = FALSE = current)
+            "FALSE",              # DeleteFlag (FALSE = current contact)
             str(lat),             # Latitude in decimal degrees
             str(lon),             # Longitude in decimal degrees
             "0",                  # Altitude in meters
@@ -109,15 +109,15 @@ class SEDAPPlugin(IntegrationPlugin):
             "",                   # Height in meters
             name,                 # Name of contact
             "M",                  # Source (M=Manual, R=Radar, O=Optical, etc.)
-            "SUGP------",         # SIDC code (MIL-STD-2525: Suspect Unknown Ground Person)
+            "SUGP-----------",    # SIDC code (15-char MIL-STD-2525)
             "",                   # MMSI (Maritime Mobile Service Identity)
             "",                   # ICAO (aviation identifier)
             image_data,           # Image (BASE64 encoded JPG/PNG)
             comment               # Comment (BASE64 encoded free text)
         ]
 
-        # Message MUST end with \n (0x0A) per SEDAP ICD v1.0 section III.1
-        return ";".join(parts) + "\n"
+        # Message ends with \r\n per SEDAP example
+        return ";".join(parts) + "\r\n"
 
     def _format_text_message(
         self,
@@ -148,8 +148,8 @@ class SEDAPPlugin(IntegrationPlugin):
             f'"{message}"'        # Text (quoted if contains special chars)
         ]
 
-        # Message MUST end with \n (0x0A) per SEDAP ICD v1.0 section III.1
-        return ";".join(parts) + "\n"
+        # Message ends with \r\n per SEDAP example
+        return ";".join(parts) + "\r\n"
 
     async def send(
         self,
