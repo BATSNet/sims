@@ -72,8 +72,8 @@ class SEDAPPlugin(IntegrationPlugin):
         # Get reporter phone as sender identifier
         reporter = incident.get('user_phone', '') or incident.get('reporter', '') or self.sender_id
 
-        # Contact metadata
-        name = incident.get('title', 'Unknown Incident')
+        # Contact metadata - use SIMS as name, not timestamp title
+        name = self.sender_id
         comment_raw = incident.get('description', '') or 'SIMS'
         comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii')
 
