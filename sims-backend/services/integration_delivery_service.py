@@ -14,6 +14,7 @@ from models.organization_model import OrganizationORM
 from models.organization_integration_model import OrganizationIntegrationORM
 from models.integration_template_model import IntegrationTemplateORM
 from models.integration_delivery_model import IntegrationDeliveryORM, DeliveryStatus
+from models.media_model import MediaORM
 from plugins.integration_registry import IntegrationRegistry
 from plugins.base_integration import IntegrationResult
 
@@ -24,16 +25,36 @@ class IntegrationDeliveryService:
     """Service for delivering incidents via configured integrations"""
 
     @staticmethod
-    def _incident_to_dict(incident: IncidentORM) -> Dict[str, Any]:
+    def _incident_to_dict(incident: IncidentORM, db: Session) -> Dict[str, Any]:
         """
         Convert IncidentORM to dictionary for plugin consumption.
 
         Args:
             incident: IncidentORM instance
+            db: Database session for querying media
 
         Returns:
             Dictionary representation of incident
         """
+        # Query media associated with this incident
+        image_url = None
+        video_url = None
+        audio_url = None
+        audio_transcript = None
+
+        media_items = db.query(MediaORM).filter(
+            MediaORM.incident_id == incident.id
+        ).all()
+
+        for media in media_items:
+            if media.media_type == 'image' and not image_url:
+                image_url = media.file_url
+            elif media.media_type == 'video' and not video_url:
+                video_url = media.file_url
+            elif media.media_type == 'audio' and not audio_url:
+                audio_url = media.file_url
+                audio_transcript = media.transcription
+
         return {
             'id': str(incident.id),
             'incident_id': incident.incident_id,
@@ -50,11 +71,10 @@ class IntegrationDeliveryService:
             'created_at': incident.created_at.isoformat() if incident.created_at else None,
             'updated_at': incident.updated_at.isoformat() if incident.updated_at else None,
             'metadata': incident.meta_data or {},
-            # Media URLs would be added by caller if needed
-            'image_url': None,
-            'video_url': None,
-            'audio_url': None,
-            'audio_transcript': None
+            'image_url': image_url,
+            'video_url': video_url,
+            'audio_url': audio_url,
+            'audio_transcript': audio_transcript
         }
 
     @staticmethod
@@ -148,7 +168,7 @@ class IntegrationDeliveryService:
                 return deliveries
 
             # Convert incident and organization to dictionaries
-            incident_dict = cls._incident_to_dict(incident)
+            incident_dict = cls._incident_to_dict(incident, db)
             org_dict = cls._organization_to_dict(organization)
 
             logger.info(

@@ -78,9 +78,8 @@ class SEDAPPlugin(IntegrationPlugin):
         comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii')
 
         # Get image data if available (BASE64 encoded)
-        image_data = ''
-        if incident.get('image_base64'):
-            image_data = incident.get('image_base64')
+        # image_base64 is populated by send() method after fetching from URL
+        image_data = incident.get('image_base64', '')
 
         # Build CONTACT message per spec
         parts = [
@@ -171,6 +170,19 @@ class SEDAPPlugin(IntegrationPlugin):
         start_time = time.time()
 
         try:
+            # Fetch image from URL and convert to base64 if available
+            if incident.get('image_url') and not incident.get('image_base64'):
+                try:
+                    async with httpx.AsyncClient(timeout=30) as img_client:
+                        img_response = await img_client.get(incident['image_url'])
+                        if img_response.status_code == 200:
+                            incident['image_base64'] = base64.b64encode(
+                                img_response.content
+                            ).decode('ascii')
+                            self.logger.info(f"Fetched and encoded image from {incident['image_url']}")
+                except Exception as img_err:
+                    self.logger.warning(f"Failed to fetch image: {img_err}")
+
             # Format CONTACT message for the incident
             contact_msg = self._format_contact_message(incident)
 
