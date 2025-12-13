@@ -147,6 +147,7 @@ async def create_incident(
             location=location_geom,
             latitude=incident_data.latitude,
             longitude=incident_data.longitude,
+            altitude=incident_data.altitude,
             heading=incident_data.heading,
             title=incident_data.title,
             description=initial_description,

@@ -44,6 +44,7 @@ class IncidentORM(Base):
     location = Column(Geometry('POINT', srid=4326))
     latitude = Column(Float)
     longitude = Column(Float)
+    altitude = Column(Float)  # Altitude in meters from GPS
     heading = Column(Float)
 
     # Incident details
@@ -83,6 +84,7 @@ class IncidentCreate(BaseModel):
     audioUrl: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    altitude: Optional[float] = None
     heading: Optional[float] = None
     timestamp: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -128,6 +130,7 @@ class IncidentResponse(BaseModel):
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    altitude: Optional[float] = None
     heading: Optional[float] = None
     imageUrl: Optional[str] = None
     videoUrl: Optional[str] = None
@@ -183,6 +186,7 @@ class IncidentResponse(BaseModel):
             updated_at=incident.updated_at.isoformat() if incident.updated_at else datetime.utcnow().isoformat(),
             latitude=incident.latitude,
             longitude=incident.longitude,
+            altitude=incident.altitude,
             heading=incident.heading,
             imageUrl=image_url,
             videoUrl=video_url,

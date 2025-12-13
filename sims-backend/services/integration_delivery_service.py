@@ -65,6 +65,7 @@ class IntegrationDeliveryService:
             'category': incident.category,
             'latitude': incident.latitude,
             'longitude': incident.longitude,
+            'altitude': incident.altitude,
             'heading': incident.heading,
             'user_phone': incident.user_phone,
             'tags': incident.tags or [],
