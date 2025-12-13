@@ -25,6 +25,50 @@ VALID_TEXT_TYPES = ['', '0', '1', '2', '3', '4']  # 0=Undefined, 1=Alert, 2=Warn
 VALID_ENCODINGS = ['BASE64', 'NONE', '']
 VALID_DELETE_FLAGS = ['TRUE', 'FALSE', '']
 
+# Category to Name mapping (from sedap_plugin.py)
+CATEGORY_TO_NAME = {
+    'drone_detection': 'Suspected Drone',
+    'suspicious_vehicle': 'Suspicious Vehicle',
+    'suspicious_person': 'Suspicious Person',
+    'fire_incident': 'Fire Incident',
+    'medical_emergency': 'Medical Emergency',
+    'infrastructure_damage': 'Infrastructure Damage',
+    'cyber_incident': 'Cyber Incident',
+    'hazmat_incident': 'Hazmat Incident',
+    'natural_disaster': 'Natural Disaster',
+    'airport_incident': 'Airport Incident',
+    'security_breach': 'Security Breach',
+    'civil_unrest': 'Civil Unrest',
+    'armed_threat': 'Armed Threat',
+    'explosion': 'Explosion',
+    'chemical_biological': 'Chemical/Biological',
+    'maritime_incident': 'Maritime Incident',
+    'theft_burglary': 'Theft/Burglary',
+    'unclassified': 'Unclassified Incident'
+}
+
+# Category to SIDC mapping (from sedap_plugin.py)
+CATEGORY_TO_SIDC = {
+    'drone_detection': 'SUAPU----------',
+    'suspicious_vehicle': 'SUGPU----------',
+    'suspicious_person': 'SUGPE----------',
+    'fire_incident': 'OHOPF----------',
+    'medical_emergency': 'GFGPUSM--------',
+    'infrastructure_damage': 'OHOPI----------',
+    'cyber_incident': 'SUGPU----------',
+    'hazmat_incident': 'OHOPH----------',
+    'natural_disaster': 'OHOPN----------',
+    'airport_incident': 'SUAPI----------',
+    'security_breach': 'SHGPU----------',
+    'civil_unrest': 'SUGPE----------',
+    'armed_threat': 'SHGPU----------',
+    'explosion': 'OHOPE----------',
+    'chemical_biological': 'OHOPB----------',
+    'maritime_incident': 'SUSPU----------',
+    'theft_burglary': 'SUGPU----------',
+    'unclassified': 'SUGP-----------',
+}
+
 
 class ValidationResult:
     def __init__(self):
@@ -362,17 +406,32 @@ def validate_text_message(message: str) -> ValidationResult:
 
 
 def generate_sample_contact_message():
-    """Generate a sample CONTACT message using our plugin logic for testing."""
+    """Generate a sample CONTACT message using the NEW plugin logic with category mappings."""
     import time
     import base64
 
     timestamp = format(int(time.time() * 1000), 'X')
 
+    # Test with drone_detection category
+    category = 'drone_detection'
+    name = CATEGORY_TO_NAME.get(category, 'Incident Report')
+    sidc = CATEGORY_TO_SIDC.get(category, 'SUGP-----------')
+
+    # Build structured comment
+    comment_parts = [
+        "Priority: HIGH",
+        "Type: Drone Detection",
+        "Report: Suspicious drone spotted near airport perimeter",
+        "Voice: I saw a drone flying over the runway"
+    ]
+    comment_text = ' | '.join(comment_parts)
+    comment = base64.b64encode(comment_text.encode('utf-8')).decode('ascii')
+
     parts = [
         "CONTACT",
         "",                      # Number (empty per example)
         timestamp,               # Time
-        "+4917663283066",        # Sender (phone number)
+        "+4917663283066",        # Sender (reporter phone number)
         "U",                     # Classification
         "",                      # Acknowledgement
         "",                      # MAC
@@ -380,25 +439,25 @@ def generate_sample_contact_message():
         "FALSE",                 # DeleteFlag
         "52.4601683",            # Latitude
         "13.3958967",            # Longitude
-        "0",                     # Altitude
+        "150",                   # Altitude (from GPS)
         "",                      # RelX
         "",                      # RelY
         "",                      # RelZ
         "",                      # Speed
         "",                      # Course
-        "",                      # Heading
+        "45",                    # Heading
         "",                      # Roll
         "",                      # Pitch
         "",                      # Width
         "",                      # Length
         "",                      # Height
-        "SIMS",                  # Name
-        "M",                     # Source
-        "SUGP-----------",       # SIDC (15 chars)
+        name,                    # Name = category-based name
+        "M",                     # Source = Manual
+        sidc,                    # SIDC = category-based code
         "",                      # MMSI
         "",                      # ICAO
         "",                      # Image (would be BASE64)
-        base64.b64encode(b"Test incident description").decode('ascii')  # Comment
+        comment                  # Comment = structured summary
     ]
 
     return ";".join(parts) + "\r\n"
@@ -468,6 +527,13 @@ def test_with_database():
                     image_url = m.file_url
                     break
 
+            # Get audio transcription if available
+            audio_transcript = None
+            for m in media_items:
+                if m.media_type == 'audio' and hasattr(m, 'transcription') and m.transcription:
+                    audio_transcript = m.transcription
+                    break
+
             # Build incident dict like integration_delivery_service does
             incident_dict = {
                 'id': str(incident.id),
@@ -479,30 +545,61 @@ def test_with_database():
                 'category': incident.category,
                 'latitude': incident.latitude,
                 'longitude': incident.longitude,
+                'altitude': getattr(incident, 'altitude', None),
                 'heading': incident.heading,
                 'user_phone': incident.user_phone,
+                'audio_transcript': audio_transcript,
                 'image_url': image_url,
                 'image_base64': ''  # Would be fetched by plugin
             }
 
             print(f"  Title: {incident.title}")
             print(f"  Description: {incident.description[:50] if incident.description else 'N/A'}...")
-            print(f"  Location: {incident.latitude}, {incident.longitude}")
+            print(f"  Category: {incident.category}")
+            print(f"  Location: {incident.latitude}, {incident.longitude}, alt={getattr(incident, 'altitude', 'N/A')}")
             print(f"  Reporter: {incident.user_phone}")
+            print(f"  Audio transcript: {audio_transcript[:50] if audio_transcript else 'None'}...")
             print(f"  Image URL: {image_url or 'None'}")
 
-            # Generate CONTACT message using plugin logic
+            # Generate CONTACT message using NEW plugin logic with category mappings
             import time
             timestamp = format(int(time.time() * 1000), 'X')
-            reporter = incident.user_phone or 'SIMS'
-            comment_raw = incident.description or 'SIMS'
-            comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii')
+
+            # Sender = reporter phone (original source)
+            sender = incident.user_phone or 'SIMS'
+
+            # Get category-based Name and SIDC
+            category = incident.category or 'unclassified'
+            category_key = category.lower().replace(' ', '_') if category else 'unclassified'
+            name = CATEGORY_TO_NAME.get(category_key, 'Incident Report')
+            sidc = CATEGORY_TO_SIDC.get(category_key, 'SUGP-----------')
+
+            # Get altitude (may not exist in older records)
+            altitude = getattr(incident, 'altitude', 0) or 0
+
+            # Build structured comment (like _build_structured_comment)
+            comment_parts = []
+            priority = incident.priority or 'medium'
+            comment_parts.append(f"Priority: {priority.upper()}")
+            comment_parts.append(f"Type: {category.replace('_', ' ').title()}")
+            if incident.description:
+                comment_parts.append(f"Report: {incident.description}")
+            if audio_transcript:
+                comment_parts.append(f"Voice: {audio_transcript}")
+            if incident.title and incident.title != incident.description:
+                comment_parts.append(f"Title: {incident.title}")
+            comment_text = ' | '.join(comment_parts) or 'SIMS Incident'
+            comment = base64.b64encode(comment_text.encode('utf-8')).decode('ascii')
+
+            print(f"\n  Category mapping:")
+            print(f"    Category: {category} -> Name: {name}")
+            print(f"    SIDC: {sidc}")
 
             parts = [
                 "CONTACT",
                 "",                      # Number
                 timestamp,               # Time
-                reporter,                # Sender
+                sender,                  # Sender = reporter phone
                 "U",                     # Classification
                 "",                      # Acknowledgement
                 "",                      # MAC
@@ -510,18 +607,18 @@ def test_with_database():
                 "FALSE",                 # DeleteFlag
                 str(incident.latitude or 0),   # Latitude
                 str(incident.longitude or 0),  # Longitude
-                "0",                     # Altitude
+                str(altitude),           # Altitude (now populated)
                 "", "", "",              # Relative coords
                 "", "",                  # Speed, Course
                 str(incident.heading or ""),  # Heading
                 "", "",                  # Roll, Pitch
                 "", "", "",              # Width, Length, Height
-                "SIMS",                  # Name
-                "M",                     # Source
-                "SUGP-----------",       # SIDC
+                name,                    # Name = category-based name
+                "M",                     # Source = Manual
+                sidc,                    # SIDC = category-based code
                 "", "",                  # MMSI, ICAO
                 "",                      # Image (empty for test)
-                comment                  # Comment
+                comment                  # Comment = structured summary
             ]
 
             contact_msg = ";".join(parts) + "\r\n"

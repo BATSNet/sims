@@ -260,6 +260,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
           'description': incidentDescription,
           'latitude': location?.latitude,
           'longitude': location?.longitude,
+          'altitude': location?.altitude,
           'heading': location?.heading,
           'timestamp': DateTime.now().toIso8601String(),
           'user_phone': userPhone,

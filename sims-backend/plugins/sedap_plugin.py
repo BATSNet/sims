@@ -14,6 +14,50 @@ from plugins.base_integration import IntegrationPlugin, IntegrationResult
 
 logger = logging.getLogger(__name__)
 
+# Category to human-readable name mapping for SEDAP Name field
+CATEGORY_TO_NAME = {
+    'drone_detection': 'Suspected Drone',
+    'suspicious_vehicle': 'Suspicious Vehicle',
+    'suspicious_person': 'Suspicious Person',
+    'fire_incident': 'Fire Incident',
+    'medical_emergency': 'Medical Emergency',
+    'infrastructure_damage': 'Infrastructure Damage',
+    'cyber_incident': 'Cyber Incident',
+    'hazmat_incident': 'Hazmat Incident',
+    'natural_disaster': 'Natural Disaster',
+    'airport_incident': 'Airport Incident',
+    'security_breach': 'Security Breach',
+    'civil_unrest': 'Civil Unrest',
+    'armed_threat': 'Armed Threat',
+    'explosion': 'Explosion',
+    'chemical_biological': 'Chemical/Biological',
+    'maritime_incident': 'Maritime Incident',
+    'theft_burglary': 'Theft/Burglary',
+    'unclassified': 'Unclassified Incident'
+}
+
+# Category to MIL-STD-2525B/STANAG 2019 SIDC mapping (15-char codes)
+CATEGORY_TO_SIDC = {
+    'drone_detection': 'SUAPU----------',  # Unknown Air UAV
+    'suspicious_vehicle': 'SUGPU----------',  # Unknown Ground Unit
+    'suspicious_person': 'SUGPE----------',  # Unknown Ground Personnel
+    'fire_incident': 'OHOPF----------',  # Hazard Fire/Flame
+    'medical_emergency': 'GFGPUSM--------',  # Friendly Unit Medical
+    'infrastructure_damage': 'OHOPI----------',  # Hazard Infrastructure
+    'cyber_incident': 'SUGPU----------',  # Unknown Ground Unit (no specific cyber)
+    'hazmat_incident': 'OHOPH----------',  # Hazard HAZMAT
+    'natural_disaster': 'OHOPN----------',  # Hazard Natural Event
+    'airport_incident': 'SUAPI----------',  # Unknown Air Installation
+    'security_breach': 'SHGPU----------',  # Hostile Ground Unit
+    'civil_unrest': 'SUGPE----------',  # Unknown Ground Personnel
+    'armed_threat': 'SHGPU----------',  # Hostile Ground Unit
+    'explosion': 'OHOPE----------',  # Hazard Explosion
+    'chemical_biological': 'OHOPB----------',  # Hazard Bio/Chem
+    'maritime_incident': 'SUSPU----------',  # Unknown Sea Surface Unit
+    'theft_burglary': 'SUGPU----------',  # Unknown Ground Unit
+    'unclassified': 'SUGP-----------',  # Unknown Ground (default)
+}
+
 
 class SEDAPPlugin(IntegrationPlugin):
     """Plugin for SEDAP.Express BMS integration"""
@@ -46,6 +90,47 @@ class SEDAPPlugin(IntegrationPlugin):
         timestamp_ms = int(time.time() * 1000)
         return format(timestamp_ms, 'X')
 
+    def _build_structured_comment(self, incident: Dict[str, Any]) -> str:
+        """
+        Build structured comment with all available context.
+
+        IMPORTANT: Always include transcription and available text regardless of AI status.
+        This ensures operators always receive maximum context about the incident.
+        """
+        parts = []
+
+        # Priority
+        priority = incident.get('priority', 'medium')
+        parts.append(f"Priority: {priority.upper()}")
+
+        # Category
+        category = incident.get('category', 'unclassified')
+        parts.append(f"Type: {category.replace('_', ' ').title()}")
+
+        # Description (AI-generated summary OR raw text input)
+        description = incident.get('description', '')
+        if description:
+            parts.append(f"Report: {description}")
+
+        # Audio transcript - ALWAYS include if available (regardless of AI)
+        transcript = incident.get('audio_transcript', '')
+        if transcript:
+            parts.append(f"Voice: {transcript}")
+
+        # Title if different from description
+        title = incident.get('title', '')
+        if title and title != description:
+            parts.append(f"Title: {title}")
+
+        # Timestamp
+        created = incident.get('created_at', '')
+        if created:
+            parts.append(f"Time: {created}")
+
+        # Combine and encode
+        comment_text = ' | '.join(parts) or 'SIMS Incident'
+        return base64.b64encode(comment_text.encode('utf-8')).decode('ascii')
+
     def _format_contact_message(
         self,
         incident: Dict[str, Any]
@@ -60,59 +145,67 @@ class SEDAPPlugin(IntegrationPlugin):
         <Heading>;<Roll>;<Pitch>;<Width>;<Length>;<Height>;
         <Name>;<Source>;<SIDC>;<MMSI>;<ICAO>;<Image>;<Comment>
         """
-        counter = self._get_next_counter("CONTACT")
         timestamp = self._get_timestamp()
+
+        # Sender = reporter phone (original source of information)
+        sender = incident.get('user_phone', '') or self.sender_id
+
+        # ContactID = incident ID
         contact_id = incident.get('incident_id', 'UNKNOWN')
 
-        # Extract location data
+        # Location data
         lat = incident.get('latitude', 0.0)
         lon = incident.get('longitude', 0.0)
-        heading = incident.get('heading', 0.0)
+        altitude = incident.get('altitude', 0) or 0
+        heading = incident.get('heading', '')
 
-        # Get reporter phone as sender identifier
-        reporter = incident.get('user_phone', '') or incident.get('reporter', '') or self.sender_id
+        # Name = dynamic category name for human readability
+        category = incident.get('category', 'unclassified')
+        # Normalize category to lowercase for lookup
+        category_key = category.lower().replace(' ', '_') if category else 'unclassified'
+        name = CATEGORY_TO_NAME.get(category_key, 'Incident Report')
 
-        # Contact metadata - use SIMS as name, not timestamp title
-        name = self.sender_id
-        comment_raw = incident.get('description', '') or 'SIMS'
-        comment = base64.b64encode(comment_raw.encode('utf-8')).decode('ascii')
+        # SIDC = dynamic based on category (MIL-STD-2525B/STANAG 2019)
+        sidc = CATEGORY_TO_SIDC.get(category_key, 'SUGP-----------')
 
-        # Get image data if available (BASE64 encoded)
-        # image_base64 is populated by send() method after fetching from URL
+        # Image = BASE64 encoded (populated by send() method)
         image_data = incident.get('image_base64', '')
+
+        # Comment = structured summary with all available context (BASE64 encoded)
+        comment = self._build_structured_comment(incident)
 
         # Build CONTACT message per spec
         parts = [
             "CONTACT",
-            "",                   # Number (empty per example)
-            timestamp,            # Time (64-bit Unix timestamp in hex)
-            reporter,             # Sender ID (phone number of reporter)
-            self.classification,  # Classification (U, R, C, S, T)
-            "",                   # Acknowledgement (empty = FALSE)
-            "",                   # MAC (Message Authentication Code)
-            contact_id,           # ContactID (mandatory)
-            "FALSE",              # DeleteFlag (FALSE = current contact)
-            str(lat),             # Latitude in decimal degrees
-            str(lon),             # Longitude in decimal degrees
-            "0",                  # Altitude in meters
-            "",                   # Relative X-Distance (empty = using absolute coords)
-            "",                   # Relative Y-Distance
-            "",                   # Relative Z-Distance
-            "",                   # Speed over ground in m/s
-            "",                   # Course over ground in degrees
+            "",                    # Number (empty per spec example)
+            timestamp,             # Time (64-bit Unix timestamp in hex)
+            sender,                # Sender = reporter phone
+            self.classification,   # Classification (U, R, C, S, T)
+            "",                    # Acknowledgement
+            "",                    # MAC (Message Authentication Code)
+            contact_id,            # ContactID (mandatory)
+            "FALSE",               # DeleteFlag (FALSE = current contact)
+            str(lat),              # Latitude in decimal degrees
+            str(lon),              # Longitude in decimal degrees
+            str(altitude),         # Altitude in meters from GPS
+            "",                    # Relative X-Distance (using absolute coords)
+            "",                    # Relative Y-Distance
+            "",                    # Relative Z-Distance
+            "",                    # Speed over ground in m/s
+            "",                    # Course over ground in degrees
             str(heading) if heading else "",  # Heading in degrees
-            "",                   # Roll in degrees
-            "",                   # Pitch in degrees
-            "",                   # Width in meters
-            "",                   # Length in meters
-            "",                   # Height in meters
-            name,                 # Name of contact
-            "M",                  # Source (M=Manual, R=Radar, O=Optical, etc.)
-            "SUGP-----------",    # SIDC code (15-char MIL-STD-2525)
-            "",                   # MMSI (Maritime Mobile Service Identity)
-            "",                   # ICAO (aviation identifier)
-            image_data,           # Image (BASE64 encoded JPG/PNG)
-            comment               # Comment (BASE64 encoded free text)
+            "",                    # Roll in degrees
+            "",                    # Pitch in degrees
+            "",                    # Width in meters
+            "",                    # Length in meters
+            "",                    # Height in meters
+            name,                  # Name = category name for readability
+            "M",                   # Source = Manual (app submission)
+            sidc,                  # SIDC = dynamic based on category
+            "",                    # MMSI (Maritime Mobile Service Identity)
+            "",                    # ICAO (aviation identifier)
+            image_data,            # Image (BASE64 encoded JPG/PNG)
+            comment                # Comment (BASE64 structured summary)
         ]
 
         # Message ends with \r\n per SEDAP example
