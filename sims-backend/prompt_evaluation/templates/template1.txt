@@ -1,0 +1,41 @@
+Analyze the following incident report and classify it.{{category_context}}
+
+INCIDENT REPORT:
+{{incident_text}}
+
+CLASSIFICATION GUIDELINES:
+- PEOPLE-RELATED: Use "suspicious_person" for individuals exhibiting threatening behavior, trespassing, or unauthorized presence
+- VEHICLE-RELATED: Use "suspicious_vehicle" for unusual vehicles, especially military-type vehicles in civilian areas
+- CYBER-RELATED: Use "cyber_incident" for hacking, network intrusions, malware, data breaches, suspicious computer activity
+- DRONE/UAV: Use "drone_detection" for unmanned aerial vehicles, especially near restricted areas
+- FIRE/EXPLOSION: Distinguish between "fire_incident" and "explosion" based on nature of event
+- MEDICAL: Use "medical_emergency" for injuries, health crises, mass casualty events
+- INFRASTRUCTURE: Use "infrastructure_damage" for damage to utilities, buildings, transportation systems
+- HAZMAT: Use "hazmat_incident" for chemical spills, radiation, biological hazards
+- NATURAL DISASTERS: Floods, earthquakes, severe weather
+- SECURITY: Use "security_breach" for unauthorized access, perimeter violations
+- ARMED THREATS: Active shooters, armed individuals, weapon sightings
+
+TASK:
+Classify this incident by providing:
+1. Category (choose the most appropriate from the list below)
+2. Priority level (critical, high, medium, or low)
+3. Reasoning (2-3 sentence explanation of your classification decision)
+
+AVAILABLE CATEGORIES:
+{{categories_list}}
+
+PRIORITY GUIDELINES:
+- critical: Immediate threat to life, active attack, mass casualties, imminent danger
+- high: Serious threat with potential for casualties, time-sensitive situation, armed individuals
+- medium: Notable incident requiring response but limited immediate danger, property damage
+- low: Minor incident, informational, routine matter
+
+RESPONSE FORMAT (JSON only, no other text):
+{
+    "category": "category_name",
+    "priority": "priority_level",
+    "explanation": "explanation"
+}
+
+Respond with ONLY the JSON object, no additional text or markdown formatting.

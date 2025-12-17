@@ -1,0 +1,384 @@
+description: "SIMS Prompt Evaluation"
+
+env:
+  OLLAMA_BASE_URL: http://localhost:11435
+
+prompts:
+  - file://templates/template*.txt
+  
+
+providers:
+  - id: ollama:chat:gpt-oss
+    config:
+      apiBaseUrl: http://localhost:11435
+      temperature: 0.3
+
+defaultTest:
+  vars:
+    system_message: file://system_prompts/system_prompt1.txt
+    category_context: ""
+    categories_list: |
+      - drone_detection
+      - suspicious_vehicle
+      - suspicious_person
+      - fire_incident
+      - medical_emergency
+      - infrastructure_damage
+      - cyber_incident
+      - hazmat_incident
+      - natural_disaster
+      - airport_incident
+      - security_breach
+      - civil_unrest
+      - armed_threat
+      - explosion
+      - chemical_biological
+      - maritime_incident
+      - theft_burglary
+      - unclassified
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        let obj;
+        try {
+          obj = JSON.parse(output);
+        } catch {
+          return false;
+        }
+        return 'category' in obj && 'explanation' in obj;
+    - type: javascript
+      value: |
+        let obj;
+        try {
+          obj = JSON.parse(output);
+        } catch {
+          return false;
+        }
+        return obj.category === context.vars.expectedCategory;
+    - type: llm-rubric
+      value: |
+        ORIGINAL INCIDENT: {{input}}
+        
+        EXPECTED CATEGORY: {{expected.expectedCategory}}
+        
+        LLM OUTPUT: {{output}}
+        
+        Score explanation quality 0.0-1.0:
+        - References incident details
+        - Logically justifies category
+        - Evidence-based
+        - Does not hallucinate
+        
+        Threshold: 0.7
+
+  options:
+    provider: ollama:chat:gpt-oss
+
+tests:
+  # DRONE DETECTION (5)
+  - vars:
+      incident_text: "I see a drone flying over the airport"
+      expectedCategory: "drone_detection"
+  - vars:
+      incident_text: "Multiple small UAVs spotted near military base perimeter"
+      expectedCategory: "drone_detection"
+  - vars:
+      incident_text: "Unidentified quadcopter hovering over power plant at night"
+      expectedCategory: "drone_detection"
+  - vars:
+      incident_text: "Drone swarm detected approaching restricted airspace"
+      expectedCategory: "drone_detection"
+  - vars:
+      incident_text: "Camera-equipped drone circling government building"
+      expectedCategory: "drone_detection"
+
+  # SUSPICIOUS VEHICLE (5)
+  - vars:
+      incident_text: "Black unmarked van parked outside data center for 3 hours"
+      expectedCategory: "suspicious_vehicle"
+  - vars:
+      incident_text: "Military-style truck with covered cargo near civilian mall"
+      expectedCategory: "suspicious_vehicle"
+  - vars:
+      incident_text: "Rental truck idling near federal courthouse after hours"
+      expectedCategory: "suspicious_vehicle"
+  - vars:
+      incident_text: "Armored personnel carrier spotted in residential neighborhood"
+      expectedCategory: "suspicious_vehicle"
+  - vars:
+      incident_text: "Box truck with fake plates circling hospital ER entrance"
+      expectedCategory: "suspicious_vehicle"
+
+  # SUSPICIOUS PERSON (5)
+  - vars:
+      incident_text: "Man in hoodie taking photos of security cameras at bank"
+      expectedCategory: "suspicious_person"
+  - vars:
+      incident_text: "Individual testing door handles on parked cars at night"
+      expectedCategory: "suspicious_person"
+  - vars:
+      incident_text: "Person loitering near chemical storage tanks wearing mask"
+      expectedCategory: "suspicious_person"
+  - vars:
+      incident_text: "Unknown male pacing outside school pickup zone with backpack"
+      expectedCategory: "suspicious_person"
+  - vars:
+      incident_text: "Woman pretending to use phone while filming police station"
+      expectedCategory: "suspicious_person"
+
+  # FIRE INCIDENT (5)
+  - vars:
+      incident_text: "Smoke rising from warehouse roof, flames visible in windows"
+      expectedCategory: "fire_incident"
+  - vars:
+      incident_text: "Vehicle fire spreading to nearby dry grass near highway"
+      expectedCategory: "fire_incident"
+  - vars:
+      incident_text: "Electrical fire in server room, sparks and smoke reported"
+      expectedCategory: "fire_incident"
+  - vars:
+      incident_text: "Dumpster fire behind apartment complex spreading to siding"
+      expectedCategory: "fire_incident"
+  - vars:
+      incident_text: "Kitchen fire in restaurant, heavy smoke from exhaust vents"
+      expectedCategory: "fire_incident"
+
+  # MEDICAL EMERGENCY (5)
+  - vars:
+      incident_text: "Multiple people collapsed at subway station, seizing"
+      expectedCategory: "medical_emergency"
+  - vars:
+      incident_text: "Elderly man clutching chest outside grocery store"
+      expectedCategory: "medical_emergency"
+  - vars:
+      incident_text: "Worker overcome by fumes at construction site"
+      expectedCategory: "medical_emergency"
+  - vars:
+      incident_text: "Child having severe allergic reaction at playground"
+      expectedCategory: "medical_emergency"
+  - vars:
+      incident_text: "Office worker sudden cardiac arrest during meeting"
+      expectedCategory: "medical_emergency"
+
+  # INFRASTRUCTURE DAMAGE (5)
+  - vars:
+      incident_text: "Major pothole causing vehicle damage on main bridge"
+      expectedCategory: "infrastructure_damage"
+  - vars:
+      incident_text: "Power lines down across residential street after storm"
+      expectedCategory: "infrastructure_damage"
+  - vars:
+      incident_text: "Gas main rupture flooding street with natural gas odor"
+      expectedCategory: "infrastructure_damage"
+  - vars:
+      incident_text: "Train tracks damaged by fallen tree blocking rail line"
+      expectedCategory: "infrastructure_damage"
+  - vars:
+      incident_text: "Sewer main break flooding intersection with sewage"
+      expectedCategory: "infrastructure_damage"
+
+  # CYBER INCIDENT (5)
+  - vars:
+      incident_text: "Hospital network offline, patient monitors blank"
+      expectedCategory: "cyber_incident"
+  - vars:
+      incident_text: "ATM machines displaying ransomware message"
+      expectedCategory: "cyber_incident"
+  - vars:
+      incident_text: "Corporate email servers sending phishing from CEO account"
+      expectedCategory: "cyber_incident"
+  - vars:
+      incident_text: "Traffic light system hacked, causing gridlock"
+      expectedCategory: "cyber_incident"
+  - vars:
+      incident_text: "Power grid control system showing unauthorized access"
+      expectedCategory: "cyber_incident"
+
+  # HAZMAT INCIDENT (5)
+  - vars:
+      incident_text: "Chemical tanker leaking yellow liquid at highway rest stop"
+      expectedCategory: "hazmat_incident"
+  - vars:
+      incident_text: "Unknown white powder spilled from truck at warehouse"
+      expectedCategory: "hazmat_incident"
+  - vars:
+      incident_text: "Gas cloud with chlorine smell near water treatment plant"
+      expectedCategory: "hazmat_incident"
+  - vars:
+      incident_text: "Radioactive warning symbol on damaged shipping container"
+      expectedCategory: "hazmat_incident"
+  - vars:
+      incident_text: "Fuel truck overturned, diesel spreading toward storm drain"
+      expectedCategory: "hazmat_incident"
+
+  # NATURAL DISASTER (5)
+  - vars:
+      incident_text: "Flash flooding submerging vehicles on main street"
+      expectedCategory: "natural_disaster"
+  - vars:
+      incident_text: "Tornado touchdown damaging homes in suburban area"
+      expectedCategory: "natural_disaster"
+  - vars:
+      incident_text: "Earthquake shaking buildings, cracked foundation reported"
+      expectedCategory: "natural_disaster"
+  - vars:
+      incident_text: "Hurricane force winds downing power lines citywide"
+      expectedCategory: "natural_disaster"
+  - vars:
+      incident_text: "Wildfire approaching residential neighborhood from east"
+      expectedCategory: "natural_disaster"
+
+  # AIRPORT INCIDENT (5)
+  - vars:
+      incident_text: "Runway breach by unauthorized vehicle on tarmac"
+      expectedCategory: "airport_incident"
+  - vars:
+      incident_text: "Bird strike on departing commercial flight"
+      expectedCategory: "airport_incident"
+  - vars:
+      incident_text: "Baggage claim area flooded from burst pipe"
+      expectedCategory: "airport_incident"
+  - vars:
+      incident_text: "Security checkpoint alarm triggered by unknown device"
+      expectedCategory: "airport_incident"
+  - vars:
+      incident_text: "Lost child wandering onto active taxiway"
+      expectedCategory: "airport_incident"
+
+  # SECURITY BREACH (5)
+  - vars:
+      incident_text: "Gate left unlocked, strangers entering secure facility"
+      expectedCategory: "security_breach"
+  - vars:
+      incident_text: "Tailgating observed at data center entrance"
+      expectedCategory: "security_breach"
+  - vars:
+      incident_text: "Motion sensors triggered in vault area after hours"
+      expectedCategory: "security_breach"
+  - vars:
+      incident_text: "Perimeter fence cut near electrical substation"
+      expectedCategory: "security_breach"
+  - vars:
+      incident_text: "Unauthorized access badge used at nuclear plant"
+      expectedCategory: "security_breach"
+
+  # CIVIL UNREST (5)
+  - vars:
+      incident_text: "Protesters blocking highway ramps with barricades"
+      expectedCategory: "civil_unrest"
+  - vars:
+      incident_text: "Rioters throwing bottles at police near city hall"
+      expectedCategory: "civil_unrest"
+  - vars:
+      incident_text: "Large crowd gathered outside federal building chanting"
+      expectedCategory: "civil_unrest"
+  - vars:
+      incident_text: "Looters breaking store windows during demonstration"
+      expectedCategory: "civil_unrest"
+  - vars:
+      incident_text: "Molotov cocktails thrown at patrol cars downtown"
+      expectedCategory: "civil_unrest"
+
+  # ARMED THREAT (5)
+  - vars:
+      incident_text: "Man with rifle entering shopping mall"
+      expectedCategory: "armed_threat"
+  - vars:
+      incident_text: "Active shooter reported on university campus"
+      expectedCategory: "armed_threat"
+  - vars:
+      incident_text: "Two suspects with handguns robbing convenience store"
+      expectedCategory: "armed_threat"
+  - vars:
+      incident_text: "Individual brandishing shotgun at gas station"
+      expectedCategory: "armed_threat"
+  - vars:
+      incident_text: "Hostage situation at neighborhood bank branch"
+      expectedCategory: "armed_threat"
+
+  # EXPLOSION (5)
+  - vars:
+      incident_text: "Loud explosion rocked chemical plant, fireball visible"
+      expectedCategory: "explosion"
+  - vars:
+      incident_text: "Car bomb detonated outside police station"
+      expectedCategory: "explosion"
+  - vars:
+      incident_text: "Pipeline explosion creating 100ft flame plume"
+      expectedCategory: "explosion"
+  - vars:
+      incident_text: "IED discovered and detonated by bomb squad"
+      expectedCategory: "explosion"
+  - vars:
+      incident_text: "Boiler explosion in factory scattering debris"
+      expectedCategory: "explosion"
+
+  # CHEMICAL BIOLOGICAL (5)
+  - vars:
+      incident_text: "White powder envelope sent to mayor's office"
+      expectedCategory: "chemical_biological"
+  - vars:
+      incident_text: "Lab workers exposed to unknown pathogen aerosol"
+      expectedCategory: "chemical_biological"
+  - vars:
+      incident_text: "Nerve agent detected on public transit rail"
+      expectedCategory: "chemical_biological"
+  - vars:
+      incident_text: "Suspicious green liquid dumped near playground"
+      expectedCategory: "chemical_biological"
+  - vars:
+      incident_text: "Biohazard container found abandoned at mall"
+      expectedCategory: "chemical_biological"
+
+  # MARITIME INCIDENT (5)
+  - vars:
+      incident_text: "Cargo ship collision in busy harbor channel"
+      expectedCategory: "maritime_incident"
+  - vars:
+      incident_text: "Oil tanker running aground leaking crude"
+      expectedCategory: "maritime_incident"
+  - vars:
+      incident_text: "Ferry taking on water near passenger dock"
+      expectedCategory: "maritime_incident"
+  - vars:
+      incident_text: "Suspicious boat approaching naval pier at night"
+      expectedCategory: "maritime_incident"
+  - vars:
+      incident_text: "Container ship lost power drifting toward bridge"
+      expectedCategory: "maritime_incident"
+
+  # THEFT BURGLARY (5)
+  - vars:
+      incident_text: "Smash and grab at jewelry store, safe cracked"
+      expectedCategory: "theft_burglary"
+  - vars:
+      incident_text: "Warehouse broken into, electronics pallets stolen"
+      expectedCategory: "theft_burglary"
+  - vars:
+      incident_text: "Construction site tools and copper wire stolen"
+      expectedCategory: "theft_burglary"
+  - vars:
+      incident_text: "Armored car robbery at shopping plaza"
+      expectedCategory: "theft_burglary"
+  - vars:
+      incident_text: "Pharmacy broken into, opioids taken"
+      expectedCategory: "theft_burglary"
+
+  # UNCLASSIFIED (5)
+  - vars:
+      incident_text: "Lost dog running loose on interstate"
+      expectedCategory: "unclassified"
+  - vars:
+      incident_text: "Broken shopping cart blocking store entrance"
+      expectedCategory: "unclassified"
+  - vars:
+      incident_text: "Neighbor dispute over loud music at 2AM"
+      expectedCategory: "unclassified"
+  - vars:
+      incident_text: "Abandoned bicycle found chained to light pole"
+      expectedCategory: "unclassified"
+  - vars:
+      incident_text: "Streetlight flickering causing traffic confusion"
+      expectedCategory: "unclassified"
+

@@ -1,0 +1,27 @@
+{{category_context}}
+
+INCIDENT: {{incident_text}}
+
+STEP 1: IDENTIFY KEY ELEMENTS
+List 2-3 most important facts from the incident:
+1.
+2.
+3.
+
+STEP 2: MATCH TO CATEGORY
+From these available categories ONLY: {{categories_list}}
+
+Which SINGLE category best matches the key elements? Choose exactly one:
+
+STEP 3: ASSIGN PRIORITY
+critical = life threat now | high = potential casualties | medium = response needed | low = routine
+
+STEP 4: EXPLAIN DECISION
+2 sentences: Why this category? Why this priority?
+
+OUTPUT JSON ONLY (copy exactly):
+{
+  "category": "EXACT_category_name",
+  "priority": "critical|high|medium|low",
+  "explanation": "Your 2-sentence reasoning here"
+}
