@@ -85,7 +85,7 @@ class SimsApp extends StatelessWidget {
             foregroundColor: SimsColors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           ),
-          cardTheme: const CardTheme(
+          cardTheme: const CardThemeData(
             elevation: 0,
             color: SimsColors.navyBlueLight,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
