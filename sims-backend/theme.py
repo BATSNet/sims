@@ -6,38 +6,54 @@ from contextlib import asynccontextmanager
 from nicegui import ui
 
 
-# Color scheme
+# Color scheme - Modern 2026 tactical palette
 COLORS = {
-    'primary': '#0D2637',        # Navy blue background
-    'gradient_start': '#0D2637',
-    'gradient_end': '#0a1d2a',
-    'secondary': '#63ABFF',      # Light blue accent
-    'accent': '#FF4444',         # Red accent
-    'critical': '#FF4444',       # Critical alerts
-    'high': '#ffa600',          # High priority
-    'medium': '#63ABFF',        # Medium priority
-    'low': 'rgba(255, 255, 255, 0.4)',  # Low priority
-    'text_primary': '#ffffff',
-    'text_secondary': 'rgba(255, 255, 255, 0.8)',
+    # Base - Deep tactical slate/charcoal
+    'background': '#0A0E12',           # Darker, more sophisticated
+    'background_light': '#121820',     # Cards, elevated surfaces
+    'background_elevated': '#1A2028',  # Modals, overlays
+    'background_card': 'rgba(18, 24, 32, 0.8)',  # Semi-transparent cards
+
+    # Tactical accents - Muted, professional
+    'accent_tactical': '#4A7C59',      # Muted olive-green (primary CTA)
+    'accent_cyan': '#2DD4BF',          # Status indicators, live updates
+    'accent_amber': '#F59E0B',         # Warnings
+
+    # Slate neutrals for depth
+    'slate_900': '#0F172A',
+    'slate_800': '#1E293B',
+    'slate_700': '#334155',
+    'slate_600': '#475569',
+    'slate_500': '#64748B',
+
+    # Priority colors - Muted tones
+    'critical': '#B91C1C',             # Deep red
+    'high': '#D97706',                 # Burnt orange
+    'medium': '#2DD4BF',               # Tactical cyan
+    'low': '#4A7C59',                  # Muted green
+
+    # Text colors
+    'text_primary': '#FFFFFF',
+    'text_secondary': 'rgba(255, 255, 255, 0.85)',
     'text_muted': 'rgba(255, 255, 255, 0.6)',
-    'border': 'rgba(255, 255, 255, 0.1)',
-    'card_bg': 'rgba(26, 31, 46, 0.6)',
-    'hover_bg': 'rgba(26, 31, 46, 0.4)',
+
+    # Borders and dividers
+    'border': 'rgba(255, 255, 255, 0.08)',
+    'border_accent': 'rgba(74, 124, 89, 0.3)',
 }
 
 
 def apply_theme():
     """Apply the SIMS military theme colors and styles"""
     ui.colors(
-        primary=COLORS['primary'],
-        secondary=COLORS['secondary'],
-        accent=COLORS['accent'],
-        positive=COLORS['accent'],
-        negative=COLORS['critical'],
-        warning=COLORS['high'],
-        info=COLORS['medium'],
-        dark=COLORS['primary'],
-        dark_page=COLORS['primary']
+        primary='#4A7C59',              # Tactical green
+        secondary='#2DD4BF',            # Cyan
+        accent='#2DD4BF',               # Cyan
+        dark='#0A0E12',                 # Deep background
+        positive='#4A7C59',             # Success green
+        negative='#B91C1C',             # Error red
+        info='#2DD4BF',                 # Info cyan
+        warning='#F59E0B',              # Warning amber
     )
 
 
@@ -55,15 +71,19 @@ def inject_custom_css():
         <style>
             /* Base styling */
             body {
-                background: linear-gradient(180deg, #0D2637 0%, #0a1d2a 100%);
+                background: linear-gradient(180deg, #0A0E12 0%, #121820 100%);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 color: #fff;
                 font-size: 15px;
+                font-weight: 400;
+                line-height: 1.6;
             }
 
             /* Typography - Titles */
             h1, h2, h3, .header-title, .section-title, .dashboard-title, .table-title, .title-font {
                 font-family: 'Stack Sans Notch', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-weight: 700;
+                letter-spacing: 0.5px;
             }
 
             /* Page title in header */
@@ -109,15 +129,16 @@ def inject_custom_css():
             }
 
             ::-webkit-scrollbar-track {
-                background: rgba(26, 74, 111, 0.1);
+                background: rgba(18, 24, 32, 0.3);
             }
 
             ::-webkit-scrollbar-thumb {
-                background: rgba(99, 171, 255, 0.3);
+                background: rgba(74, 124, 89, 0.4);
+                border-radius: 4px;
             }
 
             ::-webkit-scrollbar-thumb:hover {
-                background: rgba(99, 171, 255, 0.5);
+                background: rgba(74, 124, 89, 0.6);
             }
 
             /* Overview Section - Map and Stats */
@@ -127,8 +148,11 @@ def inject_custom_css():
                 gap: 0;
                 margin: 0 0 3rem;
                 margin-left: 0;
-                background: #1a1f2e;
-                border-left: 3px solid rgba(255, 68, 68, 0.3);
+                background: #121820;
+                border-left: 3px solid rgba(74, 124, 89, 0.3);
+                border-radius: 4px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
                 width: 100%;
             }
 
@@ -160,23 +184,25 @@ def inject_custom_css():
             }
 
             .metric-card {
-                background: #0d2637;
+                background: rgba(18, 24, 32, 0.8);
                 padding: 24px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-                transition: background 0.2s ease;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                transition: all 0.2s ease;
             }
 
             .metric-card:hover {
-                background: #0f2d40;
+                background: rgba(26, 32, 40, 0.9);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+                transform: translateY(-2px);
             }
 
             .metric-label {
-                font-size: 12px;
-                color: rgba(255, 255, 255, 0.4);
+                font-size: 11px;
+                color: rgba(255, 255, 255, 0.6);
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                letter-spacing: 0.8px;
                 margin-bottom: 12px;
-                font-weight: 500;
+                font-weight: 600;
             }
 
             .metric-value {
@@ -192,17 +218,20 @@ def inject_custom_css():
                 font-size: 32px;
                 font-weight: 700;
                 color: #fff;
-                letter-spacing: 2px;
+                letter-spacing: 0.5px;
                 margin: 0 0 1.5rem;
                 text-transform: uppercase;
             }
 
             /* Table Section */
             .table-section {
-                background: #1a1f2e;
+                background: #121820;
                 margin: 0;
                 margin-left: 0;
                 width: 100%;
+                border-radius: 4px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             }
 
             .table-header-bar {
@@ -210,8 +239,8 @@ def inject_custom_css():
                 justify-content: space-between;
                 align-items: center;
                 padding: 20px 24px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                border-left: 3px solid rgba(255, 68, 68, 0.3);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                border-left: 3px solid rgba(74, 124, 89, 0.3);
             }
 
             .table-title {
@@ -229,108 +258,136 @@ def inject_custom_css():
 
             .filter-btn {
                 background: transparent;
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                color: rgba(255, 255, 255, 0.6);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: rgba(255, 255, 255, 0.7);
                 padding: 6px 14px;
                 font-size: 11px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
                 cursor: pointer;
                 transition: all 0.2s ease;
-                font-weight: 500;
+                font-weight: 600;
+                border-radius: 4px;
             }
 
             .filter-btn:hover {
-                border-color: rgba(255, 255, 255, 0.3);
+                border-color: rgba(74, 124, 89, 0.5);
                 color: rgba(255, 255, 255, 0.9);
+                background: rgba(74, 124, 89, 0.1);
             }
 
             .filter-btn.active {
-                background: rgba(255, 68, 68, 0.1);
-                border-color: #FF4444;
-                color: #FF4444;
+                background: rgba(74, 124, 89, 0.15);
+                border-color: #4A7C59;
+                color: #4A7C59;
             }
 
             /* Table styling */
+            .q-table {
+                background: #0A0E12;
+            }
+
             .q-table thead tr,
             .q-table tbody td {
-                background: #0d2637;
+                background: rgba(18, 24, 32, 0.6);
             }
 
             .q-table thead th {
                 font-size: 11px;
-                color: rgba(255, 255, 255, 0.5);
+                color: rgba(255, 255, 255, 0.6);
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                letter-spacing: 0.8px;
                 font-weight: 600;
-                background: #0a1d2a;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                background: #121820;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                border-right: 1px solid rgba(255, 255, 255, 0.03);
             }
 
             .q-table tbody tr {
-                transition: all 0.15s ease;
+                transition: all 0.2s ease;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
                 border-left: 3px solid transparent;
             }
 
             .q-table tbody tr:hover {
-                background: #1a1f2e;
-                border-left-color: #FF4444;
+                background: rgba(26, 32, 40, 0.8);
+                border-left-color: #4A7C59;
             }
 
             .q-table tbody td {
                 font-size: 14px;
-                color: rgba(255, 255, 255, 0.8);
+                color: rgba(255, 255, 255, 0.85);
+                border-right: 1px solid rgba(255, 255, 255, 0.03);
             }
 
             /* Priority badges */
             .priority-badge {
                 display: inline-block;
                 padding: 4px 10px;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                border-radius: 2px;
             }
 
             .priority-critical {
-                color: #FF4444;
-                background: rgba(255, 68, 68, 0.1);
+                background: rgba(185, 28, 28, 0.15);
+                color: #EF4444;
+                border: 1px solid rgba(185, 28, 28, 0.3);
             }
 
             .priority-high {
-                color: #ffa600;
-                background: rgba(255, 166, 0, 0.1);
+                background: rgba(217, 119, 6, 0.15);
+                color: #F59E0B;
+                border: 1px solid rgba(217, 119, 6, 0.3);
             }
 
             .priority-medium {
-                color: #63ABFF;
-                background: rgba(99, 171, 255, 0.1);
+                background: rgba(45, 212, 191, 0.15);
+                color: #2DD4BF;
+                border: 1px solid rgba(45, 212, 191, 0.3);
             }
 
             .priority-low {
-                color: rgba(255, 255, 255, 0.4);
-                background: rgba(255, 255, 255, 0.05);
+                background: rgba(74, 124, 89, 0.15);
+                color: #4A7C59;
+                border: 1px solid rgba(74, 124, 89, 0.3);
             }
 
             /* Action button */
             .action-button {
-                background: transparent;
-                border: 1px solid rgba(255, 68, 68, 0.3);
-                color: #FF4444;
-                padding: 6px 14px;
-                font-size: 10px;
+                background: #4A7C59;
+                border: none;
+                border-radius: 4px;
+                color: white;
+                padding: 10px 20px;
+                font-size: 11px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
                 cursor: pointer;
                 transition: all 0.2s ease;
                 font-weight: 600;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             }
 
             .action-button:hover {
-                background: #FF4444;
-                color: #0D2637;
-                border-color: #FF4444;
+                background: #5a8c69;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+                transform: translateY(-1px);
+            }
+
+            .action-button-secondary {
+                background: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                box-shadow: none;
+            }
+
+            .action-button-secondary:hover {
+                border-color: rgba(74, 124, 89, 0.5);
+                background: rgba(74, 124, 89, 0.1);
+                transform: translateY(-1px);
             }
 
             /* Cell styling */
@@ -366,24 +423,28 @@ def inject_custom_css():
             }
 
             .leaflet-popup-content-wrapper {
-                background: rgba(26, 31, 46, 0.95) !important;
+                background: rgba(18, 24, 32, 0.95) !important;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                border-radius: 4px !important;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
                 color: #fff;
             }
 
             .custom-popup-critical .leaflet-popup-content-wrapper {
-                border-left: 3px solid #FF4444;
+                border-left: 3px solid #B91C1C !important;
             }
 
             .custom-popup-high .leaflet-popup-content-wrapper {
-                border-left: 3px solid #ffa600;
+                border-left: 3px solid #D97706 !important;
             }
 
             .custom-popup-medium .leaflet-popup-content-wrapper {
-                border-left: 3px solid #63ABFF;
+                border-left: 3px solid #2DD4BF !important;
             }
 
             .custom-popup-low .leaflet-popup-content-wrapper {
-                border-left: 3px solid rgba(255, 255, 255, 0.4);
+                border-left: 3px solid #4A7C59 !important;
             }
 
             .leaflet-popup-content {
@@ -392,7 +453,7 @@ def inject_custom_css():
             }
 
             .leaflet-popup-tip {
-                background: rgba(26, 31, 46, 0.95) !important;
+                background: rgba(18, 24, 32, 0.95) !important;
             }
 
             .popup-title {
@@ -572,12 +633,14 @@ def inject_custom_css():
 
             /* NiceGUI specific overrides */
             .q-page {
-                background: linear-gradient(180deg, #0D2637 0%, #0a1d2a 100%);
+                background: linear-gradient(180deg, #0A0E12 0%, #121820 100%);
             }
 
             .q-card {
-                background: #0D2637;
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(18, 24, 32, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 4px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             }
 
             .q-table {
@@ -592,7 +655,37 @@ def inject_custom_css():
 
             .q-btn {
                 text-transform: none;
-                border-radius: 0 !important;
+                border-radius: 4px !important;
+            }
+
+            /* Glassmorphic effects */
+            .glass-effect {
+                background: rgba(18, 24, 32, 0.7);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 4px;
+            }
+
+            .status-indicator {
+                background: rgba(74, 124, 89, 0.15);
+                backdrop-filter: blur(8px);
+                border: 1px solid rgba(74, 124, 89, 0.3);
+                border-radius: 12px;
+                padding: 6px 12px;
+            }
+
+            .status-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #2DD4BF;
+                box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);
+                animation: pulse 2s infinite;
+            }
+
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
             }
 
             /* Chat interface styling */
@@ -630,7 +723,8 @@ async def frame(title: str = "SIMS Command"):
     # Sidebar with logo - responsive drawer
     # On desktop (>1024px): persistent drawer, open by default
     # On mobile (<1024px): overlay drawer, closed by default
-    drawer = ui.left_drawer(top_corner=True, bottom_corner=False).classes('w-64 bg-[#0D2637]').props('breakpoint=1024')
+    drawer = ui.left_drawer(top_corner=True, bottom_corner=False).classes('w-64').props('breakpoint=1024')
+    drawer.style('background: linear-gradient(180deg, #0A0E12 0%, #121820 100%); border-right: 1px solid rgba(255, 255, 255, 0.08);')
 
     with drawer:
         # Logo
@@ -641,17 +735,26 @@ async def frame(title: str = "SIMS Command"):
             ui.label('Command Center').classes('text-xs font-bold text-gray-400 mb-2 title-font')
 
             # Dashboard link
-            with ui.link(target='/').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline w-full'):
+            nav_link = ui.link(target='/').classes('flex items-center gap-2 px-4 py-2 text-white no-underline w-full')
+            nav_link.style('border-radius: 4px; transition: all 0.2s ease;')
+            nav_link.classes('hover:bg-[rgba(74,124,89,0.1)]')
+            with nav_link:
                 ui.icon('dashboard', size='md')
                 ui.label('Dashboard').classes('title-font')
 
             # Organizations link
-            with ui.link(target='/organizations').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline w-full'):
+            nav_link = ui.link(target='/organizations').classes('flex items-center gap-2 px-4 py-2 text-white no-underline w-full')
+            nav_link.style('border-radius: 4px; transition: all 0.2s ease;')
+            nav_link.classes('hover:bg-[rgba(74,124,89,0.1)]')
+            with nav_link:
                 ui.icon('corporate_fare', size='md')
                 ui.label('Organizations').classes('title-font')
 
             # Integrations link
-            with ui.link(target='/integrations').classes('flex items-center gap-2 px-4 py-2 text-white hover:bg-[#FF4444] hover:bg-opacity-20 no-underline w-full'):
+            nav_link = ui.link(target='/integrations').classes('flex items-center gap-2 px-4 py-2 text-white no-underline w-full')
+            nav_link.style('border-radius: 4px; transition: all 0.2s ease;')
+            nav_link.classes('hover:bg-[rgba(74,124,89,0.1)]')
+            with nav_link:
                 ui.icon('hub', size='md')
                 ui.label('Integrations').classes('title-font')
 
@@ -660,7 +763,9 @@ async def frame(title: str = "SIMS Command"):
             ui.button('Logout', on_click=lambda: None).props('outline color=white').classes('w-full logout-btn')
 
     # Header with hamburger menu for mobile
-    with ui.header(elevated=False, bordered=False).classes('bg-[#0D2637] border-b border-[rgba(255,255,255,0.1)]'):
+    header = ui.header(elevated=False, bordered=False).classes('border-b border-[rgba(255,255,255,0.08)]')
+    header.style('background: linear-gradient(90deg, #0A0E12 0%, #121820 100%); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);')
+    with header:
         with ui.element('div').classes('w-full max-w-[96rem] mx-auto px-2 sm:px-4'):
             with ui.row().classes('items-center justify-between w-full py-3 gap-2'):
                 # Hamburger menu for mobile
@@ -674,8 +779,9 @@ async def frame(title: str = "SIMS Command"):
                     status_text = ui.label('System Operational').classes('text-xs sm:text-sm text-gray-400 hidden sm:block').props('id=system-status-text')
                     # Timestamp
                     status_timestamp = ui.label('--:--:--').classes('text-xs sm:text-sm font-bold title-font text-[#ccc]').props('id=system-status-timestamp').style('min-width: 50px; font-variant-numeric: tabular-nums;')
-                    # Status indicator dot
-                    ui.element('div').classes('w-2 h-2 bg-[#FF4444]').props('id=system-status-dot')
+                    # Status indicator dot - with glassmorphic effect
+                    status_dot = ui.element('div').classes('w-2 h-2 status-dot').props('id=system-status-dot')
+                    status_dot.style('background: #2DD4BF; box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);')
 
     # Main content area - no padding, let individual sections control their own layout
     with ui.column().classes('w-full'):

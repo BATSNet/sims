@@ -6,38 +6,47 @@ from contextlib import asynccontextmanager
 from nicegui import ui
 
 
-# Color scheme - Teal/Turquoise variant
+# Color scheme - Modern tactical teal variant
 COLORS = {
-    'primary': '#0A1929',        # Deep navy background
-    'gradient_start': '#0A1929',
-    'gradient_end': '#071220',
-    'secondary': '#26C6DA',      # Turquoise accent
-    'accent': '#00897B',         # Teal accent
-    'critical': '#FF4444',       # Critical alerts
-    'high': '#ffa600',          # High priority
-    'medium': '#26C6DA',        # Medium priority
-    'low': 'rgba(255, 255, 255, 0.4)',  # Low priority
-    'text_primary': '#ffffff',
-    'text_secondary': 'rgba(255, 255, 255, 0.8)',
+    # Base - Deep tactical slate/charcoal
+    'background': '#0A0E12',           # Darker, more sophisticated
+    'background_light': '#121820',     # Cards, elevated surfaces
+    'background_elevated': '#1A2028',  # Modals, overlays
+    'background_card': 'rgba(18, 24, 32, 0.8)',  # Semi-transparent cards
+
+    # Teal accents - Muted, professional
+    'accent_teal': '#4A7C59',          # Muted teal-green (primary CTA)
+    'accent_cyan': '#2DD4BF',          # Status indicators, live updates
+    'accent_amber': '#F59E0B',         # Warnings
+
+    # Priority colors - Muted tones
+    'critical': '#B91C1C',             # Deep red
+    'high': '#D97706',                 # Burnt orange
+    'medium': '#2DD4BF',               # Tactical cyan
+    'low': '#4A7C59',                  # Muted green
+
+    # Text colors
+    'text_primary': '#FFFFFF',
+    'text_secondary': 'rgba(255, 255, 255, 0.85)',
     'text_muted': 'rgba(255, 255, 255, 0.6)',
-    'border': 'rgba(255, 255, 255, 0.1)',
-    'card_bg': 'rgba(26, 31, 46, 0.6)',
-    'hover_bg': 'rgba(0, 137, 123, 0.1)',
+
+    # Borders and dividers
+    'border': 'rgba(255, 255, 255, 0.08)',
+    'border_accent': 'rgba(74, 124, 89, 0.3)',
 }
 
 
 def apply_theme():
     """Apply the SIMS responder theme colors and styles"""
     ui.colors(
-        primary=COLORS['accent'],
-        secondary=COLORS['secondary'],
-        accent=COLORS['accent'],
-        positive=COLORS['accent'],
-        negative=COLORS['critical'],
-        warning=COLORS['high'],
-        info=COLORS['secondary'],
-        dark=COLORS['primary'],
-        dark_page=COLORS['primary']
+        primary='#4A7C59',              # Tactical teal-green
+        secondary='#2DD4BF',            # Cyan
+        accent='#2DD4BF',               # Cyan
+        dark='#0A0E12',                 # Deep background
+        positive='#4A7C59',             # Success green
+        negative='#B91C1C',             # Error red
+        info='#2DD4BF',                 # Info cyan
+        warning='#F59E0B',              # Warning amber
     )
 
 
@@ -53,12 +62,14 @@ def inject_custom_css():
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
         <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
         <style>
-            /* Base styling - Teal theme */
+            /* Base styling - Modern tactical teal theme */
             body {
-                background: linear-gradient(180deg, #0A1929 0%, #071220 100%);
+                background: linear-gradient(180deg, #0A0E12 0%, #121820 100%);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 color: #fff;
                 font-size: 15px;
+                font-weight: 400;
+                line-height: 1.6;
             }
 
             /* Typography - Titles */
@@ -205,34 +216,39 @@ def inject_custom_css():
                 color: rgba(255, 255, 255, 0.4);
             }
 
-            /* Priority badges - Teal theme */
+            /* Priority badges - Modern tactical theme */
             .priority-badge {
                 display: inline-block;
                 padding: 4px 10px;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                border-radius: 2px;
             }
 
             .priority-critical {
-                color: #FF4444;
-                background: rgba(255, 68, 68, 0.1);
+                background: rgba(185, 28, 28, 0.15);
+                color: #EF4444;
+                border: 1px solid rgba(185, 28, 28, 0.3);
             }
 
             .priority-high {
-                color: #ffa600;
-                background: rgba(255, 166, 0, 0.1);
+                background: rgba(217, 119, 6, 0.15);
+                color: #F59E0B;
+                border: 1px solid rgba(217, 119, 6, 0.3);
             }
 
             .priority-medium {
-                color: #26C6DA;
-                background: rgba(38, 198, 218, 0.1);
+                background: rgba(45, 212, 191, 0.15);
+                color: #2DD4BF;
+                border: 1px solid rgba(45, 212, 191, 0.3);
             }
 
             .priority-low {
-                color: rgba(255, 255, 255, 0.4);
-                background: rgba(255, 255, 255, 0.05);
+                background: rgba(74, 124, 89, 0.15);
+                color: #4A7C59;
+                border: 1px solid rgba(74, 124, 89, 0.3);
             }
 
             /* Action panel */
@@ -251,10 +267,11 @@ def inject_custom_css():
             }
 
             .action-button {
-                background: transparent;
-                border: 1px solid rgba(0, 137, 123, 0.3);
-                color: #00897B;
-                padding: 8px 16px;
+                background: #4A7C59;
+                border: none;
+                border-radius: 4px;
+                color: white;
+                padding: 10px 16px;
                 font-size: 11px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
@@ -263,12 +280,13 @@ def inject_custom_css():
                 font-weight: 600;
                 width: 100%;
                 margin-bottom: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             }
 
             .action-button:hover {
-                background: #00897B;
-                color: #fff;
-                border-color: #00897B;
+                background: #5a8c69;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+                transform: translateY(-1px);
             }
 
             /* Notes section */
@@ -427,24 +445,23 @@ def inject_custom_css():
 
             /* NiceGUI specific overrides */
             .q-page {
-                background: linear-gradient(180deg, #0A1929 0%, #071220 100%);
+                background: linear-gradient(180deg, #0A0E12 0%, #121820 100%);
             }
 
             .q-card {
-                background: #0A1929;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 0 !important;
-                box-shadow: none !important;
+                background: rgba(18, 24, 32, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 4px !important;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
             }
 
             .q-btn {
                 text-transform: none;
-                border-radius: 0 !important;
-                box-shadow: none !important;
+                border-radius: 4px !important;
             }
 
             .q-input {
-                border-radius: 0 !important;
+                border-radius: 4px !important;
             }
 
             /* Table styling for incident list */
@@ -498,7 +515,9 @@ async def frame(title: str = "SIMS Responder"):
     ui.dark_mode(True)
 
     # Header only (no sidebar for responder portal)
-    with ui.header(elevated=False, bordered=False).classes('bg-[#0A1929] border-b border-[rgba(255,255,255,0.1)]'):
+    header = ui.header(elevated=False, bordered=False).classes('border-b border-[rgba(255,255,255,0.08)]')
+    header.style('background: linear-gradient(90deg, #0A0E12 0%, #121820 100%); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);')
+    with header:
         with ui.element('div').classes('w-full max-w-6xl mx-auto px-4'):
             with ui.row().classes('items-center justify-between w-full py-3'):
                 # Logo/Title
@@ -509,7 +528,8 @@ async def frame(title: str = "SIMS Responder"):
                 # Status section
                 with ui.row().classes('items-center gap-3'):
                     ui.label('Responder Portal').classes('text-sm text-gray-400')
-                    ui.element('div').classes('w-2 h-2 bg-[#00897B]')
+                    status_dot = ui.element('div').classes('w-2 h-2 status-dot')
+                    status_dot.style('background: #2DD4BF; box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);')
 
     # Main content area
     with ui.column().classes('w-full'):
