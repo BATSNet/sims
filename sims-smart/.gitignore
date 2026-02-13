@@ -1,0 +1,30 @@
+# PlatformIO
+.pio
+.vscode
+.pioenvs
+.piolibdeps
+
+# Build artifacts
+*.elf
+*.bin
+*.hex
+
+# IDE
+.idea
+*.swp
+*.swo
+*~
+
+# Credentials (never commit!)
+include/credentials.h
+config_local.h
+
+# ESP32-SR library (large, should be cloned separately)
+lib/esp-sr/
+
+# Compiled Object files
+*.o
+*.obj
+
+# Logs
+*.log
