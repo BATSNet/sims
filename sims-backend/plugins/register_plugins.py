@@ -10,7 +10,6 @@ from plugins.integration_registry import IntegrationRegistry
 from plugins.webhook_plugin import WebhookPlugin
 from plugins.sedap_plugin import SEDAPPlugin
 from plugins.email_plugin import EmailPlugin
-from plugins.mesh_plugin import MeshPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +27,6 @@ def register_all_plugins():
 
         # Register email plugin
         IntegrationRegistry.register('email', EmailPlugin)
-
-        # Register mesh network plugin
-        IntegrationRegistry.register('mesh', MeshPlugin)
 
         logger.info("Successfully registered all integration plugins")
         logger.info(f"Available plugins: {', '.join(IntegrationRegistry.list_plugins().keys())}")

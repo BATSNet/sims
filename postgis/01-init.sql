@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS incident (
     location GEOMETRY(POINT, 4326),
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
+    altitude DOUBLE PRECISION,
     heading DOUBLE PRECISION,
 
     -- Incident details
