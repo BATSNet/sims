@@ -37,6 +37,19 @@ public:
     void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t color);
     void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t color);
 
+    // Dirty page tracking - only send changed pages to display
+    void displayDirty();
+
+    // Display power control (SSD1306 sleep/wake)
+    void setDisplayOn(bool on);
+    bool isDisplayOn() const { return displayOn_; }
+
+    // Clear a rectangular region in the buffer
+    void clearRegion(int16_t x, int16_t y, int16_t w, int16_t h);
+
+    // Direct pixel access (used by icon drawing)
+    void setPixel(int16_t x, int16_t y, uint8_t color);
+
 private:
     int width_;
     int height_;
@@ -50,6 +63,10 @@ private:
     // Frame buffer: 128x64 / 8 = 1024 bytes
     uint8_t buffer_[1024];
 
+    // Dirty page tracking: bit N = page N needs sending (8 pages for 64px height)
+    uint8_t dirtyPages_;
+    bool displayOn_;
+
     // Text state
     int16_t cursorX_;
     int16_t cursorY_;
@@ -58,7 +75,6 @@ private:
 
     void sendCommand(uint8_t cmd);
     void sendCommands(const uint8_t* cmds, size_t len);
-    void setPixel(int16_t x, int16_t y, uint8_t color);
     void drawChar(int16_t x, int16_t y, char c, uint8_t color, uint8_t size);
 };
 

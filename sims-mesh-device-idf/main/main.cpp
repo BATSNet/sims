@@ -10,6 +10,10 @@
 #include "esp_spiffs.h"
 #include "esp_timer.h"
 #include "esp_mac.h"
+#include "esp_sleep.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -52,9 +56,183 @@ enum DeviceState {
 
 DeviceState currentState = STATE_IDLE;
 
+// Battery ADC
+static adc_oneshot_unit_handle_t adcHandle = nullptr;
+static adc_cali_handle_t adcCaliHandle = nullptr;
+static int batteryPercent = 100;
+
+// Button state (GPIO 0 - active low)
+static bool buttonPressed = false;
+static unsigned long buttonPressStart = 0;
+static bool longPressHandled = false;
+
 // Function prototypes
 void setupHardware();
 void setupServices();
+void initBatteryADC();
+int readBatteryPercent();
+void enterDeepSleep();
+void handleButton();
+
+// --- Battery ADC ---
+
+void initBatteryADC() {
+    // GPIO 37 must be LOW to enable the battery voltage divider on Heltec V3
+    gpio_config_t adc_ctrl_conf = {};
+    adc_ctrl_conf.pin_bit_mask = (1ULL << BATTERY_ADC_CTRL);
+    adc_ctrl_conf.mode = GPIO_MODE_OUTPUT;
+    gpio_config(&adc_ctrl_conf);
+    gpio_set_level((gpio_num_t)BATTERY_ADC_CTRL, 0);
+
+    adc_oneshot_unit_init_cfg_t initCfg = {};
+    initCfg.unit_id = ADC_UNIT_1;
+    initCfg.ulp_mode = ADC_ULP_MODE_DISABLE;
+
+    esp_err_t err = adc_oneshot_new_unit(&initCfg, &adcHandle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ADC unit init failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    adc_oneshot_chan_cfg_t chanCfg = {};
+    chanCfg.atten = ADC_ATTEN_DB_12;
+    chanCfg.bitwidth = ADC_BITWIDTH_12;
+
+    err = adc_oneshot_config_channel(adcHandle, ADC_CHANNEL_0, &chanCfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ADC channel config failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    // Try to create calibration handle
+    adc_cali_curve_fitting_config_t caliCfg = {};
+    caliCfg.unit_id = ADC_UNIT_1;
+    caliCfg.chan = ADC_CHANNEL_0;
+    caliCfg.atten = ADC_ATTEN_DB_12;
+    caliCfg.bitwidth = ADC_BITWIDTH_12;
+
+    err = adc_cali_create_scheme_curve_fitting(&caliCfg, &adcCaliHandle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "ADC calibration not available, using raw values");
+        adcCaliHandle = nullptr;
+    }
+
+    ESP_LOGI(TAG, "Battery ADC initialized (GPIO %d, ADC1_CH0)", BATTERY_ADC_PIN);
+}
+
+int readBatteryPercent() {
+    if (!adcHandle) return 100;
+
+    // Enable voltage divider - try both LOW and HIGH to auto-detect board revision
+    // V3.1: GPIO 37 LOW enables divider, V3.2: GPIO 37 HIGH enables divider
+    gpio_set_level((gpio_num_t)BATTERY_ADC_CTRL, 0);  // Try LOW first (V3.1)
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int raw0 = 0;
+    adc_oneshot_read(adcHandle, ADC_CHANNEL_0, &raw0);
+
+    gpio_set_level((gpio_num_t)BATTERY_ADC_CTRL, 1);  // Try HIGH (V3.2)
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int raw1 = 0;
+    adc_oneshot_read(adcHandle, ADC_CHANNEL_0, &raw1);
+
+    // Use whichever gave a higher reading
+    bool useHigh = (raw1 > raw0);
+    ESP_LOGI(TAG, "Battery ADC probe: GPIO37 LOW->raw=%d, HIGH->raw=%d, using %s",
+             raw0, raw1, useHigh ? "HIGH (V3.2)" : "LOW (V3.1)");
+    gpio_set_level((gpio_num_t)BATTERY_ADC_CTRL, useHigh ? 1 : 0);
+    vTaskDelay(pdMS_TO_TICKS(5));
+
+    int rawSum = 0;
+    for (int i = 0; i < BATTERY_SAMPLES; i++) {
+        int raw = 0;
+        adc_oneshot_read(adcHandle, ADC_CHANNEL_0, &raw);
+        rawSum += raw;
+    }
+    int rawAvg = rawSum / BATTERY_SAMPLES;
+
+    // Disable voltage divider to save power
+    gpio_set_level((gpio_num_t)BATTERY_ADC_CTRL, useHigh ? 0 : 1);
+
+    float voltage;
+    if (adcCaliHandle) {
+        int mv = 0;
+        adc_cali_raw_to_voltage(adcCaliHandle, rawAvg, &mv);
+        voltage = (mv / 1000.0f) * BATTERY_DIVIDER;
+    } else {
+        // Fallback: 12-bit ADC with 12dB atten gives ~0-3.1V range
+        voltage = (rawAvg / 4095.0f) * 3.1f * BATTERY_DIVIDER;
+    }
+
+    // Map voltage to percentage
+    int percent = (int)((voltage - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V) * 100.0f);
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    ESP_LOGI(TAG, "Battery: raw=%d, voltage=%.2fV, percent=%d%%", rawAvg, voltage, percent);
+    return percent;
+}
+
+// --- Deep Sleep ---
+
+void enterDeepSleep() {
+    ESP_LOGI(TAG, "Entering deep sleep...");
+
+    // Show sleep screen
+    displayManager.showSleepScreen();
+
+    // Turn off display
+    displayManager.setScreenPower(false);
+
+    // Turn off Vext (GPIO 36 HIGH = power OFF)
+    gpio_set_level((gpio_num_t)VEXT_CTRL, 1);
+
+    // Turn off LED
+    gpio_set_level((gpio_num_t)STATUS_LED, 0);
+
+    // Configure wake on GPIO 0 (button press = LOW)
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
+
+    // Enter deep sleep (device resets on wake)
+    esp_deep_sleep_start();
+}
+
+// --- Button Handling ---
+
+void handleButton() {
+    bool pressed = (gpio_get_level(GPIO_NUM_0) == 0);  // Active low
+
+    if (pressed && !buttonPressed) {
+        // Button just pressed
+        buttonPressed = true;
+        buttonPressStart = millis();
+        longPressHandled = false;
+    } else if (pressed && buttonPressed && !longPressHandled) {
+        // Button held - check for long press
+        if (millis() - buttonPressStart >= BUTTON_LONG_PRESS_MS) {
+            longPressHandled = true;
+            displayManager.registerActivity();
+            enterDeepSleep();
+            // Never returns - device resets on wake
+        }
+    } else if (!pressed && buttonPressed) {
+        // Button released
+        unsigned long pressDuration = millis() - buttonPressStart;
+        buttonPressed = false;
+
+        if (!longPressHandled && pressDuration >= BUTTON_DEBOUNCE_MS
+            && pressDuration < BUTTON_SHORT_PRESS_MAX_MS) {
+            // Short press: toggle display on/off
+            bool isOn = displayManager.isDisplayOn();
+            displayManager.setScreenPower(!isOn);
+            displayManager.registerActivity();
+            ESP_LOGI(TAG, "Display toggled %s", isOn ? "OFF" : "ON");
+        }
+    }
+}
+
+// --- Hardware & Services Setup ---
 
 void setupHardware() {
     // Configure status LED
@@ -64,7 +242,7 @@ void setupHardware() {
     gpio_config(&io_conf);
     gpio_set_level((gpio_num_t)STATUS_LED, 0);
 
-    // Configure PTT button
+    // Configure PTT button (GPIO 0)
     io_conf.pin_bit_mask = (1ULL << PTT_BUTTON);
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
@@ -105,6 +283,10 @@ void setupHardware() {
             vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
+
+    // Initialize battery ADC
+    initBatteryADC();
+    batteryPercent = readBatteryPercent();
 
     // Initialize SPIFFS for message storage
     displayManager.showInitProgress("Storage", 10);
@@ -191,6 +373,8 @@ void setupServices() {
     #endif
 }
 
+// --- Main Task ---
+
 void main_task(void* param) {
     bool firstLoop = true;
 
@@ -199,6 +383,9 @@ void main_task(void* param) {
             ESP_LOGI(TAG, ">>>>>> LOOP FIRST ITERATION - NEW FIRMWARE RUNNING <<<<<<");
             firstLoop = false;
         }
+
+        // Button polling (before anything else)
+        handleButton();
 
         // Update GPS service
         gpsService.update();
@@ -215,6 +402,8 @@ void main_task(void* param) {
             MeshMessage msg = meshProtocol.receiveMessage();
             ESP_LOGI(TAG, "Received message: type=%d, from=0x%08X, RSSI=%d",
                      msg.messageType, (unsigned int)msg.sourceId, loraTransport.getRSSI());
+
+            displayManager.registerActivity();
 
             switch (msg.messageType) {
                 case MSG_TYPE_INCIDENT:
@@ -275,7 +464,8 @@ void main_task(void* param) {
             if (loraTransport.send(packet, len)) {
                 ESP_LOGI(TAG, "Meshtastic text message sent: %s", message);
                 ESP_LOGI(TAG, "Packet size: %d bytes", len);
-                displayManager.showMessage("MT SENT", 1000);
+                displayManager.notifyTx(1500);
+                displayManager.registerActivity();
             } else {
                 ESP_LOGE(TAG, "Meshtastic text message FAILED");
             }
@@ -284,6 +474,13 @@ void main_task(void* param) {
         }
         #endif
 
+        // Battery reading every 60s
+        static unsigned long lastBatteryRead = 0;
+        if (millis() - lastBatteryRead > BATTERY_CHECK_INTERVAL) {
+            batteryPercent = readBatteryPercent();
+            lastBatteryRead = millis();
+        }
+
         // Update status display every 5 seconds
         static unsigned long lastDisplayUpdate = 0;
         if (millis() - lastDisplayUpdate > 5000) {
@@ -291,26 +488,35 @@ void main_task(void* param) {
             int satellites = gpsService.getSatellites();
             int meshNodes = meshProtocol.getConnectedNodes();
             int pendingMessages = messageStorage.getPendingCount();
-            int batteryPercent = 100;
-            bool wifiConnected = false;
-            int wifiRSSI = 0;
             bool bleConnected = false;
+            int bleClients = 0;
             int loraRSSI = loraTransport.getRSSI();
             float loraSNR = loraTransport.getSNR();
+
+            #ifdef MESHTASTIC_TEST_MODE
+            bleConnected = meshtasticBLE.isConnected();
+            bleClients = meshtasticBLE.getConnectedCount();
+            #endif
 
             uint32_t sent, received, relayed;
             meshProtocol.getStats(sent, received, relayed);
             int packetsReceived = (int)received;
 
-            displayManager.updateStatus(gpsValid, satellites, meshNodes,
-                                       pendingMessages, batteryPercent,
-                                       wifiConnected, wifiRSSI, bleConnected,
-                                       loraRSSI, loraSNR, packetsReceived);
+            // Check idle timeout - show idle screen if no activity
+            if (displayManager.isIdle(IDLE_SCREEN_TIMEOUT_MS)) {
+                displayManager.showIdleScreen(batteryPercent);
+            } else {
+                displayManager.updateStatus(gpsValid, satellites, meshNodes,
+                                           pendingMessages, batteryPercent,
+                                           bleConnected, bleClients,
+                                           loraRSSI, loraSNR, packetsReceived);
+            }
+
             lastDisplayUpdate = millis();
 
-            ESP_LOGI(TAG, "GPS:%s Sats:%d Mesh:%d/%dpkts RSSI:%d SNR:%.1f Queue:%d",
+            ESP_LOGI(TAG, "GPS:%s Sats:%d Mesh:%d/%dpkts RSSI:%d SNR:%.1f Queue:%d Bat:%d%%",
                      gpsValid ? "OK" : "NO", satellites, meshNodes, packetsReceived,
-                     loraRSSI, loraSNR, pendingMessages);
+                     loraRSSI, loraSNR, pendingMessages, batteryPercent);
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));

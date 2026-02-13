@@ -99,6 +99,22 @@
 #define BATTERY_CHECK_INTERVAL 60000
 #define LOW_BATTERY_THRESHOLD 3.3
 
+// Battery ADC (GPIO 1 / ADC1_CH0 on Heltec V3)
+#define BATTERY_ADC_PIN      1
+#define BATTERY_ADC_CTRL     37       // GPIO 37 must be LOW to enable battery voltage divider
+#define BATTERY_DIVIDER      4.9f     // Heltec V3: 390K/100K divider = (390+100)/100
+#define BATTERY_FULL_V       4.2f
+#define BATTERY_EMPTY_V      3.0f
+#define BATTERY_SAMPLES      16
+
+// Button configuration (GPIO 0 - active low with pull-up)
+#define BUTTON_SHORT_PRESS_MAX_MS  500
+#define BUTTON_LONG_PRESS_MS       2000
+#define BUTTON_DEBOUNCE_MS         50
+
+// Idle/display timeout
+#define IDLE_SCREEN_TIMEOUT_MS     120000  // 2 minutes
+
 // Storage configuration
 #define MAX_STORED_MESSAGES 100
 #define STORAGE_PATH "/spiffs/messages"

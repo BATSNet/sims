@@ -121,6 +121,7 @@ SSD1306::SSD1306(int width, int height, int rstPin)
     : width_(width), height_(height), rstPin_(rstPin),
       addr_(0x3C), busHandle_(nullptr), devHandle_(nullptr),
       initialized_(false),
+      dirtyPages_(0), displayOn_(true),
       cursorX_(0), cursorY_(0), textSize_(1), textColor_(SSD1306_WHITE) {
     memset(buffer_, 0, sizeof(buffer_));
 }
@@ -218,6 +219,7 @@ void SSD1306::sendCommand(uint8_t cmd) {
 
 void SSD1306::clearDisplay() {
     memset(buffer_, 0, sizeof(buffer_));
+    dirtyPages_ = 0xFF;  // Mark all pages dirty so displayDirty() sends them
 }
 
 void SSD1306::display() {
@@ -246,11 +248,13 @@ void SSD1306::display() {
 void SSD1306::setPixel(int16_t x, int16_t y, uint8_t color) {
     if (x < 0 || x >= width_ || y < 0 || y >= height_) return;
 
+    int page = y / 8;
     if (color) {
-        buffer_[x + (y / 8) * width_] |= (1 << (y & 7));
+        buffer_[x + page * width_] |= (1 << (y & 7));
     } else {
-        buffer_[x + (y / 8) * width_] &= ~(1 << (y & 7));
+        buffer_[x + page * width_] &= ~(1 << (y & 7));
     }
+    dirtyPages_ |= (1 << page);
 }
 
 void SSD1306::setTextSize(uint8_t size) {
@@ -369,4 +373,48 @@ void SSD1306::drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t color
     drawLine(x + w - 1, y, x + w - 1, y + h - 1, color);
     drawLine(x + w - 1, y + h - 1, x, y + h - 1, color);
     drawLine(x, y + h - 1, x, y, color);
+}
+
+void SSD1306::displayDirty() {
+    if (!devHandle_ || dirtyPages_ == 0) return;
+
+    for (int page = 0; page < 8; page++) {
+        if (!(dirtyPages_ & (1 << page))) continue;
+
+        // Set column address range: full width
+        sendCommand(0x21);  // Column addr
+        sendCommand(0);     // Start
+        sendCommand(127);   // End
+
+        // Set page address range: just this page
+        sendCommand(0x22);  // Page addr
+        sendCommand(page);  // Start
+        sendCommand(page);  // End
+
+        // Send 128 bytes for this page
+        uint8_t buf[129];
+        buf[0] = 0x40;  // Data prefix
+        memcpy(buf + 1, buffer_ + page * 128, 128);
+        i2c_master_transmit(devHandle_, buf, 129, 100);
+    }
+
+    dirtyPages_ = 0;
+}
+
+void SSD1306::setDisplayOn(bool on) {
+    if (!devHandle_) return;
+    sendCommand(on ? 0xAF : 0xAE);
+    displayOn_ = on;
+}
+
+void SSD1306::clearRegion(int16_t x, int16_t y, int16_t w, int16_t h) {
+    for (int16_t j = y; j < y + h && j < height_; j++) {
+        for (int16_t i = x; i < x + w && i < width_; i++) {
+            if (i >= 0 && j >= 0) {
+                int page = j / 8;
+                buffer_[i + page * width_] &= ~(1 << (j & 7));
+                dirtyPages_ |= (1 << page);
+            }
+        }
+    }
 }

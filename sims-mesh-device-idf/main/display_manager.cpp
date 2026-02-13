@@ -1,6 +1,14 @@
 /**
  * Display Manager Implementation
  * ESP-IDF version using SSD1306 driver
+ *
+ * Status screen layout (128x64):
+ * [O] IDLE    B:1   [batt]     <- y=0, top bar
+ * ____________________________  <- y=10, divider
+ * GPS: 12 sats                  <- y=14
+ * Mesh: 3 nodes                 <- y=26
+ * LoRa: -85dBm / 6.2dB         <- y=38
+ * Q: 0          Rx: 15         <- y=50
  */
 
 #include "display_manager.h"
@@ -13,27 +21,19 @@
 
 static const char* TAG = "Display";
 
-// Boot screen content
-static const char* BOOT_LOGO[] = {
-    "S.I.M.S.",
-    "Situation Incident",
-    "Management System",
-    "Mesh Network",
-    "v1.0.0"
-};
-
-static const int LOGO_LINES = 5;
-static const int LOGO_START_Y = 10;
-
 unsigned long DisplayManager::millis() {
     return (unsigned long)(esp_timer_get_time() / 1000ULL);
 }
 
 DisplayManager::DisplayManager()
-    : display(nullptr), initialized(false), lastUpdate(0),
-      currentScreen(SCREEN_NONE), screenLineCount(0) {
+    : display(nullptr), initialized(false), screenOn(true),
+      currentScreen(SCREEN_NONE), screenLineCount(0),
+      statusDrawn(false),
+      txActive(false), txStartTime(0), txDurationMs(0),
+      lastActivityTime(0) {
     memset(screenLines, 0, sizeof(screenLines));
     memset(screenLineYPos, 0, sizeof(screenLineYPos));
+    memset(prevFields, 0, sizeof(prevFields));
 }
 
 bool DisplayManager::begin() {
@@ -47,6 +47,7 @@ bool DisplayManager::begin() {
     }
 
     initialized = true;
+    lastActivityTime = millis();
 
     display->clearDisplay();
     display->setTextColor(SSD1306_WHITE);
@@ -56,6 +57,8 @@ bool DisplayManager::begin() {
     ESP_LOGI(TAG, "OLED initialized successfully");
     return true;
 }
+
+// --- Boot screens (full redraw, blocking) ---
 
 void DisplayManager::showBootScreen() {
     if (!initialized) return;
@@ -177,96 +180,289 @@ void DisplayManager::showInitProgress(const char* step, int percent) {
     vTaskDelay(pdMS_TO_TICKS(30));
 }
 
-void DisplayManager::updateStatus(bool gpsValid, int satellites, int meshNodes,
-                                  int pendingMessages, int batteryPercent,
-                                  bool wifiConnected, int wifiRSSI,
-                                  bool bleConnected,
-                                  int loraRSSI, float loraSNR,
-                                  int packetsReceived) {
-    if (!initialized) return;
+// --- Status screen with partial updates ---
 
-    bool isTransition = isScreenTransition(SCREEN_STATUS);
+void DisplayManager::drawStatusIcon(StatusIcon icon, int16_t x, int16_t y) {
+    // 7x7 circle indicator
+    // Draw circle outline
+    display->setPixel(x + 2, y, SSD1306_WHITE);
+    display->setPixel(x + 3, y, SSD1306_WHITE);
+    display->setPixel(x + 4, y, SSD1306_WHITE);
+    display->setPixel(x + 1, y + 1, SSD1306_WHITE);
+    display->setPixel(x + 5, y + 1, SSD1306_WHITE);
+    display->setPixel(x, y + 2, SSD1306_WHITE);
+    display->setPixel(x + 6, y + 2, SSD1306_WHITE);
+    display->setPixel(x, y + 3, SSD1306_WHITE);
+    display->setPixel(x + 6, y + 3, SSD1306_WHITE);
+    display->setPixel(x, y + 4, SSD1306_WHITE);
+    display->setPixel(x + 6, y + 4, SSD1306_WHITE);
+    display->setPixel(x + 1, y + 5, SSD1306_WHITE);
+    display->setPixel(x + 5, y + 5, SSD1306_WHITE);
+    display->setPixel(x + 2, y + 6, SSD1306_WHITE);
+    display->setPixel(x + 3, y + 6, SSD1306_WHITE);
+    display->setPixel(x + 4, y + 6, SSD1306_WHITE);
 
-    beginScreen(SCREEN_STATUS);
-
-    // Title bar
-    display->setCursor(0, 0);
-    display->print("SIMS");
-
-    // WiFi indicator
-    if (wifiConnected) {
-        int bars = 3;
-        if (wifiRSSI > -55) bars = 4;
-        else if (wifiRSSI > -70) bars = 3;
-        else if (wifiRSSI > -80) bars = 2;
-        else bars = 1;
-
-        int wifiX = 30;
-        for (int i = 0; i < bars; i++) {
-            display->fillRect(wifiX + i * 3, 0 + (3 - i), 2, 1 + i, SSD1306_WHITE);
-        }
+    if (icon == ICON_ACTIVE) {
+        // Filled circle: fill interior
+        display->fillRect(x + 2, y + 1, 3, 1, SSD1306_WHITE);
+        display->fillRect(x + 1, y + 2, 5, 3, SSD1306_WHITE);
+        display->fillRect(x + 2, y + 5, 3, 1, SSD1306_WHITE);
+    } else if (icon == ICON_IDLE) {
+        // Half-filled: fill bottom half
+        display->fillRect(x + 1, y + 3, 5, 2, SSD1306_WHITE);
+        display->fillRect(x + 2, y + 5, 3, 1, SSD1306_WHITE);
     }
+    // ICON_DISCONNECTED: just the outline (already drawn)
+}
 
-    // BLE indicator
-    if (bleConnected) {
-        display->setCursor(48, 0);
-        display->print("B");
-    }
+void DisplayManager::drawBatteryIcon(int16_t x, int16_t y, int percent) {
+    // Battery icon: 12x7 body + 2x3 nub on right = 14 wide total
+    // Outer rectangle
+    display->drawRect(x, y, 12, 7, SSD1306_WHITE);
+    // Nub on right
+    display->fillRect(x + 12, y + 2, 2, 3, SSD1306_WHITE);
 
-    // Battery indicator
-    display->setCursor(56, 0);
-    display->print("BAT:");
-    display->print(batteryPercent);
-    display->print("%");
-
-    // Divider line
-    display->drawLine(0, 10, 128, 10, SSD1306_WHITE);
-
-    // Build animated content as lines
-    char line[32];
-
-    // GPS Status
-    if (gpsValid) {
-        snprintf(line, sizeof(line), "GPS:%d sats", satellites);
-    } else {
-        snprintf(line, sizeof(line), "GPS:NO FIX");
-    }
-    addLine(line, 14);
-
-    // Mesh Network Status
-    if (packetsReceived > 0) {
-        snprintf(line, sizeof(line), "Mesh:%d/%dpkts", meshNodes, packetsReceived);
-    } else {
-        snprintf(line, sizeof(line), "Mesh:%d nodes", meshNodes);
-    }
-    addLine(line, 26);
-
-    // LoRa Signal Strength
-    if (loraRSSI != 0) {
-        snprintf(line, sizeof(line), "LoRa:%ddBm/%.1fdB", loraRSSI, loraSNR);
-    } else {
-        snprintf(line, sizeof(line), "LoRa:READY");
-    }
-    addLine(line, 38);
-
-    // Status line
-    if (pendingMessages > 0) {
-        snprintf(line, sizeof(line), "Q:%d msgs", pendingMessages);
-    } else {
-        snprintf(line, sizeof(line), "IDLE");
-    }
-    addLine(line, 50);
-
-    if (isTransition) {
-        animateScreen();
-    } else {
-        for (int i = 0; i < screenLineCount; i++) {
-            display->setCursor(0, screenLineYPos[i]);
-            display->print(screenLines[i]);
-        }
-        display->display();
+    // Fill inside proportional to percentage (max inner width = 8)
+    int fillWidth = (8 * percent) / 100;
+    if (fillWidth < 0) fillWidth = 0;
+    if (fillWidth > 8) fillWidth = 8;
+    if (fillWidth > 0) {
+        display->fillRect(x + 2, y + 2, fillWidth, 3, SSD1306_WHITE);
     }
 }
+
+void DisplayManager::drawTopBar(StatusIcon icon, const char* statusText,
+                                 bool bleConnected, int bleClients,
+                                 int batteryPercent) {
+    // Clear top bar region (y=0 to y=9)
+    display->clearRegion(0, 0, SCREEN_WIDTH, 10);
+
+    // Status icon at (0, 1)
+    drawStatusIcon(icon, 0, 1);
+
+    // Status text at (10, 1)
+    display->setTextSize(1);
+    display->setCursor(10, 1);
+    display->print(statusText);
+
+    // BLE client count at (70, 1) - show "B:N" if connected
+    if (bleConnected && bleClients > 0) {
+        char bleBuf[16];
+        snprintf(bleBuf, sizeof(bleBuf), "B:%d", bleClients);
+        display->setCursor(70, 1);
+        display->print(bleBuf);
+    }
+
+    // Battery percentage text + icon
+    char batBuf[8];
+    snprintf(batBuf, sizeof(batBuf), "%d%%", batteryPercent);
+    int batTextLen = strlen(batBuf);
+    // Right-align: icon(14px) at x=114, text before it
+    int batTextX = 114 - batTextLen * 6 - 1;
+    display->setCursor(batTextX, 1);
+    display->print(batBuf);
+    drawBatteryIcon(114, 0, batteryPercent);
+}
+
+void DisplayManager::updateField(DisplayField field, int16_t x, int16_t y,
+                                  const char* newText) {
+    if (strcmp(prevFields[field], newText) == 0 && statusDrawn) {
+        return;  // No change
+    }
+
+    // Clear the old text region
+    int oldLen = strlen(prevFields[field]);
+    if (oldLen > 0) {
+        display->clearRegion(x, y, oldLen * 6, 8);
+    }
+    // Clear the new text region too (in case new text is shorter)
+    int newLen = strlen(newText);
+    int maxLen = oldLen > newLen ? oldLen : newLen;
+    if (maxLen > 0) {
+        display->clearRegion(x, y, maxLen * 6, 8);
+    }
+
+    // Draw new text
+    display->setTextSize(1);
+    display->setCursor(x, y);
+    display->print(newText);
+
+    // Save for next comparison
+    strncpy(prevFields[field], newText, 31);
+    prevFields[field][31] = '\0';
+}
+
+void DisplayManager::updateStatus(bool gpsValid, int satellites, int meshNodes,
+                                   int pendingMessages, int batteryPercent,
+                                   bool bleConnected, int bleClients,
+                                   int loraRSSI, float loraSNR,
+                                   int packetsReceived) {
+    if (!initialized || !screenOn) return;
+
+    bool isTransition = (currentScreen != SCREEN_STATUS);
+
+    if (isTransition) {
+        // Full clear + redraw on screen transition
+        display->clearDisplay();
+        display->setTextSize(1);
+        display->setTextColor(SSD1306_WHITE);
+        memset(prevFields, 0, sizeof(prevFields));
+        statusDrawn = false;
+        currentScreen = SCREEN_STATUS;
+    }
+
+    // Determine status icon and text
+    StatusIcon icon;
+    const char* statusText;
+
+    // Check if TX notification is active
+    if (txActive) {
+        if (millis() - txStartTime < (unsigned long)txDurationMs) {
+            icon = ICON_ACTIVE;
+            statusText = "TX";
+        } else {
+            txActive = false;
+            icon = ICON_IDLE;
+            statusText = "IDLE";
+        }
+    } else if (pendingMessages > 0) {
+        icon = ICON_ACTIVE;
+        statusText = "ACTIVE";
+    } else {
+        icon = ICON_IDLE;
+        statusText = "IDLE";
+    }
+
+    // Draw top bar (always redraw - it has icons, not just text)
+    drawTopBar(icon, statusText, bleConnected, bleClients, batteryPercent);
+
+    // Divider line at y=10
+    if (!statusDrawn) {
+        display->drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    }
+
+    // Field updates - only redraw what changed
+    char line[32];
+
+    // GPS (y=14)
+    if (gpsValid) {
+        snprintf(line, sizeof(line), "GPS: %d sats", satellites);
+    } else {
+        snprintf(line, sizeof(line), "GPS: NO FIX");
+    }
+    updateField(FIELD_GPS, 0, 14, line);
+
+    // Mesh (y=26)
+    snprintf(line, sizeof(line), "Mesh: %d nodes", meshNodes);
+    updateField(FIELD_MESH, 0, 26, line);
+
+    // LoRa (y=38)
+    if (loraRSSI != 0) {
+        snprintf(line, sizeof(line), "LoRa: %ddBm/%.1fdB", loraRSSI, loraSNR);
+    } else {
+        snprintf(line, sizeof(line), "LoRa: READY");
+    }
+    updateField(FIELD_LORA, 0, 38, line);
+
+    // Queue + Rx (y=50)
+    snprintf(line, sizeof(line), "Q:%d       Rx:%d", pendingMessages, packetsReceived);
+    updateField(FIELD_QUEUE, 0, 50, line);
+
+    statusDrawn = true;
+
+    // Send only changed pages to display
+    display->displayDirty();
+}
+
+// --- Non-blocking TX notification ---
+
+void DisplayManager::notifyTx(int durationMs) {
+    txActive = true;
+    txStartTime = millis();
+    txDurationMs = durationMs;
+    registerActivity();
+}
+
+// --- Idle screen ---
+
+void DisplayManager::showIdleScreen(int batteryPercent) {
+    if (!initialized || !screenOn) return;
+    if (currentScreen == SCREEN_IDLE) return;
+
+    currentScreen = SCREEN_IDLE;
+    statusDrawn = false;
+
+    display->clearDisplay();
+    display->setTextColor(SSD1306_WHITE);
+
+    // Centered "SIMS" in large text
+    display->setTextSize(2);
+    const char* text = "SIMS";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    display->setCursor((SCREEN_WIDTH - w) / 2, 20);
+    display->print(text);
+
+    // Battery icon centered below
+    drawBatteryIcon((SCREEN_WIDTH - 14) / 2, 45, batteryPercent);
+
+    display->display();
+}
+
+// --- Sleep screen ---
+
+void DisplayManager::showSleepScreen() {
+    if (!initialized) return;
+
+    currentScreen = SCREEN_SLEEP;
+
+    display->clearDisplay();
+    display->setTextColor(SSD1306_WHITE);
+    display->setTextSize(2);
+
+    const char* text = "SLEEP";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    display->setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
+    display->print(text);
+    display->display();
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+}
+
+// --- Display power ---
+
+void DisplayManager::setScreenPower(bool on) {
+    if (!initialized) return;
+
+    screenOn = on;
+    display->setDisplayOn(on);
+
+    if (on) {
+        // Force full redraw on next update
+        statusDrawn = false;
+        currentScreen = SCREEN_NONE;
+        registerActivity();
+    }
+}
+
+bool DisplayManager::isDisplayOn() {
+    return screenOn && initialized;
+}
+
+// --- Activity tracking ---
+
+void DisplayManager::registerActivity() {
+    lastActivityTime = millis();
+}
+
+bool DisplayManager::isIdle(unsigned long timeoutMs) {
+    return (millis() - lastActivityTime) >= timeoutMs;
+}
+
+// --- Message display (blocking, for init-time use) ---
 
 void DisplayManager::showMessage(const char* message, int duration) {
     if (!initialized) return;
@@ -308,15 +504,7 @@ void DisplayManager::clear() {
     display->display();
 }
 
-void DisplayManager::drawSIMSLogo() {
-    display->setTextSize(3);
-    display->setCursor(20, 10);
-    display->print("SIMS");
-
-    display->setTextSize(1);
-    centerText("Mesh Network", 38);
-    centerText("Incident Reporting", 48);
-}
+// --- Private helpers ---
 
 void DisplayManager::drawProgressBar(int x, int y, int width, int height, int percent) {
     display->drawRect(x, y, width, height, SSD1306_WHITE);
@@ -415,13 +603,4 @@ void DisplayManager::revealLine(const char* text, int y) {
     display->display();
 
     vTaskDelay(pdMS_TO_TICKS(40));
-}
-
-void DisplayManager::drawAnimatedLogo() {
-    if (!initialized) return;
-
-    for (int i = 0; i < LOGO_LINES; i++) {
-        int yPos = LOGO_START_Y + (i * 10);
-        revealLine(BOOT_LOGO[i], yPos);
-    }
 }

@@ -36,6 +36,7 @@ idf_component_register(
         spiffs
         esp_event
         vfs
+        esp_adc
         Nanopb
         RadioLib
         TinyGPSPlus
