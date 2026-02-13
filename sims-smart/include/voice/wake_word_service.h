@@ -3,10 +3,9 @@
 
 #include <Arduino.h>
 
-// Forward declarations for ESP32-SR types
-// These will be properly defined when ESP32-SR is included in the .cpp file
-typedef struct esp_mn_iface esp_mn_iface_t;
-typedef struct model_iface_data_t model_iface_data_t;
+// Forward declaration for ESP32-SR model data
+// Will be properly defined when ESP32-SR is included in the .cpp file
+struct model_iface_data_t;
 
 class WakeWordService {
 public:

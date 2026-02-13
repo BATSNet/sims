@@ -55,55 +55,107 @@ class SimsApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: SimsColors.navyBlue,
+            seedColor: SimsColors.background,
             brightness: Brightness.dark,
-            surface: SimsColors.navyBlue,
-            background: SimsColors.navyBlue,
-            primary: SimsColors.accentBlue,
-            secondary: SimsColors.navyBlueLight,
+            surface: SimsColors.backgroundLight,
+            background: SimsColors.background,
+            primary: SimsColors.accentTactical,
+            secondary: SimsColors.accentCyan,
           ),
-          scaffoldBackgroundColor: SimsColors.navyBlue,
+          scaffoldBackgroundColor: SimsColors.background,
           fontFamily: 'SpaceGrotesk',
           textTheme: ThemeData.dark().textTheme.apply(
             bodyColor: SimsColors.white,
             displayColor: SimsColors.white,
             fontFamily: 'SpaceGrotesk',
+          ).copyWith(
+            headlineLarge: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: SimsColors.white,
+              fontFamily: 'SpaceGrotesk',
+            ),
+            headlineMedium: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: SimsColors.white,
+              fontFamily: 'SpaceGrotesk',
+            ),
+            bodyLarge: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+              height: 1.6,
+              color: SimsColors.white,
+              fontFamily: 'SpaceGrotesk',
+            ),
+            bodyMedium: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              height: 1.6,
+              color: SimsColors.white,
+              fontFamily: 'SpaceGrotesk',
+            ),
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: SimsColors.navyBlue,
+            backgroundColor: SimsColors.background,
             foregroundColor: SimsColors.white,
             elevation: 0,
+            shadowColor: Colors.transparent,
             titleTextStyle: TextStyle(
               fontSize: 24,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
               color: SimsColors.white,
               fontFamily: 'SpaceGrotesk',
             ),
           ),
           floatingActionButtonTheme: const FloatingActionButtonThemeData(
-            backgroundColor: SimsColors.accentBlue,
+            backgroundColor: SimsColors.accentTactical,
             foregroundColor: SimsColors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+            ),
           ),
-          cardTheme: const CardThemeData(
-            elevation: 0,
-            color: SimsColors.navyBlueLight,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          cardTheme: CardThemeData(
+            elevation: 2,
+            shadowColor: Colors.black.withOpacity(0.3),
+            color: SimsColors.backgroundLight,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+            ),
           ),
-          inputDecorationTheme: const InputDecorationTheme(
-            border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+          inputDecorationTheme: InputDecorationTheme(
+            border: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+            ),
             filled: true,
-            fillColor: SimsColors.navyBlueLight,
+            fillColor: SimsColors.backgroundLight,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
-              backgroundColor: SimsColors.accentBlue,
+              backgroundColor: SimsColors.accentTactical,
               foregroundColor: SimsColors.white,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              elevation: 2,
+              shadowColor: Colors.black.withOpacity(0.3),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ),
               textStyle: const TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
                 fontFamily: 'SpaceGrotesk',
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
               ),
             ),
           ),

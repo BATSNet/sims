@@ -708,7 +708,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               )
             else
               const Center(
-                child: CircularProgressIndicator(color: SimsColors.teal),
+                child: CircularProgressIndicator(color: SimsColors.accentCyan),
               ),
 
             // Top controls
@@ -747,7 +747,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                 bottom: 0,
                 top: MediaQuery.of(context).size.height * 0.375, // Start at 3/8 from top (leaves 5/8 for chat)
                 child: Container(
-                  color: SimsColors.navyBlue.withOpacity(0.85),
+                  color: SimsColors.background.withOpacity(0.90),
                   child: Column(
                     children: [
                       // Chat messages list
@@ -767,10 +767,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: SimsColors.navyBlueLight,
+                            color: SimsColors.backgroundLight,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withOpacity(0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, -2),
                               ),
@@ -786,11 +786,11 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                                     hintText: 'Describe the incident...',
                                     hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
+                                      borderRadius: BorderRadius.circular(20),
                                       borderSide: BorderSide.none,
                                     ),
                                     filled: true,
-                                    fillColor: SimsColors.navyBlueDark,
+                                    fillColor: SimsColors.background,
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                       vertical: 12,
@@ -803,7 +803,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                               ),
                               const SizedBox(width: 8),
                               IconButton(
-                                icon: const Icon(Icons.send, color: SimsColors.accentBlue),
+                                icon: const Icon(Icons.send, color: SimsColors.accentCyan),
                                 onPressed: _sendTextMessage,
                               ),
                             ],
@@ -813,7 +813,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                       // Bottom controls
                       Container(
                         padding: const EdgeInsets.all(16),
-                        color: SimsColors.navyBlue,
+                        color: SimsColors.background,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
@@ -867,10 +867,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: SimsColors.navyBlueLight,
+                          color: SimsColors.backgroundLight,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color: Colors.black.withOpacity(0.3),
                               blurRadius: 8,
                               offset: const Offset(0, -2),
                             ),
@@ -886,11 +886,11 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                                   hintText: 'Describe the incident...',
                                   hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                                   border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: BorderRadius.circular(20),
                                     borderSide: BorderSide.none,
                                   ),
                                   filled: true,
-                                  fillColor: SimsColors.navyBlueDark,
+                                  fillColor: SimsColors.background,
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 12,
@@ -903,7 +903,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.send, color: SimsColors.accentBlue),
+                              icon: const Icon(Icons.send, color: SimsColors.accentCyan),
                               onPressed: _sendTextMessage,
                             ),
                           ],
@@ -913,7 +913,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                     // Bottom controls
                     Container(
                       padding: const EdgeInsets.all(16),
-                      color: SimsColors.navyBlue,
+                      color: SimsColors.background,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -924,25 +924,25 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                             child: _buildControlButtonWidget(
                               icon: _cameraService.isRecordingVideo ? Icons.videocam : Icons.camera_alt,
                               color: _cameraService.isRecordingVideo ? SimsColors.criticalRed : SimsColors.white,
-                              iconColor: _cameraService.isRecordingVideo ? Colors.white : SimsColors.blue,
+                              iconColor: _cameraService.isRecordingVideo ? Colors.white : SimsColors.accentTactical,
                             ),
                           ),
                           _buildControlButton(
                             icon: _audioService.isRecording ? Icons.stop : Icons.mic,
                             color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
-                            iconColor: _audioService.isRecording ? Colors.white : SimsColors.blue,
+                            iconColor: _audioService.isRecording ? Colors.white : SimsColors.accentTactical,
                             onTap: _toggleRecording,
                           ),
                           _buildControlButton(
                             icon: Icons.photo_library,
                             color: SimsColors.white,
-                            iconColor: SimsColors.blue,
+                            iconColor: SimsColors.accentTactical,
                             onTap: _pickFromGallery,
                           ),
                           _buildControlButton(
                             icon: _showTextInput ? Icons.keyboard_hide : Icons.keyboard,
-                            color: _showTextInput ? SimsColors.accentBlue : SimsColors.white,
-                            iconColor: _showTextInput ? Colors.white : SimsColors.blue,
+                            color: _showTextInput ? SimsColors.accentTactical : SimsColors.white,
+                            iconColor: _showTextInput ? Colors.white : SimsColors.accentTactical,
                             onTap: _toggleTextInput,
                           ),
                         ],
@@ -969,8 +969,15 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: SimsColors.accentBlue,
-                borderRadius: BorderRadius.circular(12),
+                color: SimsColors.accentTactical,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 3,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

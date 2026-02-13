@@ -257,3 +257,36 @@ category_to_org_type:
     - police
     - civil_defense
     - government
+
+# Mesh Network Configuration
+mesh_network:
+  enabled: false  # Set to true to enable mesh network integration
+  mqtt_broker: localhost:1883  # MQTT broker address for mesh gateway
+  mqtt_username: null  # Optional MQTT username
+  mqtt_password: null  # Optional MQTT password
+  topic_prefix: sims/mesh  # MQTT topic prefix
+  enable_forwarding: true  # Forward backend incidents to mesh network
+
+  # Gateway configuration
+  gateway:
+    auto_start: false  # Automatically start gateway service on backend startup
+    reassembly_timeout: 300  # Timeout in seconds for chunked message reassembly
+    max_chunk_size: 200  # Maximum chunk size in bytes (matches LoRa packet size)
+    heartbeat_interval: 60  # Node heartbeat interval in seconds
+    node_timeout: 300  # Consider node offline after N seconds without heartbeat
+
+  # Protocol configuration
+  protocol:
+    max_hops: 5  # Maximum number of hops for mesh routing
+    ttl: 300  # Message time-to-live in seconds
+    retry_attempts: 3  # Number of retry attempts for failed transmissions
+    ack_timeout: 5  # Timeout in seconds for acknowledgment
+
+  # Bandwidth optimization
+  optimization:
+    use_protobuf: true  # Use Protobuf encoding instead of JSON
+    compress_images: true  # Enable image compression
+    jpeg_quality: 20  # JPEG quality for compressed images (1-100, lower = smaller)
+    image_max_size: 10240  # Maximum image size in bytes (10 KB)
+    enable_delta_encoding: true  # Use delta encoding for GPS coordinates
+    voice_compression: opus  # Voice compression codec (opus, whisper, raw)

@@ -1,0 +1,21 @@
+# ESP-IDF build artifacts
+build/
+sdkconfig
+sdkconfig.old
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Components (will be added as submodules or dependencies)
+components/esp-sr/
+components/ArduinoJson/
+components/TinyGPSPlus/
+
+# Credentials (never commit)
+main/credentials.h

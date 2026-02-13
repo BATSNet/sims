@@ -64,6 +64,7 @@ sims-app/.flutter-plugins-dependencies
 sims-app/.packages
 sims-app/.pub-cache/
 sims-app/.pub/
+sims-app/.flutter
 sims-app/build/
 sims-app/flutter_*.png
 sims-app/pubspec.lock
@@ -133,3 +134,38 @@ media/
 *.backup
 backups/*.sql
 CLAUDE.md
+
+# PlatformIO (sims-smart)
+sims-smart/.pio/
+sims-smart/.pioenvs/
+sims-smart/.piolibdeps/
+
+# PlatformIO (sims-mesh-device)
+sims-mesh-device/.pio/
+sims-mesh-device/.pioenvs/
+sims-mesh-device/.piolibdeps/
+
+# ESP-IDF (sims-smart-espidf)
+sims-smart-espidf/build/
+sims-smart-espidf/sdkconfig
+sims-smart-espidf/sdkconfig.old
+sims-smart-espidf/managed_components/
+sims-smart-espidf/dependencies.lock
+
+# ESP-IDF (sims-mesh-device-idf)
+sims-mesh-device-idf/build/
+sims-mesh-device-idf/sdkconfig
+sims-mesh-device-idf/sdkconfig.old
+sims-mesh-device-idf/managed_components/
+sims-mesh-device-idf/dependencies.lock
+
+# Internal documentation (procurement, hardware inventory)
+research/hardware-inventory.md
+
+# Third-party tool directories
+.aivory/
+
+# Temporary screenshots
+*.png
+!resources/*.png
+!sims-app/**/*.png

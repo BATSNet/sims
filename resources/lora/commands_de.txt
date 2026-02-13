@@ -1,0 +1,373 @@
+# =============================================================================
+# GERMAN TACTICAL COMMAND VOCABULARY
+# For: Bundeswehr, Feuerwehr, Rettungsdienst, Polizei, THW Operations
+#
+# ⚠ IMPORTANT: ESP-SR MultiNet does NOT support German.
+# Deploy via one of these alternatives:
+#   1. Edge Impulse: Train keyword spotting model, export as TFLite,
+#      deploy to ESP32-S3 via TensorFlow Lite Micro
+#   2. Custom CRNN+CTC: Train on these keywords with German audio data,
+#      quantize to int8, deploy with TFLM
+#   3. Espressif custom model: Contact Espressif for custom MultiNet
+#      language support (commercial engagement)
+#
+# Format: command_id,command_text,category
+# Max recommended: ~200 keywords for Edge Impulse on ESP32-S3 (RAM limited)
+# =============================================================================
+
+# =============================================================================
+# ABSCHNITT 1: ZAHLEN (1-30)
+# =============================================================================
+1,null,zahlen
+2,eins,zahlen
+3,zwei,zahlen
+4,drei,zahlen
+5,vier,zahlen
+6,fünf,zahlen
+7,sechs,zahlen
+8,sieben,zahlen
+9,acht,zahlen
+10,neun,zahlen
+11,zehn,zahlen
+12,elf,zahlen
+13,zwölf,zahlen
+14,dreizehn,zahlen
+15,vierzehn,zahlen
+16,fünfzehn,zahlen
+17,zwanzig,zahlen
+18,dreißig,zahlen
+19,vierzig,zahlen
+20,fünfzig,zahlen
+21,sechzig,zahlen
+22,siebzig,zahlen
+23,achtzig,zahlen
+24,neunzig,zahlen
+25,hundert,zahlen
+26,tausend,zahlen
+
+# =============================================================================
+# ABSCHNITT 2: BUCHSTABIERTAFEL (27-52)
+# Traditional German spelling alphabet (still used by Feuerwehr/THW/Polizei)
+# =============================================================================
+27,anton,buchstabieren
+28,berta,buchstabieren
+29,cäsar,buchstabieren
+30,dora,buchstabieren
+31,emil,buchstabieren
+32,friedrich,buchstabieren
+33,gustav,buchstabieren
+34,heinrich,buchstabieren
+35,ida,buchstabieren
+36,julius,buchstabieren
+37,kaufmann,buchstabieren
+38,ludwig,buchstabieren
+39,martha,buchstabieren
+40,nordpol,buchstabieren
+41,otto,buchstabieren
+42,paula,buchstabieren
+43,quelle,buchstabieren
+44,richard,buchstabieren
+45,siegfried,buchstabieren
+46,theodor,buchstabieren
+47,ulrich,buchstabieren
+48,viktor,buchstabieren
+49,wilhelm,buchstabieren
+50,xanthippe,buchstabieren
+51,ypsilon,buchstabieren
+52,zacharias,buchstabieren
+
+# =============================================================================
+# ABSCHNITT 3: FUNKVERKEHR / SPRECHFUNK (53-75)
+# BOS-Funk (Behörden und Organisationen mit Sicherheitsaufgaben)
+# =============================================================================
+53,kommen,funkverkehr
+54,ende,funkverkehr
+55,verstanden,funkverkehr
+56,wiederholen,funkverkehr
+57,hier,funkverkehr
+58,sprechen,funkverkehr
+59,empfang,funkverkehr
+60,bestätigen,funkverkehr
+61,korrektur,funkverkehr
+62,positiv,funkverkehr
+63,negativ,funkverkehr
+64,warten,funkverkehr
+65,sofort,funkverkehr
+66,dringend,funkverkehr
+67,funkspruch,funkverkehr
+68,lagemeldung,funkverkehr
+69,einsatzbereit,funkverkehr
+70,nicht einsatzbereit,funkverkehr
+71,funkstille,funkverkehr
+72,priorität,funkverkehr
+73,alle einheiten,funkverkehr
+74,achtung,funkverkehr
+75,weitergeben,funkverkehr
+
+# =============================================================================
+# ABSCHNITT 4: LAGEMELDUNG / STATUS (76-100)
+# =============================================================================
+76,feindkontakt,lage
+77,lage ruhig,lage
+78,lage unverändert,lage
+79,lage verschlechtert,lage
+80,einsatzstelle erreicht,lage
+81,auf anmarsch,lage
+82,in stellung,lage
+83,rücken vor,lage
+84,rücken ab,lage
+85,auftrag erledigt,lage
+86,auftrag abgebrochen,lage
+87,bereich gesichert,lage
+88,bereich nicht sicher,lage
+89,person gesichtet,lage
+90,personen vermisst,lage
+91,gebäude betreten,lage
+92,gebäude verlassen,lage
+93,abmarsch,lage
+94,ankunft,lage
+95,standort,lage
+96,standortmeldung,lage
+97,freund,lage
+98,feind,lage
+99,zivilist,lage
+100,unbekannt,lage
+
+# =============================================================================
+# ABSCHNITT 5: RICHTUNGEN / NAVIGATION (101-115)
+# =============================================================================
+101,norden,navigation
+102,süden,navigation
+103,osten,navigation
+104,westen,navigation
+105,nordost,navigation
+106,nordwest,navigation
+107,südost,navigation
+108,südwest,navigation
+109,links,navigation
+110,rechts,navigation
+111,vorwärts,navigation
+112,zurück,navigation
+113,oben,navigation
+114,unten,navigation
+115,planquadrat,navigation
+
+# =============================================================================
+# ABSCHNITT 6: MEDIZIN / VERLETZTE (116-155)
+# Rettungsdienst, Sanitätsdienst
+# =============================================================================
+116,verletzte,medizin
+117,verwundete,medizin
+118,notarzt,medizin
+119,rettungswagen,medizin
+120,rettungshubschrauber,medizin
+121,christoph,medizin
+122,erste hilfe,medizin
+123,sichtung,medizin
+124,sofort behandeln,medizin
+125,dringend behandeln,medizin
+126,kann warten,medizin
+127,hoffnungslos,medizin
+128,leichtverletzt,medizin
+129,schwerverletzt,medizin
+130,lebensbedrohlich,medizin
+131,tot,medizin
+132,bei bewusstsein,medizin
+133,bewusstlos,medizin
+134,atmung vorhanden,medizin
+135,keine atmung,medizin
+136,puls vorhanden,medizin
+137,kein puls,medizin
+138,blutung,medizin
+139,starke blutung,medizin
+140,knochenbruch,medizin
+141,verbrennung,medizin
+142,kopfverletzung,medizin
+143,brustverletzung,medizin
+144,bauchverletzung,medizin
+145,wirbelsäule,medizin
+146,schock,medizin
+147,herzstillstand,medizin
+148,schlaganfall,medizin
+149,unterkühlung,medizin
+150,hitzschlag,medizin
+151,vergiftung,medizin
+152,reanimation,medizin
+153,beatmung,medizin
+154,infusion,medizin
+155,patient stabil,medizin
+
+# =============================================================================
+# ABSCHNITT 7: FEUERWEHR (156-185)
+# =============================================================================
+156,feuer,feuerwehr
+157,brand,feuerwehr
+158,zimmerbrand,feuerwehr
+159,dachstuhlbrand,feuerwehr
+160,kellerbrand,feuerwehr
+161,waldbrand,feuerwehr
+162,fahrzeugbrand,feuerwehr
+163,feuer breitet aus,feuerwehr
+164,feuer unter kontrolle,feuerwehr
+165,feuer aus,feuerwehr
+166,rauch,feuerwehr
+167,starke verrauchung,feuerwehr
+168,durchzündung,feuerwehr
+169,rückzündung,feuerwehr
+170,einsturz,feuerwehr
+171,teileinsturz,feuerwehr
+172,einsturzgefahr,feuerwehr
+173,person eingeklemmt,feuerwehr
+174,person eingeschlossen,feuerwehr
+175,menschenrettung,feuerwehr
+176,rettung läuft,feuerwehr
+177,rettung abgeschlossen,feuerwehr
+178,drehleiter,feuerwehr
+179,wasser marsch,feuerwehr
+180,wasser halt,feuerwehr
+181,wasserversorgung,feuerwehr
+182,lüften,feuerwehr
+183,evakuierung,feuerwehr
+184,sofort evakuieren,feuerwehr
+185,gebäude geräumt,feuerwehr
+
+# =============================================================================
+# ABSCHNITT 8: GEFAHRGUT / ABC (186-210)
+# ABC-Erkundung, CBRN
+# =============================================================================
+186,gefahrgut,gefahrgut
+187,gefahrstoff,gefahrgut
+188,chemisch,gefahrgut
+189,biologisch,gefahrgut
+190,radiologisch,gefahrgut
+191,nuklear,gefahrgut
+192,sprengstoff,gefahrgut
+193,gasaustritt,gefahrgut
+194,leckage,gefahrgut
+195,kontamination,gefahrgut
+196,dekontamination,gefahrgut
+197,gefahrenbereich,gefahrgut
+198,absperrbereich,gefahrgut
+199,sicherheitsabstand,gefahrgut
+200,giftig,gefahrgut
+201,brennbar,gefahrgut
+202,ätzend,gefahrgut
+203,explosionsgefahr,gefahrgut
+204,unbekannter stoff,gefahrgut
+205,schutzausrüstung,gefahrgut
+206,atemschutz,gefahrgut
+207,maske auf,gefahrgut
+208,maske ab,gefahrgut
+209,messung durchführen,gefahrgut
+210,messwerte,gefahrgut
+
+# =============================================================================
+# ABSCHNITT 9: THW - TECHNISCHES HILFSWERK (211-250)
+# Bergung, Infrastruktur, Versorgung
+# =============================================================================
+211,stromausfall,thw
+212,strom wiederhergestellt,thw
+213,notstrom,thw
+214,stromerzeuger,thw
+215,beleuchtung,thw
+216,hochwasser,thw
+217,überflutung,thw
+218,pegelstand steigt,thw
+219,pegelstand fällt,thw
+220,deich,thw
+221,deichbruch,thw
+222,sandsäcke,thw
+223,pumpen,thw
+224,pumpe läuft,thw
+225,pumpe ausgefallen,thw
+226,gebäudeschaden,thw
+227,gebäude nicht sicher,thw
+228,gebäude sicher,thw
+229,straße gesperrt,thw
+230,straße frei,thw
+231,brücke beschädigt,thw
+232,brücke befahrbar,thw
+233,trümmer,thw
+234,räumung,thw
+235,schweres gerät,thw
+236,kran,thw
+237,schneiden,thw
+238,abstützen,thw
+239,abriss,thw
+240,trinkwasser,thw
+241,trinkwasseraufbereitung,thw
+242,versorgungsstelle,thw
+243,notunterkunft,thw
+244,bergung,thw
+245,bergung abgeschlossen,thw
+246,fachgruppe,thw
+247,zugtrupp,thw
+248,sprengung,thw
+249,brückenbau,thw
+250,ölsperre,thw
+
+# =============================================================================
+# ABSCHNITT 10: WETTER / UMGEBUNG (251-260)
+# =============================================================================
+251,unwetterwarnung,wetter
+252,starkregen,wetter
+253,sturm,wetter
+254,schnee,wetter
+255,glatteis,wetter
+256,nebel,wetter
+257,sicht schlecht,wetter
+258,sicht gut,wetter
+259,erdbeben,wetter
+260,nachbeben,wetter
+
+# =============================================================================
+# ABSCHNITT 11: EINSATZMITTEL / LOGISTIK (261-285)
+# =============================================================================
+261,verstärkung anfordern,logistik
+262,hubschrauber anfordern,logistik
+263,rettungswagen anfordern,logistik
+264,feuerwehr anfordern,logistik
+265,polizei anfordern,logistik
+266,thw anfordern,logistik
+267,nachschub,logistik
+268,munition,logistik
+269,treibstoff,logistik
+270,verpflegung,logistik
+271,sanitätsmaterial,logistik
+272,gerät ausgefallen,logistik
+273,fahrzeug ausgefallen,logistik
+274,fahrzeug einsatzbereit,logistik
+275,landeplatz,logistik
+276,abwurfzone,logistik
+277,sammelpunkt,logistik
+278,kontrollpunkt,logistik
+279,befehlsstelle,logistik
+280,bereitstellungsraum,logistik
+281,einsatzleitung,logistik
+282,abschnitt,logistik
+283,unterabschnitt,logistik
+284,verbindungsweg,logistik
+285,versorgungsweg,logistik
+
+# =============================================================================
+# ABSCHNITT 12: FÜHRUNG / STEUERUNG (286-298)
+# =============================================================================
+286,einsatzleiter,fuehrung
+287,übernahme führung,fuehrung
+288,übergabe führung,fuehrung
+289,meldung an führung,fuehrung
+290,ausführen,fuehrung
+291,stellung halten,fuehrung
+292,vorrücken,fuehrung
+293,zurückfallen,fuehrung
+294,sammeln,fuehrung
+295,absperren,fuehrung
+296,absperrung aufheben,fuehrung
+297,kanal wechseln,fuehrung
+298,nur notverkehr,fuehrung
+
+# =============================================================================
+# ABSCHNITT 13: GERÄTESTEUERUNG (299-300)
+# =============================================================================
+299,foto senden,geraet
+300,position senden,geraet

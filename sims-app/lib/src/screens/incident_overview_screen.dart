@@ -34,33 +34,62 @@ class IncidentOverviewScreen extends StatelessWidget {
             },
             tooltip: 'Settings',
           ),
-          // Connection status indicator
+          // Connection status indicator with glassmorphic effect
           BlocBuilder<WebSocketBloc, WebSocketState>(
             builder: (context, state) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Center(
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: state.isConnected
-                              ? SimsColors.lowGreen
-                              : SimsColors.criticalRed,
-                          shape: BoxShape.circle,
-                        ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: (state.isConnected
+                              ? SimsColors.accentTactical
+                              : SimsColors.slate700)
+                          .withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: (state.isConnected
+                                ? SimsColors.accentTactical
+                                : SimsColors.slate600)
+                            .withOpacity(0.4),
+                        width: 1,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        state.isConnected ? 'Live' : 'Offline',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: SimsColors.white,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: state.isConnected
+                                ? SimsColors.accentCyan
+                                : SimsColors.criticalRed,
+                            shape: BoxShape.circle,
+                            boxShadow: state.isConnected
+                                ? [
+                                    BoxShadow(
+                                      color: SimsColors.accentCyan.withOpacity(0.5),
+                                      blurRadius: 4,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : null,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          state.isConnected ? 'Live' : 'Offline',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: SimsColors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -84,18 +113,25 @@ class IncidentOverviewScreen extends StatelessWidget {
                       margin: const EdgeInsets.all(16),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: SimsColors.navyBlueLight,
-                        borderRadius: BorderRadius.circular(8),
+                        color: SimsColors.backgroundLight,
+                        borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: SimsColors.highOrange.withOpacity(0.5),
+                          color: SimsColors.highOrange.withOpacity(0.3),
                           width: 1,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
                           const Icon(
                             Icons.info_outline,
-                            color: SimsColors.highOrange,
+                            color: SimsColors.accentAmber,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -177,11 +213,18 @@ class IncidentOverviewScreen extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              SimsColors.blue.withOpacity(0.9),
-              SimsColors.blue.withOpacity(0.7),
+              SimsColors.accentTactical.withOpacity(0.8),
+              SimsColors.accentTactical.withOpacity(0.6),
             ],
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -190,7 +233,7 @@ class IncidentOverviewScreen extends StatelessWidget {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: SimsColors.white.withOpacity(0.2),
+                color: SimsColors.white.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -204,7 +247,8 @@ class IncidentOverviewScreen extends StatelessWidget {
               'Start Recording',
               style: TextStyle(
                 fontSize: 24,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
                 color: SimsColors.white,
               ),
             ),
@@ -213,6 +257,7 @@ class IncidentOverviewScreen extends StatelessWidget {
               'Tap to report a new incident',
               style: TextStyle(
                 fontSize: 16,
+                fontWeight: FontWeight.w400,
                 color: SimsColors.white.withOpacity(0.9),
               ),
             ),
@@ -227,12 +272,19 @@ class IncidentOverviewScreen extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: SimsColors.navyBlueLight,
-        borderRadius: BorderRadius.circular(12),
+        color: SimsColors.backgroundLight,
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: SimsColors.teal.withOpacity(0.3),
+          color: SimsColors.slate700,
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,15 +293,15 @@ class IncidentOverviewScreen extends StatelessWidget {
             children: [
               const Icon(
                 Icons.info_outline,
-                color: SimsColors.teal,
+                color: SimsColors.accentCyan,
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
+              const Text(
                 'Welcome to SIMS',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   color: SimsColors.white,
                 ),
               ),
@@ -261,7 +313,7 @@ class IncidentOverviewScreen extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               color: SimsColors.white.withOpacity(0.9),
-              height: 1.4,
+              height: 1.5,
             ),
           ),
         ],
@@ -347,12 +399,19 @@ class IncidentOverviewScreen extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: SimsColors.navyBlueLight,
-        borderRadius: BorderRadius.circular(12),
+        color: SimsColors.backgroundLight,
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: SimsColors.criticalRed.withOpacity(0.3),
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,11 +424,11 @@ class IncidentOverviewScreen extends StatelessWidget {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
+              const Text(
                 'Emergency Contact',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   color: SimsColors.white,
                 ),
               ),
@@ -397,8 +456,19 @@ class IncidentOverviewScreen extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
-          color: SimsColors.navyBlueLight,
-          borderRadius: BorderRadius.circular(12),
+          color: SimsColors.backgroundLight,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: SimsColors.slate700.withOpacity(0.5),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 3,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: IntrinsicHeight(
           child: Row(
@@ -406,7 +476,7 @@ class IncidentOverviewScreen extends StatelessWidget {
             children: [
               if (incident.imageUrl != null)
                 ClipRRect(
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(4)),
                   child: Image.network(
                     incident.imageUrl!,
                     width: 80,
@@ -414,11 +484,11 @@ class IncidentOverviewScreen extends StatelessWidget {
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
                         width: 80,
-                        color: SimsColors.navyBlueDark,
+                        color: SimsColors.background,
                         child: const Icon(
                           Icons.image_not_supported,
                           size: 32,
-                          color: SimsColors.gray600,
+                          color: SimsColors.slate600,
                         ),
                       );
                     },
@@ -448,7 +518,7 @@ class IncidentOverviewScreen extends StatelessWidget {
                               incident.title,
                               style: const TextStyle(
                                 fontSize: 15,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
                                 color: SimsColors.white,
                               ),
                               maxLines: 1,
@@ -473,14 +543,14 @@ class IncidentOverviewScreen extends StatelessWidget {
                           Icon(
                             Icons.access_time,
                             size: 12,
-                            color: SimsColors.gray600,
+                            color: SimsColors.slate500,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             _formatDateTime(incident.createdAt),
                             style: TextStyle(
                               fontSize: 12,
-                              color: SimsColors.gray600,
+                              color: SimsColors.slate500,
                             ),
                           ),
                         ],

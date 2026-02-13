@@ -12,9 +12,9 @@ class OrbitSpinner extends StatefulWidget {
   const OrbitSpinner({
     super.key,
     this.size = 34.0,
-    this.orbitOneColor = const Color(0xFF51b5bf),
-    this.orbitTwoColor = const Color(0xFFA5D579),
-    this.orbitThreeColor = const Color(0xFF293961),
+    this.orbitOneColor = const Color(0xFF2DD4BF),  // Accent cyan
+    this.orbitTwoColor = const Color(0xFF4A7C59),  // Tactical green
+    this.orbitThreeColor = const Color(0xFF334155),  // Slate 700
     this.duration = const Duration(milliseconds: 1200),
     this.strokeWidth = 3.0,
   });

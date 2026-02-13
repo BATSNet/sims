@@ -10,9 +10,8 @@
 #include "voice/command_parser.h"
 
 #ifdef ESP32_SR_ENABLED
-// TODO: Uncomment when ESP32-SR is installed
-// #include "esp_mn_iface.h"
-// #include "esp_mn_models.h"
+#include "esp_mn_iface.h"
+#include "esp_mn_models.h"
 #endif
 
 CommandParser::CommandParser()
@@ -32,33 +31,80 @@ bool CommandParser::begin() {
     Serial.println("[CommandParser] Initializing command parser...");
 
 #ifdef ESP32_SR_ENABLED
-    // TODO: Initialize ESP32-SR MultiNet when library is installed
-    // Example initialization code:
-    /*
-    // Get MultiNet handle
-    esp_mn_iface_t *multinet = (esp_mn_iface_t *)&MULTINET_MODEL;
+    // Initialize ESP32-SR MultiNet for command recognition
+    Serial.println("[CommandParser] Initializing ESP32-SR MultiNet...");
 
-    // Create model instance
-    model_iface_data_t *model_data = multinet->create("mn6_en", 5760);  // MultiNet6 English
+    // Get MultiNet interface handle
+    esp_mn_iface_t *multinet = esp_mn_handle_from_name((char*)"mn6_en");
+    if (multinet == nullptr) {
+        Serial.println("[CommandParser] ERROR: Failed to get MultiNet handle");
+        _state = STATE_ERROR;
+        return false;
+    }
+
+    // Create MultiNet model instance
+    model_iface_data_t *model_data = multinet->create((char*)"mn6_en", 5760);
     if (model_data == nullptr) {
         Serial.println("[CommandParser] ERROR: Failed to create MultiNet instance");
         _state = STATE_ERROR;
         return false;
     }
 
-    // Add commands (command IDs will be used for mapping)
-    multinet->add_command(model_data, "take photo");
-    multinet->add_command(model_data, "record voice");
-    multinet->add_command(model_data, "send incident");
-    multinet->add_command(model_data, "cancel");
-    multinet->add_command(model_data, "status check");
+    // Build command list (ESP32-SR requires linked list of commands)
+    // Create phrases (must persist for model lifetime)
+    static esp_mn_phrase_t phrases[5];
+    static esp_mn_node_t nodes[5];
+
+    // Define commands (order determines command_id mapping)
+    phrases[0].string = (char*)"take photo";
+    phrases[0].phonemes = nullptr;
+    phrases[0].command_id = 0;
+    phrases[0].threshold = 0.0;
+    phrases[0].wave = nullptr;
+
+    phrases[1].string = (char*)"record voice";
+    phrases[1].phonemes = nullptr;
+    phrases[1].command_id = 1;
+    phrases[1].threshold = 0.0;
+    phrases[1].wave = nullptr;
+
+    phrases[2].string = (char*)"send incident";
+    phrases[2].phonemes = nullptr;
+    phrases[2].command_id = 2;
+    phrases[2].threshold = 0.0;
+    phrases[2].wave = nullptr;
+
+    phrases[3].string = (char*)"cancel";
+    phrases[3].phonemes = nullptr;
+    phrases[3].command_id = 3;
+    phrases[3].threshold = 0.0;
+    phrases[3].wave = nullptr;
+
+    phrases[4].string = (char*)"status check";
+    phrases[4].phonemes = nullptr;
+    phrases[4].command_id = 4;
+    phrases[4].threshold = 0.0;
+    phrases[4].wave = nullptr;
+
+    // Build linked list
+    for (int i = 0; i < 5; i++) {
+        nodes[i].phrase = &phrases[i];
+        nodes[i].next = (i < 4) ? &nodes[i+1] : nullptr;
+    }
+
+    // Set commands
+    esp_mn_error_t *error = multinet->set_speech_commands(model_data, &nodes[0]);
+    if (error && error->num > 0) {
+        Serial.printf("[CommandParser] WARNING: %d commands failed to add\n", error->num);
+    }
 
     _modelData = model_data;
-    */
-
     _state = STATE_READY;
     _enabled = true;
-    Serial.println("[CommandParser] Initialized (ESP32-SR stub)");
+    Serial.println("[CommandParser] ESP32-SR MultiNet initialized successfully");
+    Serial.println("[CommandParser] Commands: take photo, record voice, send incident, cancel, status check");
+    Serial.printf("[CommandParser] Sample rate: %d Hz\n", multinet->get_samp_rate(model_data));
+    Serial.printf("[CommandParser] Chunk size: %d samples\n", multinet->get_samp_chunksize(model_data));
     return true;
 #else
     Serial.println("[CommandParser] ESP32-SR not enabled - using stub mode");
@@ -70,8 +116,13 @@ bool CommandParser::begin() {
 
 void CommandParser::end() {
     if (_modelData != nullptr) {
-        // TODO: Cleanup ESP32-SR resources
-        // multinet->destroy(_modelData);
+#ifdef ESP32_SR_ENABLED
+        // Cleanup ESP32-SR resources
+        esp_mn_iface_t *multinet = esp_mn_handle_from_name((char*)"mn6_en");
+        if (multinet != nullptr) {
+            multinet->destroy(_modelData);
+        }
+#endif
         _modelData = nullptr;
     }
     _state = STATE_UNINITIALIZED;
@@ -91,16 +142,17 @@ CommandParser::VoiceCommand CommandParser::parseCommand(int16_t* audioBuffer, si
     }
 
 #ifdef ESP32_SR_ENABLED
-    // TODO: Process audio through ESP32-SR MultiNet when library is installed
-    /*
-    // Feed audio to MultiNet
-    esp_mn_iface_t *multinet = (esp_mn_iface_t *)&MULTINET_MODEL;
+    // Process audio through ESP32-SR MultiNet
+    esp_mn_iface_t *multinet = esp_mn_handle_from_name((char*)"mn6_en");
+    if (multinet == nullptr || _modelData == nullptr) {
+        return CMD_NONE;
+    }
 
-    // Detect command
+    // Detect command in audio buffer
     esp_mn_state_t mn_state = multinet->detect(_modelData, audioBuffer);
 
     if (mn_state == ESP_MN_STATE_DETECTED) {
-        // Command detected - get command ID
+        // Command detected - get command ID and map to our enum
         esp_mn_results_t *mn_result = multinet->get_results(_modelData);
         int command_id = mn_result->command_id[0];  // Get first result
 
@@ -108,12 +160,11 @@ CommandParser::VoiceCommand CommandParser::parseCommand(int16_t* audioBuffer, si
         _confidence = 90;  // MultiNet doesn't provide confidence, use high value
         _state = STATE_READY;
 
-        Serial.printf("[CommandParser] Command detected: %s\n",
-                     commandToString(_lastCommand));
+        Serial.printf("[CommandParser] Command detected: %s (ID: %d)\n",
+                     commandToString(_lastCommand), command_id);
 
         return _lastCommand;
     }
-    */
 #else
     // Stub mode - no actual parsing
     // For testing, return CMD_NONE

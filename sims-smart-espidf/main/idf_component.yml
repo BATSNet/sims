@@ -1,0 +1,17 @@
+# ESP-IDF Component Manager dependencies
+# These are fetched automatically during build
+
+dependencies:
+  # ESP32-SR voice recognition (WakeNet + MultiNet)
+  espressif/esp-sr:
+    version: ">=1.0.0"
+    rules:
+      - if: "idf_version >=5.0"
+
+  # ESP32 Camera driver
+  espressif/esp32-camera:
+    version: ">=2.0.0"
+
+  # TinyGPS++ (NMEA parser)
+  # Note: TinyGPSPlus may need to be added as a local component
+  # if not available in the component registry

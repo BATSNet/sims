@@ -22,3 +22,28 @@ simsdemo.aivory.net {
         max_size 100MB
     }
 }
+
+localhost {
+    encode gzip
+
+    reverse_proxy backend:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    log {
+        output stdout
+    }
+
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        -Server
+    }
+
+    request_body {
+        max_size 100MB
+    }
+}

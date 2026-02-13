@@ -81,6 +81,18 @@ Python-based backend with FastAPI:
 - NiceGUI operator dashboard
 - SEDAP.Express integration for BMS/Mese forwarding
 
+### Mesh Network Device (sims-mesh-device / sims-mesh-device-idf)
+ESP32-S3 based mesh network node for off-grid incident reporting:
+- Hardware: Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)
+- LoRa mesh networking with flood routing protocol
+- Meshtastic-compatible BLE interface (works with Meshtastic iOS/Android apps)
+- SSD1306 OLED display with status information
+- GPS location tracking
+- SPIFFS message queue for store-and-forward
+- Two implementations available:
+  - `sims-mesh-device/` - Arduino/PlatformIO version
+  - `sims-mesh-device-idf/` - Native ESP-IDF version (recommended)
+
 ### Infrastructure
 - PostgreSQL with PostGIS extension
 - Docker containerization
@@ -250,13 +262,17 @@ python main.py
 
 ```
 sims-bw/
-├── sims-backend/       # Python backend (FastAPI, NiceGUI)
-├── sims-app/          # Flutter mobile application
-├── documents/         # Implementation guides and specifications
-├── postgis/           # Database initialization scripts
-├── docker-compose.yml # Multi-container orchestration
-├── CLAUDE.md          # Development guidelines for Claude Code
-└── README.md          # This file
+├── sims-app/              # Flutter mobile application (Android/iOS)
+├── sims-backend/          # Python backend (FastAPI, NiceGUI)
+├── sims-mesh-device/      # Mesh node firmware - Arduino/PlatformIO
+├── sims-mesh-device-idf/  # Mesh node firmware - ESP-IDF (recommended)
+├── sims-smart/            # Voice-controlled device - PlatformIO
+├── sims-smart-espidf/     # Voice-controlled device - ESP-IDF
+├── research/              # Hardware research and API documentation
+├── documents/             # Implementation guides and specifications
+├── postgis/               # Database initialization scripts
+├── docker-compose.yml     # Multi-container orchestration
+└── README.md              # This file
 ```
 
 ## Technology Stack

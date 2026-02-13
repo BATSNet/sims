@@ -10,11 +10,10 @@
 #include "voice/wake_word_service.h"
 
 #ifdef ESP32_SR_ENABLED
-// TODO: Uncomment when ESP32-SR is installed
-// #include "esp_wn_iface.h"
-// #include "esp_wn_models.h"
-// #include "esp_afe_sr_iface.h"
-// #include "esp_afe_sr_models.h"
+#include "esp_wn_iface.h"
+#include "esp_wn_models.h"
+#include "esp_afe_sr_iface.h"
+#include "esp_afe_sr_models.h"
 #endif
 
 WakeWordService::WakeWordService()
@@ -35,45 +34,31 @@ bool WakeWordService::begin(const char* wakeWord) {
     _wakeWord = wakeWord;
 
 #ifdef ESP32_SR_ENABLED
-    // TODO: Initialize ESP32-SR when library is installed
-    // Example initialization code:
-    /*
-    // Get AFE (Acoustic Front End) handle
-    afe_config_t afe_config = {
-        .aec_init = true,
-        .se_init = true,
-        .vad_init = true,
-        .wakenet_init = true,
-        .voice_communication_init = false,
-        .voice_communication_agc_init = false,
-        .voice_communication_agc_gain = 15,
-        .vad_mode = VAD_MODE_3,
-        .wakenet_model_name = "wn9_hiesp",  // WakeNet9
-        .wakenet_mode = DET_MODE_2CH_90,
-        .afe_mode = SR_MODE_LOW_COST,
-        .afe_perferred_core = 0,
-        .afe_perferred_priority = 5,
-        .afe_ringbuf_size = 50,
-        .memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM,
-        .agc_mode = AFE_MN_PEAK_AGC_MODE_2,
-    };
+    // Initialize ESP32-SR WakeNet
+    Serial.println("[WakeWord] Initializing ESP32-SR WakeNet...");
 
-    // Create AFE instance
-    afe_handle = (esp_afe_sr_iface_t *)&ESP_AFE_SR_HANDLE;
-    _modelData = afe_handle->create_from_config(&afe_config);
-
-    if (_modelData == nullptr) {
-        Serial.println("[WakeWord] ERROR: Failed to create AFE instance");
+    // Get WakeNet interface handle
+    const esp_wn_iface_t *wakenet = esp_wn_handle_from_name("wn9_hiesp");
+    if (wakenet == nullptr) {
+        Serial.println("[WakeWord] ERROR: Failed to get WakeNet handle");
         _state = STATE_ERROR;
         return false;
     }
-    */
 
-    // For now, just indicate success
+    // Create WakeNet model instance (DET_MODE_90 = 90% confidence)
+    _modelData = wakenet->create("wn9_hiesp", DET_MODE_90);
+    if (_modelData == nullptr) {
+        Serial.println("[WakeWord] ERROR: Failed to create WakeNet instance");
+        _state = STATE_ERROR;
+        return false;
+    }
+
     _state = STATE_IDLE;
     _enabled = true;
-    Serial.println("[WakeWord] Initialized (ESP32-SR stub)");
-    Serial.printf("[WakeWord] Wake word: \"%s\"\n", _wakeWord);
+    Serial.println("[WakeWord] ESP32-SR WakeNet initialized successfully");
+    Serial.printf("[WakeWord] Wake word: \"Hi ESP\" (model: wn9_hiesp)\n");
+    Serial.printf("[WakeWord] Sample rate: %d Hz\n", wakenet->get_samp_rate(_modelData));
+    Serial.printf("[WakeWord] Chunk size: %d samples\n", wakenet->get_samp_chunksize(_modelData));
     return true;
 #else
     Serial.println("[WakeWord] ESP32-SR not enabled - using stub mode");
@@ -85,8 +70,13 @@ bool WakeWordService::begin(const char* wakeWord) {
 
 void WakeWordService::end() {
     if (_modelData != nullptr) {
-        // TODO: Cleanup ESP32-SR resources
-        // afe_handle->destroy(_modelData);
+#ifdef ESP32_SR_ENABLED
+        // Cleanup ESP32-SR resources
+        const esp_wn_iface_t *wakenet = esp_wn_handle_from_name("wn9_hiesp");
+        if (wakenet != nullptr) {
+            wakenet->destroy(_modelData);
+        }
+#endif
         _modelData = nullptr;
     }
     _state = STATE_UNINITIALIZED;
@@ -113,25 +103,21 @@ void WakeWordService::processAudio(int16_t* audioBuffer, size_t samples) {
     }
 
 #ifdef ESP32_SR_ENABLED
-    // TODO: Process audio through ESP32-SR when library is installed
-    /*
-    // Feed audio to AFE
-    int afe_chunksize = afe_handle->get_feed_chunksize(_modelData);
-    int audio_chunksize = AFE_READ_SAMPLES;
+    // Get WakeNet interface
+    const esp_wn_iface_t *wakenet = esp_wn_handle_from_name("wn9_hiesp");
+    if (wakenet == nullptr || _modelData == nullptr) {
+        return;
+    }
 
-    // Feed audio data
-    afe_handle->feed(_modelData, audioBuffer);
-
-    // Check for wake word detection
-    int res = afe_handle->fetch(_modelData);
-    if (res == AFE_FETCH_CHANNEL_VERIFIED) {
-        // Wake word detected
+    // Detect wake word in audio buffer
+    int result = wakenet->detect(_modelData, audioBuffer);
+    if (result > 0) {
+        // Wake word detected (result > 0 indicates detection)
         _detected = true;
-        _confidence = 95;  // ESP32-SR doesn't provide confidence, use high value
+        _confidence = 95;  // ESP32-SR doesn't provide confidence score
         _state = STATE_DETECTED;
         handleDetection();
     }
-    */
 #else
     // Stub mode - no actual detection
     // In real implementation, this would process audio through WakeNet9

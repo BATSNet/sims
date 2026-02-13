@@ -51,6 +51,10 @@ size_t imageSize = 0;
 uint8_t* audioBuffer = nullptr;
 size_t audioSize = 0;
 
+// Audio processing buffers for voice recognition
+int16_t audioProcessingBuffer[AUDIO_BUFFER_SIZE];
+size_t audioSamplesAvailable = 0;
+
 // Function declarations
 void handleStateTransition(SystemState newState);
 void handleWakeDetection();
@@ -147,6 +151,16 @@ void loop() {
         case STATE_IDLE:
             // Listening for wake word
             wakeWord.enable();
+
+            // TODO: Audio service would fill audioProcessingBuffer here
+            // Example: audioSamplesAvailable = audio.read(audioProcessingBuffer, AUDIO_BUFFER_SIZE);
+
+            // Process audio through wake word detector
+            if (audioSamplesAvailable > 0) {
+                wakeWord.processAudio(audioProcessingBuffer, audioSamplesAvailable);
+            }
+
+            // Check if wake word was detected
             if (wakeWord.isAwake()) {
                 handleWakeDetection();
             }
@@ -157,13 +171,57 @@ void loop() {
             handleStateTransition(STATE_LISTENING_COMMAND);
             break;
 
-        case STATE_LISTENING_COMMAND:
+        case STATE_LISTENING_COMMAND: {
             // Listening for voice command
             commandParser.enable();
-            // TODO: Feed audio to command parser
-            // For now, simulate command detection for testing
-            handleVoiceCommand();
+
+            // TODO: Audio service would fill audioProcessingBuffer here
+            // Example: audioSamplesAvailable = audio.read(audioProcessingBuffer, AUDIO_BUFFER_SIZE);
+
+            // Process audio through command parser
+            CommandParser::VoiceCommand detectedCommand = CommandParser::CMD_NONE;
+            if (audioSamplesAvailable > 0) {
+                detectedCommand = commandParser.parseCommand(audioProcessingBuffer, audioSamplesAvailable);
+            }
+
+            // Handle detected command or timeout
+            if (detectedCommand != CommandParser::CMD_NONE) {
+                lastCommand = detectedCommand;
+                Serial.printf("[MAIN] Command detected: %s\n", commandParser.commandToString(detectedCommand));
+
+                // Execute command action
+                switch (detectedCommand) {
+                    case CommandParser::CMD_TAKE_PHOTO:
+                        handleStateTransition(STATE_CAPTURING_IMAGE);
+                        break;
+
+                    case CommandParser::CMD_RECORD_VOICE:
+                        handleStateTransition(STATE_RECORDING_VOICE);
+                        break;
+
+                    case CommandParser::CMD_SEND_INCIDENT:
+                        handleStateTransition(STATE_PROCESSING);
+                        break;
+
+                    case CommandParser::CMD_CANCEL:
+                        handleStateTransition(STATE_IDLE);
+                        break;
+
+                    case CommandParser::CMD_STATUS_CHECK:
+                        printStatus();
+                        handleStateTransition(STATE_IDLE);
+                        break;
+
+                    default:
+                        handleError("Unknown command");
+                        break;
+                }
+            } else {
+                // Fallback to stub timeout handling
+                handleVoiceCommand();
+            }
             break;
+        }
 
         case STATE_CAPTURING_IMAGE:
             captureImage();
