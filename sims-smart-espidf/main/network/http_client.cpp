@@ -8,6 +8,7 @@
 #include "network/wifi_service.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_crt_bundle.h"
 #include "mbedtls/base64.h"
 #include "cJSON.h"
 #include <string.h>
@@ -120,6 +121,10 @@ HTTPClientService::IncidentUploadResult HTTPClientService::uploadIncident(
     config.method = HTTP_METHOD_POST;
     config.timeout_ms = API_TIMEOUT_MS;
     config.event_handler = http_event_handler;
+    // Only attach TLS cert bundle for HTTPS URLs
+    if (strncmp(backendURL, "https://", 8) == 0) {
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+    }
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
@@ -202,6 +207,7 @@ bool HTTPClientService::ping() {
     config.url = healthURL;
     config.timeout_ms = 5000;
     config.event_handler = http_event_handler;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) return false;
@@ -237,6 +243,11 @@ char* HTTPClientService::buildIncidentJSON(
     char* deviceId = getDeviceId();
     cJSON_AddStringToObject(doc, "device_type", DEVICE_TYPE);
     cJSON_AddStringToObject(doc, "device_id", deviceId);
+
+    // Title (required by backend)
+    char title[128];
+    snprintf(title, sizeof(title), "Voice report from %s", deviceId);
+    cJSON_AddStringToObject(doc, "title", title);
     free(deviceId);
 
     // Location data
@@ -248,7 +259,6 @@ char* HTTPClientService::buildIncidentJSON(
 
     // Incident metadata
     cJSON_AddStringToObject(doc, "priority", getPriorityString(priority));
-    cJSON_AddNumberToObject(doc, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
     cJSON_AddStringToObject(doc, "description", description ? description : "");
 
     // Voice command metadata

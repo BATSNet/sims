@@ -35,6 +35,7 @@ idf_component_register(
         spi_flash
         TinyGPSPlus
         esp-sr
+        libwebp
 )
 
 # C++ standard for all source files

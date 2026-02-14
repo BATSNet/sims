@@ -1,14 +1,15 @@
 /**
  * LED Feedback Service - ESP-IDF Port
  *
- * Manages WS2812B RGB LED for status indication
- * Uses RMT (Remote Control) driver instead of FastLED
+ * Manages WS2812B RGB LED for status indication.
+ * Uses the espressif/led_strip managed component with SPI backend.
+ * RMT backend produced no output on ESP-IDF v5.5, SPI works reliably.
  */
 
 #ifndef LED_FEEDBACK_H
 #define LED_FEEDBACK_H
 
-#include "driver/rmt.h"
+#include "led_strip.h"
 #include "config.h"
 
 class LEDFeedback {
@@ -48,13 +49,15 @@ private:
     unsigned long lastUpdate;
     uint8_t brightness;
     bool pulseDirection;  // true = increasing, false = decreasing
-    bool rmtInitialized;
-    rmt_channel_t rmtChannel;
+    bool stripInitialized;
+
+    // LED strip handle (SPI driver via managed component)
+    led_strip_handle_t ledStrip;
 
     // Current color values
     uint8_t currentR, currentG, currentB;
 
-    // WS2812B timing via RMT
+    // Send pixel data via led_strip API
     void sendPixel(uint8_t r, uint8_t g, uint8_t b);
 
     // Animation helpers

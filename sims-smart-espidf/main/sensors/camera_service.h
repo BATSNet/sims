@@ -2,7 +2,7 @@
  * Camera Service - ESP-IDF Port
  *
  * OV2640 camera on XIAO ESP32S3 Sense
- * Uses esp_camera component (already ESP-IDF native)
+ * Captures grayscale frames and encodes to WebP for LoRa transmission.
  */
 
 #ifndef CAMERA_SERVICE_H
@@ -19,14 +19,13 @@ public:
     // Initialize camera
     bool begin();
 
-    // Capture a JPEG image
-    // Returns pointer to JPEG buffer (caller must call release() when done)
+    // Capture and encode image to WebP
     bool capture();
 
-    // Release the last captured frame buffer
+    // Release the last encoded image
     void release();
 
-    // Get captured image data
+    // Get encoded WebP image data
     uint8_t* getImageBuffer();
     size_t getImageSize();
 
@@ -39,7 +38,8 @@ public:
 
 private:
     bool initialized;
-    camera_fb_t* currentFrame;
+    uint8_t* encodedImage;
+    size_t encodedImageSize;
 };
 
 #endif // CAMERA_SERVICE_H

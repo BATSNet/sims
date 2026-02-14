@@ -403,16 +403,17 @@ class BatchProcessor:
                                             provider = get_provider(Config.CLASSIFICATION_PROVIDER)
                                             summary_prompt = f"Create a brief 1-2 sentence incident summary from this content:\n\n{combined_content}\n\nProvide ONLY the summary, no other text:"
 
-                                            summary = await provider.generate_text(
-                                                prompt=summary_prompt,
+                                            from services.ai_providers.base import Message
+                                            response = await provider.chat_completion(
+                                                messages=[Message(role="user", content=summary_prompt)],
                                                 temperature=0.3,
                                                 max_tokens=100
                                             )
 
-                                            if summary:
-                                                incident.description = summary.strip()
+                                            if response and response.content:
+                                                incident.description = response.content.strip()
                                                 db.commit()
-                                                logger.info(f"Generated summary description for {incident.incident_id}: {summary[:50]}...")
+                                                logger.info(f"Generated summary description for {incident.incident_id}: {response.content[:50]}...")
                                             else:
                                                 # Fallback to combined content
                                                 incident.description = combined_content[:200]

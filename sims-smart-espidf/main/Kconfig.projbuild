@@ -1,0 +1,21 @@
+menu "SIMS-SMART Configuration"
+
+    config SIMS_WIFI_SSID
+        string "WiFi SSID"
+        default "iPhone"
+        help
+            Default WiFi network name. Can also be overridden at runtime via NVS.
+
+    config SIMS_WIFI_PASSWORD
+        string "WiFi Password"
+        default "letsrock"
+        help
+            Default WiFi password. Can also be overridden at runtime via NVS.
+
+    config SIMS_BACKEND_URL
+        string "Backend API URL"
+        default "http://91.99.179.35:8000/api/incidents"
+        help
+            URL for the SIMS backend incident upload endpoint.
+
+endmenu

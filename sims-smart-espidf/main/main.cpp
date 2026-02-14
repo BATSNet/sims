@@ -9,13 +9,16 @@
  *
  * Architecture:
  * - main_task: State machine, service coordination, HTTP uploads (Core 0)
- * - voice_task: Continuous audio capture and voice recognition (Core 1)
+ * - voice_task: Continuous audio capture and WakeNet9 wake word detection (Core 1)
  * - GPS updated periodically from main_task
  * - LED updated from main_task
+ *
+ * Flow: "Hi ESP" -> auto-record (stops on silence) -> auto-photo -> auto-send
  */
 
 #include <stdio.h>
 #include <string.h>
+#include <cmath>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -34,7 +37,6 @@
 #include "sensors/camera_service.h"
 #include "sensors/audio_service.h"
 #include "voice/wake_word_service.h"
-#include "voice/command_parser.h"
 #include "led/led_feedback.h"
 #include "power/power_manager.h"
 
@@ -79,14 +81,11 @@ static const char* stateToString(system_state_t s) {
 
 typedef enum {
     EVENT_NONE,
-    EVENT_WAKE_DETECTED,
-    EVENT_COMMAND_RECOGNIZED,
-    EVENT_TIMEOUT
+    EVENT_WAKE_DETECTED
 } voice_event_type_t;
 
 typedef struct {
     voice_event_type_t type;
-    int command_id;  // CommandParser::VoiceCommand value
 } voice_event_t;
 
 // ---------------------------------------------------------------------------
@@ -94,8 +93,6 @@ typedef struct {
 // ---------------------------------------------------------------------------
 
 static system_state_t current_state = STATE_INIT;
-static CommandParser::VoiceCommand lastCommand = CommandParser::CMD_NONE;
-static char incidentDescription[256] = "";
 
 // Captured data
 static uint8_t* capturedAudioBuffer = nullptr;
@@ -110,9 +107,12 @@ static unsigned long stateEntryTime = 0;
 
 static QueueHandle_t voice_event_queue = NULL;
 
-// Shared flag: main task tells voice task whether to run wake word or command
+// Shared flag: main task tells voice task whether to listen for wake word
 static volatile bool voiceListenForWakeWord = true;
-static volatile bool voiceListenForCommand = false;
+
+// Pause flag: main task sets true during audio.record() to prevent voice_task
+// from calling audio.read() concurrently (both use the same I2S channel)
+static volatile bool voicePauseAudio = false;
 
 // ---------------------------------------------------------------------------
 // Task handles
@@ -131,7 +131,6 @@ static GPSService     gps;
 static CameraService  camera;
 static AudioService   audio;
 static WakeWordService wakeWord;
-static CommandParser  commandParser;
 static LEDFeedback    led;
 static PowerManager   power;
 
@@ -179,7 +178,7 @@ extern "C" void app_main(void)
 
     // Main task on Core 0 (networking, state machine)
     BaseType_t ret = xTaskCreatePinnedToCore(
-        main_task, "main_task", 8192, NULL,
+        main_task, "main_task", TASK_STACK_MAIN, NULL,
         TASK_PRIORITY_MAIN, &main_task_handle, 0);
     if (ret != pdPASS) {
         ESP_LOGE(TAG, "Failed to create main task");
@@ -243,13 +242,10 @@ static void main_task(void *pvParameters)
         ESP_LOGI(TAG, "Loaded %d SR models", models->num);
     }
 
-    // Voice recognition
-    ESP_LOGI(TAG, "Initializing voice recognition...");
+    // Voice recognition (wake word only - no command parser needed)
+    ESP_LOGI(TAG, "Initializing wake word detection...");
     if (!wakeWord.begin(WAKE_WORD)) {
         ESP_LOGW(TAG, "Wake word init failed");
-    }
-    if (!commandParser.begin()) {
-        ESP_LOGW(TAG, "Command parser init failed");
     }
 
     // Power manager
@@ -284,9 +280,8 @@ static void main_task(void *pvParameters)
         switch (current_state) {
 
         case STATE_IDLE: {
-            // Tell voice task to listen for wake word
+            // Listen for wake word
             voiceListenForWakeWord = true;
-            voiceListenForCommand = false;
 
             // Check for wake word event from voice task
             voice_event_t event;
@@ -300,55 +295,10 @@ static void main_task(void *pvParameters)
         }
 
         case STATE_WAKE_DETECTED:
-            // Brief pause for user feedback
+            // Brief pause for user feedback, then start recording
             vTaskDelay(pdMS_TO_TICKS(300));
-            handle_state_transition(STATE_LISTENING_COMMAND);
+            handle_state_transition(STATE_RECORDING_VOICE);
             break;
-
-        case STATE_LISTENING_COMMAND: {
-            // Tell voice task to listen for commands
-            voiceListenForWakeWord = false;
-            voiceListenForCommand = true;
-
-            // Wait for command event or timeout
-            voice_event_t event;
-            if (xQueueReceive(voice_event_queue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
-                if (event.type == EVENT_COMMAND_RECOGNIZED) {
-                    lastCommand = (CommandParser::VoiceCommand)event.command_id;
-                    ESP_LOGI(TAG, "Command: %s",
-                             CommandParser::commandToString(lastCommand));
-
-                    switch (lastCommand) {
-                        case CommandParser::CMD_TAKE_PHOTO:
-                            handle_state_transition(STATE_CAPTURING_IMAGE);
-                            break;
-                        case CommandParser::CMD_RECORD_VOICE:
-                            handle_state_transition(STATE_RECORDING_VOICE);
-                            break;
-                        case CommandParser::CMD_SEND_INCIDENT:
-                            handle_state_transition(STATE_PROCESSING);
-                            break;
-                        case CommandParser::CMD_CANCEL:
-                            handle_state_transition(STATE_IDLE);
-                            break;
-                        case CommandParser::CMD_STATUS_CHECK:
-                            print_status();
-                            handle_state_transition(STATE_IDLE);
-                            break;
-                        default:
-                            handle_error("Unknown command");
-                            break;
-                    }
-                }
-            }
-
-            // Timeout after COMMAND_TIMEOUT_MS
-            if (millis_now() - stateEntryTime > COMMAND_TIMEOUT_MS) {
-                ESP_LOGW(TAG, "Command timeout - returning to idle");
-                handle_state_transition(STATE_IDLE);
-            }
-            break;
-        }
 
         case STATE_CAPTURING_IMAGE: {
             ESP_LOGI(TAG, "Capturing image...");
@@ -377,21 +327,33 @@ static void main_task(void *pvParameters)
         case STATE_RECORDING_VOICE: {
             ESP_LOGI(TAG, "Recording voice message...");
 #ifdef HAS_MICROPHONE
-            // Stop voice recognition while recording
+            // Stop wake word detection while recording
             voiceListenForWakeWord = false;
-            voiceListenForCommand = false;
 
-            // Record audio
+            // Pause voice_task audio reads to prevent I2S channel conflict
+            voicePauseAudio = true;
+            vTaskDelay(pdMS_TO_TICKS(50));  // Let voice_task finish current read
+
+            ESP_LOGI(TAG, ">>> RECORDING STARTED - speak now (%d ms max, silence stops) <<<",
+                     MAX_VOICE_DURATION_MS);
+
+            // Record audio with silence detection
             capturedAudioBuffer = audio.record(MAX_VOICE_DURATION_MS, &capturedAudioSize);
+
+            ESP_LOGI(TAG, ">>> RECORDING STOPPED <<<");
+
+            // Resume voice_task audio reads
+            voicePauseAudio = false;
+
             if (capturedAudioBuffer && capturedAudioSize > 0) {
-                ESP_LOGI(TAG, "Audio recorded: %d bytes", capturedAudioSize);
-                handle_state_transition(STATE_PROCESSING);
+                ESP_LOGI(TAG, "Audio recorded: %d bytes", (int)capturedAudioSize);
+                handle_state_transition(STATE_CAPTURING_IMAGE);
             } else {
                 handle_error("Audio recording failed");
             }
 #else
             ESP_LOGW(TAG, "Microphone not available");
-            handle_state_transition(STATE_PROCESSING);
+            handle_state_transition(STATE_CAPTURING_IMAGE);
 #endif
             break;
         }
@@ -411,11 +373,6 @@ static void main_task(void *pvParameters)
 #endif
             }
 
-            // Build description from voice command
-            snprintf(incidentDescription, sizeof(incidentDescription),
-                     "Voice incident report - Command: %s",
-                     CommandParser::commandToString(lastCommand));
-
             handle_state_transition(STATE_UPLOADING);
             break;
         }
@@ -430,18 +387,18 @@ static void main_task(void *pvParameters)
 
             GPSLocation location = gps.getLocation();
 
-            // Upload incident
+            // Upload incident (no audio - SR handles voice on-device)
             HTTPClientService::IncidentUploadResult result = httpClient.uploadIncident(
                 location.latitude,
                 location.longitude,
                 location.altitude,
                 PRIORITY_HIGH,
-                CommandParser::commandToString(lastCommand),
-                incidentDescription,
+                "voice_report",
+                "Voice-activated incident report",
                 camera.getImageBuffer(),
                 camera.getImageSize(),
-                capturedAudioBuffer,
-                capturedAudioSize
+                nullptr,
+                0
             );
 
             // Cleanup captured data
@@ -515,12 +472,36 @@ static void voice_task(void *pvParameters)
 
     ESP_LOGI(TAG, "Voice processing chunk size: %d samples", chunkSize);
 
+    int debugCounter = 0;
+
     while (1) {
+        // When main_task is recording, pause audio reads to avoid I2S conflict
+        if (voicePauseAudio) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
         // Read audio chunk from microphone
         size_t samplesRead = audio.read(audioChunk, chunkSize);
         if (samplesRead == 0) {
+            if (debugCounter++ % 100 == 0) {
+                ESP_LOGW(TAG, "Voice: audio.read returned 0 (iter %d)", debugCounter);
+            }
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
+        }
+
+        // Debug: log audio stats periodically
+        if (++debugCounter % 500 == 0) {
+            // Calculate RMS level to verify mic is capturing sound
+            int64_t sum = 0;
+            for (int i = 0; i < (int)samplesRead; i++) {
+                sum += (int64_t)audioChunk[i] * audioChunk[i];
+            }
+            int rms = (int)sqrt((double)sum / samplesRead);
+            ESP_LOGI(TAG, "Voice: read=%d samples, rms=%d, wakeEnabled=%d, listenWake=%d",
+                     (int)samplesRead, rms, wakeWord.isEnabled() ? 1 : 0,
+                     voiceListenForWakeWord ? 1 : 0);
         }
 
         // Wake word detection
@@ -531,18 +512,6 @@ static void voice_task(void *pvParameters)
                 event.type = EVENT_WAKE_DETECTED;
                 xQueueSend(voice_event_queue, &event, 0);
                 wakeWord.reset();
-            }
-        }
-
-        // Command recognition
-        if (voiceListenForCommand && commandParser.isEnabled()) {
-            CommandParser::VoiceCommand cmd =
-                commandParser.parseCommand(audioChunk, samplesRead);
-            if (cmd != CommandParser::CMD_NONE) {
-                voice_event_t event = {};
-                event.type = EVENT_COMMAND_RECOGNIZED;
-                event.command_id = (int)cmd;
-                xQueueSend(voice_event_queue, &event, 0);
             }
         }
 
@@ -568,23 +537,23 @@ static void handle_state_transition(system_state_t newState)
     current_state = newState;
     stateEntryTime = millis_now();
 
-    // Update LED
+    // Update LED and print user-facing feedback
     switch (newState) {
         case STATE_IDLE:
             led.setState(LEDFeedback::STATE_IDLE);
             wakeWord.reset();
             wakeWord.enable();
-            commandParser.reset();
+            ESP_LOGI(TAG, "Listening for wake word - say \"%s\"", WAKE_WORD);
             break;
         case STATE_WAKE_DETECTED:
             led.setState(LEDFeedback::STATE_SUCCESS);
-            break;
-        case STATE_LISTENING_COMMAND:
-            led.setState(LEDFeedback::STATE_LISTENING);
-            commandParser.enable();
+            ESP_LOGI(TAG, "========================================");
+            ESP_LOGI(TAG, "WAKE WORD DETECTED - recording starts...");
+            ESP_LOGI(TAG, "========================================");
             break;
         case STATE_CAPTURING_IMAGE:
             led.setState(LEDFeedback::STATE_PROCESSING);
+            ESP_LOGI(TAG, ">>> CAPTURING IMAGE <<<");
             break;
         case STATE_RECORDING_VOICE:
             led.setState(LEDFeedback::STATE_RECORDING);
@@ -597,6 +566,7 @@ static void handle_state_transition(system_state_t newState)
             break;
         case STATE_SUCCESS:
             led.setState(LEDFeedback::STATE_SUCCESS);
+            ESP_LOGI(TAG, ">>> INCIDENT SENT SUCCESSFULLY <<<");
             break;
         case STATE_ERROR:
             led.setState(LEDFeedback::STATE_ERROR);

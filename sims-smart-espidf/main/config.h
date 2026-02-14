@@ -34,16 +34,16 @@
 #define BATTERY_MIN_MV     3200 // Empty voltage
 #define BATTERY_MAX_MV     4200 // Full voltage
 
-// WiFi configuration (move to NVS in production)
-#define WIFI_SSID          "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
+// WiFi configuration (configurable via idf.py menuconfig)
+#define WIFI_SSID          CONFIG_SIMS_WIFI_SSID
+#define WIFI_PASSWORD      CONFIG_SIMS_WIFI_PASSWORD
 #define WIFI_CONNECT_TIMEOUT_MS    10000  // 10s timeout for connection
 #define WIFI_RECONNECT_INTERVAL_MS 30000  // 30s between reconnect attempts
 #define WIFI_MAX_RETRY     5
 #define WIFI_MAX_STORED_NETWORKS 5     // Store up to 5 WiFi credentials in NVS
 
-// Backend API configuration
-#define BACKEND_URL        "http://192.168.1.100:8080/api/incidents"
+// Backend API configuration (configurable via idf.py menuconfig)
+#define BACKEND_URL        CONFIG_SIMS_BACKEND_URL
 #define API_TIMEOUT_MS     30000
 
 // Incident priority levels
@@ -60,10 +60,10 @@
 #define AUDIO_BUFFER_COUNT 4
 
 // Camera settings (OV2640)
-#define CAMERA_PIXEL_FORMAT  PIXFORMAT_JPEG
-#define CAMERA_FRAME_SIZE    FRAMESIZE_SVGA  // 800x600
-#define CAMERA_JPEG_QUALITY  20              // 0-63 (lower = better quality)
+#define CAMERA_PIXEL_FORMAT  PIXFORMAT_GRAYSCALE
+#define CAMERA_FRAME_SIZE    FRAMESIZE_QVGA  // 320x240
 #define CAMERA_FB_COUNT      2
+#define CAMERA_WEBP_QUALITY  35              // WebP quality (0-100)
 
 // OV2640 Camera Pins (XIAO ESP32S3 Sense)
 #define CAM_PIN_PWDN       -1
@@ -113,7 +113,7 @@
 #define TASK_PRIORITY_LED      2
 
 // Task stack sizes (bytes)
-#define TASK_STACK_MAIN        4096
+#define TASK_STACK_MAIN        16384
 #define TASK_STACK_VOICE       8192
 #define TASK_STACK_GPS         2048
 #define TASK_STACK_LED         2048

@@ -87,7 +87,7 @@ bool WiFiService::begin() {
 }
 
 void WiFiService::update() {
-    // Handle auto-reconnect
+    // Handle auto-reconnect (only when fully disconnected, not while connecting)
     if (state == WIFI_STATE_DISCONNECTED || state == WIFI_STATE_FAILED) {
         handleReconnect();
     }
@@ -156,6 +156,10 @@ bool WiFiService::connect(const char* ssid, const char* password, bool saveCrede
 }
 
 esp_err_t WiFiService::connectInternal(const char* ssid, const char* password) {
+    // Disconnect first if already connecting/connected to avoid ESP_ERR_WIFI_STATE
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
     wifi_config_t wifi_config = {};
     strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
@@ -163,7 +167,11 @@ esp_err_t WiFiService::connectInternal(const char* ssid, const char* password) {
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
 
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_set_config failed: %s", esp_err_to_name(err));
+        return err;
+    }
     return esp_wifi_connect();
 }
 
@@ -312,16 +320,17 @@ bool WiFiService::tryStoredNetworks() {
 void WiFiService::handleReconnect() {
     unsigned long now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-    // Check if it's time to attempt reconnection
+    // Check if it's time to attempt reconnection (non-blocking)
     if (now - lastReconnectAttempt >= getBackoffInterval()) {
         lastReconnectAttempt = now;
         reconnectAttempts++;
 
-        ESP_LOGI(TAG, "Reconnect attempt %d...", reconnectAttempts);
+        ESP_LOGI(TAG, "Reconnect attempt %d (non-blocking)...", reconnectAttempts);
 
-        if (!tryStoredNetworks()) {
-            ESP_LOGW(TAG, "Reconnection failed");
-        }
+        // Just kick off a connect - the event handler will update state
+        retryCount = 0;
+        state = WIFI_STATE_CONNECTING;
+        esp_wifi_connect();
     }
 }
 
@@ -346,15 +355,15 @@ void WiFiService::wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_sta_disconnected_t* event = (wifi_event_sta_disconnected_t*)event_data;
         ESP_LOGW(TAG, "Disconnected from AP, reason: %d", event->reason);
 
-        self->state = WIFI_STATE_DISCONNECTED;
-
         if (self->retryCount < WIFI_MAX_RETRY) {
+            self->state = WIFI_STATE_CONNECTING;
             esp_wifi_connect();
             self->retryCount++;
             ESP_LOGI(TAG, "Retry connection %d/%d", self->retryCount, WIFI_MAX_RETRY);
         } else {
+            self->state = WIFI_STATE_FAILED;
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            ESP_LOGE(TAG, "Max retries reached");
+            ESP_LOGE(TAG, "Max retries reached, will backoff");
         }
     }
 }

@@ -1,24 +1,24 @@
 /**
  * Camera Service Implementation - ESP-IDF Port
  *
- * Uses esp_camera component directly (already ESP-IDF compatible).
- * Pin configuration from working camera_audio_web test.
+ * Captures grayscale QVGA frames from OV2640, converts to RGB888,
+ * and encodes as WebP for compact LoRa transmission.
  */
 
 #include "sensors/camera_service.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "webp/encode.h"
 
 static const char *TAG = "Camera";
 
 CameraService::CameraService()
-    : initialized(false), currentFrame(nullptr) {
+    : initialized(false),
+      encodedImage(nullptr), encodedImageSize(0) {
 }
 
 CameraService::~CameraService() {
-    if (currentFrame) {
-        esp_camera_fb_return(currentFrame);
-        currentFrame = nullptr;
-    }
+    release();
     if (initialized) {
         esp_camera_deinit();
     }
@@ -49,7 +49,6 @@ bool CameraService::begin() {
     config.xclk_freq_hz = 20000000;
     config.pixel_format = CAMERA_PIXEL_FORMAT;
     config.frame_size = CAMERA_FRAME_SIZE;
-    config.jpeg_quality = CAMERA_JPEG_QUALITY;
     config.fb_count = CAMERA_FB_COUNT;
     config.grab_mode = CAMERA_GRAB_LATEST;
 
@@ -70,47 +69,80 @@ bool CameraService::capture() {
         return false;
     }
 
-    // Release previous frame if not yet released
-    if (currentFrame) {
-        esp_camera_fb_return(currentFrame);
-        currentFrame = nullptr;
-    }
+    // Release previous encoded image
+    release();
 
     ESP_LOGI(TAG, "Capturing image...");
-    currentFrame = esp_camera_fb_get();
-    if (!currentFrame) {
+    camera_fb_t* fb = esp_camera_fb_get();
+    if (!fb) {
         ESP_LOGE(TAG, "Capture failed - no frame buffer");
         return false;
     }
 
-    ESP_LOGI(TAG, "Image captured: %d bytes (%dx%d)",
-             currentFrame->len, currentFrame->width, currentFrame->height);
+    int width = fb->width;
+    int height = fb->height;
+    size_t pixelCount = width * height;
+    ESP_LOGI(TAG, "Raw grayscale frame: %d bytes (%dx%d)", fb->len, width, height);
+
+    // Allocate RGB888 buffer in PSRAM for WebP encoder input
+    size_t rgbSize = pixelCount * 3;
+    uint8_t* rgb = (uint8_t*)heap_caps_malloc(rgbSize, MALLOC_CAP_SPIRAM);
+    if (!rgb) {
+        ESP_LOGE(TAG, "Failed to allocate RGB buffer (%d bytes)", rgbSize);
+        esp_camera_fb_return(fb);
+        return false;
+    }
+
+    // Convert grayscale to RGB888 (R=G=B=gray for each pixel)
+    const uint8_t* gray = fb->buf;
+    for (size_t i = 0; i < pixelCount; i++) {
+        rgb[i * 3]     = gray[i];
+        rgb[i * 3 + 1] = gray[i];
+        rgb[i * 3 + 2] = gray[i];
+    }
+
+    // Return camera frame buffer - no longer needed
+    esp_camera_fb_return(fb);
+
+    // Encode to WebP
+    uint8_t* webpOut = nullptr;
+    size_t webpSize = WebPEncodeRGB(rgb, width, height, width * 3,
+                                     (float)CAMERA_WEBP_QUALITY, &webpOut);
+
+    // Free RGB buffer
+    heap_caps_free(rgb);
+
+    if (webpSize == 0 || !webpOut) {
+        ESP_LOGE(TAG, "WebP encoding failed");
+        return false;
+    }
+
+    encodedImage = webpOut;
+    encodedImageSize = webpSize;
+    ESP_LOGI(TAG, "WebP encoded: %d bytes (%.1f%% of raw)",
+             encodedImageSize, (float)encodedImageSize / pixelCount * 100.0f);
     return true;
 }
 
 void CameraService::release() {
-    if (currentFrame) {
-        esp_camera_fb_return(currentFrame);
-        currentFrame = nullptr;
+    if (encodedImage) {
+        WebPFree(encodedImage);
+        encodedImage = nullptr;
+        encodedImageSize = 0;
     }
 }
 
 uint8_t* CameraService::getImageBuffer() {
-    return currentFrame ? currentFrame->buf : nullptr;
+    return encodedImage;
 }
 
 size_t CameraService::getImageSize() {
-    return currentFrame ? currentFrame->len : 0;
+    return encodedImageSize;
 }
 
 void CameraService::sleep() {
-    // Power down camera sensor to save power
-    // On XIAO ESP32S3, PWDN is -1 (not connected), so we can only deinit
     if (initialized) {
-        if (currentFrame) {
-            esp_camera_fb_return(currentFrame);
-            currentFrame = nullptr;
-        }
+        release();
         esp_camera_deinit();
         initialized = false;
         ESP_LOGI(TAG, "Camera powered down");

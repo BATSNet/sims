@@ -52,25 +52,24 @@ bool CommandParser::begin() {
     }
 
     // Build command list using ESP32-SR linked list structure
-    static esp_mn_phrase_t phrases[5];
-    static esp_mn_node_t nodes[5];
+    static const int NUM_COMMANDS = 4;
+    static esp_mn_phrase_t phrases[NUM_COMMANDS];
+    static esp_mn_node_t nodes[NUM_COMMANDS];
 
-    // Define commands (order determines command_id mapping)
-    phrases[0] = { .string = (char*)"take photo", .phonemes = nullptr,
+    // Define commands - single words for reliable recognition
+    phrases[0] = { .string = (char*)"photo", .phonemes = nullptr,
                    .command_id = 0, .threshold = 0.0, .wave = nullptr };
-    phrases[1] = { .string = (char*)"record voice", .phonemes = nullptr,
+    phrases[1] = { .string = (char*)"record", .phonemes = nullptr,
                    .command_id = 1, .threshold = 0.0, .wave = nullptr };
-    phrases[2] = { .string = (char*)"send incident", .phonemes = nullptr,
+    phrases[2] = { .string = (char*)"send", .phonemes = nullptr,
                    .command_id = 2, .threshold = 0.0, .wave = nullptr };
     phrases[3] = { .string = (char*)"cancel", .phonemes = nullptr,
                    .command_id = 3, .threshold = 0.0, .wave = nullptr };
-    phrases[4] = { .string = (char*)"status check", .phonemes = nullptr,
-                   .command_id = 4, .threshold = 0.0, .wave = nullptr };
 
     // Build linked list
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < NUM_COMMANDS; i++) {
         nodes[i].phrase = &phrases[i];
-        nodes[i].next = (i < 4) ? &nodes[i + 1] : nullptr;
+        nodes[i].next = (i < NUM_COMMANDS - 1) ? &nodes[i + 1] : nullptr;
     }
 
     // Set commands in model
@@ -90,7 +89,7 @@ bool CommandParser::begin() {
     _enabled = true;
 
     ESP_LOGI(TAG, "MultiNet6 initialized successfully");
-    ESP_LOGI(TAG, "Commands: take photo, record voice, send incident, cancel, status check");
+    ESP_LOGI(TAG, "Commands: photo, record, send, cancel");
     ESP_LOGI(TAG, "Sample rate: %d Hz, Chunk size: %d samples", _sampleRate, _chunkSize);
 
     return true;
@@ -150,9 +149,9 @@ CommandParser::VoiceCommand CommandParser::parseCommand(int16_t* audioBuffer, si
 const char* CommandParser::commandToString(VoiceCommand cmd) {
     switch (cmd) {
         case CMD_NONE:          return "none";
-        case CMD_TAKE_PHOTO:    return "take photo";
-        case CMD_RECORD_VOICE:  return "record voice";
-        case CMD_SEND_INCIDENT: return "send incident";
+        case CMD_TAKE_PHOTO:    return "photo";
+        case CMD_RECORD_VOICE:  return "record";
+        case CMD_SEND_INCIDENT: return "send";
         case CMD_CANCEL:        return "cancel";
         case CMD_STATUS_CHECK:  return "status check";
         case CMD_UNKNOWN:       return "unknown";

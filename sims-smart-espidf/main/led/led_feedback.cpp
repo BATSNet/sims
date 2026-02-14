@@ -1,8 +1,12 @@
 /**
  * LED Feedback Service Implementation - ESP-IDF Port
  *
- * Replaces FastLED with RMT (Remote Control) driver for WS2812B LED.
- * RMT is ESP-IDF's peripheral for precise timing signals.
+ * Uses the espressif/led_strip managed component with SPI backend.
+ * The RMT TX backend produced no visible output on ESP-IDF v5.5,
+ * so we switched to SPI which uses the MOSI line for signal generation.
+ *
+ * The led_strip component handles all WS2812B timing internally,
+ * including the GRB byte order and reset pulse.
  */
 
 #include "led/led_feedback.h"
@@ -13,59 +17,67 @@
 
 static const char *TAG = "LED";
 
-// WS2812B timing constants (in RMT ticks at 10MHz = 100ns per tick)
-// T0H = 400ns (4 ticks), T0L = 850ns (8.5 -> 9 ticks)
-// T1H = 800ns (8 ticks), T1L = 450ns (4.5 -> 5 ticks)
-#define WS2812_T0H  4
-#define WS2812_T0L  9
-#define WS2812_T1H  8
-#define WS2812_T1L  5
+// RMT resolution for WS2812B - 10MHz gives 100ns per tick
+#define LED_STRIP_RMT_RES_HZ  (10 * 1000 * 1000)
 
 LEDFeedback::LEDFeedback()
     : currentState(STATE_IDLE),
       lastUpdate(0),
       brightness(0),
       pulseDirection(true),
-      rmtInitialized(false),
-      rmtChannel(RMT_CHANNEL_0),
+      stripInitialized(false),
+      ledStrip(nullptr),
       currentR(0), currentG(0), currentB(0) {
 }
 
 LEDFeedback::~LEDFeedback() {
-    if (rmtInitialized) {
+    if (stripInitialized && ledStrip) {
         off();
-        rmt_driver_uninstall(rmtChannel);
+        led_strip_del(ledStrip);
+        ledStrip = nullptr;
     }
 }
 
 bool LEDFeedback::begin() {
-    ESP_LOGI(TAG, "Initializing LED feedback (RMT driver)...");
+    ESP_LOGI(TAG, "Initializing LED feedback (led_strip RMT driver)...");
 
-    rmt_config_t rmt_cfg = {};
-    rmt_cfg.rmt_mode = RMT_MODE_TX;
-    rmt_cfg.channel = rmtChannel;
-    rmt_cfg.gpio_num = (gpio_num_t)STATUS_LED_PIN;
-    rmt_cfg.clk_div = 8;  // 80MHz / 8 = 10MHz -> 100ns per tick
-    rmt_cfg.mem_block_num = 1;
-    rmt_cfg.tx_config.loop_en = false;
-    rmt_cfg.tx_config.carrier_en = false;
-    rmt_cfg.tx_config.idle_output_en = true;
-    rmt_cfg.tx_config.idle_level = RMT_IDLE_LEVEL_LOW;
+    // Configure the LED strip (common settings)
+    led_strip_config_t strip_config = {};
+    strip_config.strip_gpio_num = STATUS_LED_PIN;
+    strip_config.max_leds = STATUS_LED_COUNT;
+    strip_config.led_model = LED_MODEL_WS2812;
+    // Set GRB format field-by-field (compound literal macros can fail in C++)
+    strip_config.color_component_format.format.r_pos = 1;
+    strip_config.color_component_format.format.g_pos = 0;
+    strip_config.color_component_format.format.b_pos = 2;
+    strip_config.color_component_format.format.w_pos = 3;
+    strip_config.color_component_format.format.bytes_per_color = 1;
+    strip_config.color_component_format.format.num_components = 3;
+    strip_config.flags.invert_out = false;
 
-    esp_err_t err = rmt_config(&rmt_cfg);
+    // Configure the RMT backend
+    led_strip_rmt_config_t rmt_config = {};
+    rmt_config.clk_src = RMT_CLK_SRC_DEFAULT;
+    rmt_config.resolution_hz = LED_STRIP_RMT_RES_HZ;
+    rmt_config.flags.with_dma = false;
+
+    esp_err_t err = led_strip_new_rmt_device(&strip_config, &rmt_config, &ledStrip);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "RMT config failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "LED strip RMT init failed: %s", esp_err_to_name(err));
         return false;
     }
 
-    err = rmt_driver_install(rmtChannel, 0, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "RMT driver install failed: %s", esp_err_to_name(err));
-        return false;
-    }
+    // Clear the LED on startup
+    led_strip_clear(ledStrip);
 
-    rmtInitialized = true;
-    ESP_LOGI(TAG, "LED feedback initialized on GPIO%d", STATUS_LED_PIN);
+    stripInitialized = true;
+    ESP_LOGI(TAG, "LED feedback initialized on GPIO%d (led_strip component)", STATUS_LED_PIN);
+
+    // Startup test: brief white flash to confirm LED works
+    sendPixel(255, 255, 255);
+    vTaskDelay(pdMS_TO_TICKS(200));
+    sendPixel(0, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Start in idle state
     setState(STATE_IDLE);
@@ -73,28 +85,11 @@ bool LEDFeedback::begin() {
 }
 
 void LEDFeedback::sendPixel(uint8_t r, uint8_t g, uint8_t b) {
-    if (!rmtInitialized) return;
+    if (!stripInitialized || !ledStrip) return;
 
-    // WS2812B expects GRB order
-    rmt_item32_t items[24];
-    uint32_t color = ((uint32_t)g << 16) | ((uint32_t)r << 8) | b;
-
-    for (int i = 0; i < 24; i++) {
-        uint8_t bit = (color >> (23 - i)) & 1;
-        if (bit) {
-            items[i].level0 = 1;
-            items[i].duration0 = WS2812_T1H;
-            items[i].level1 = 0;
-            items[i].duration1 = WS2812_T1L;
-        } else {
-            items[i].level0 = 1;
-            items[i].duration0 = WS2812_T0H;
-            items[i].level1 = 0;
-            items[i].duration1 = WS2812_T0L;
-        }
-    }
-
-    rmt_write_items(rmtChannel, items, 24, true);
+    // The led_strip component handles GRB ordering internally
+    led_strip_set_pixel(ledStrip, 0, r, g, b);
+    led_strip_refresh(ledStrip);
 }
 
 void LEDFeedback::update() {
@@ -133,7 +128,9 @@ void LEDFeedback::setColor(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void LEDFeedback::off() {
-    sendPixel(0, 0, 0);
+    if (stripInitialized && ledStrip) {
+        led_strip_clear(ledStrip);
+    }
     currentR = 0;
     currentG = 0;
     currentB = 0;

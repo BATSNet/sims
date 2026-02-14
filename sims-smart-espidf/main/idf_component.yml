@@ -12,6 +12,10 @@ dependencies:
   espressif/esp32-camera:
     version: ">=2.0.0"
 
+  # LED strip driver (WS2812B via new RMT TX driver)
+  espressif/led_strip:
+    version: ">=2.5.0"
+
   # TinyGPS++ (NMEA parser)
   # Note: TinyGPSPlus may need to be added as a local component
   # if not available in the component registry
