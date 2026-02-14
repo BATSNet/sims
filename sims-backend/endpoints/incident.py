@@ -279,6 +279,71 @@ async def create_incident(
                 audio_media_to_analyze = media
                 logger.warning(f"Created media with URL-only path for incident {incident_id}: {incident_data.audioUrl}")
 
+        # Handle inline base64-encoded media (from ESP32 devices)
+        if not image_url and incident_data.image and incident_data.has_image:
+            try:
+                import base64
+                from pathlib import Path
+
+                image_bytes = base64.b64decode(incident_data.image)
+                file_id = f'{uuid.uuid4()}.webp'
+                upload_dir = Path(__file__).parent.parent / 'uploads' / 'images'
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                file_path = upload_dir / file_id
+
+                with open(file_path, 'wb') as f:
+                    f.write(image_bytes)
+
+                file_url = f'/api/media/image/{file_id}'
+                media = MediaORM(
+                    incident_id=incident_uuid,
+                    file_path=str(file_path),
+                    file_url=file_url,
+                    mime_type='image/webp',
+                    file_size=len(image_bytes),
+                    media_type='image',
+                    meta_data={'source': 'inline_base64', 'device_type': incident_data.metadata.get('device_type', 'unknown') if incident_data.metadata else 'unknown'}
+                )
+                db.add(media)
+                db.flush()
+                image_url = file_url
+                image_media_to_analyze = media
+                logger.info(f"Saved inline base64 image for incident {incident_id}: {file_id} ({len(image_bytes)} bytes)")
+            except Exception as img_err:
+                logger.error(f"Failed to save inline image for {incident_id}: {img_err}", exc_info=True)
+
+        if not audio_url and incident_data.audio and incident_data.has_audio:
+            try:
+                import base64
+                from pathlib import Path
+
+                audio_bytes = base64.b64decode(incident_data.audio)
+                file_id = f'{uuid.uuid4()}.wav'
+                upload_dir = Path(__file__).parent.parent / 'uploads' / 'audio'
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                file_path = upload_dir / file_id
+
+                with open(file_path, 'wb') as f:
+                    f.write(audio_bytes)
+
+                file_url = f'/api/media/audio/{file_id}'
+                media = MediaORM(
+                    incident_id=incident_uuid,
+                    file_path=str(file_path),
+                    file_url=file_url,
+                    mime_type='audio/wav',
+                    file_size=len(audio_bytes),
+                    media_type='audio',
+                    meta_data={'source': 'inline_base64'}
+                )
+                db.add(media)
+                db.flush()
+                audio_url = file_url
+                audio_media_to_analyze = media
+                logger.info(f"Saved inline base64 audio for incident {incident_id}: {file_id} ({len(audio_bytes)} bytes)")
+            except Exception as aud_err:
+                logger.error(f"Failed to save inline audio for {incident_id}: {aud_err}", exc_info=True)
+
         # Auto-classify incident using LLM (if categorization enabled)
         classification = None
         transcription = None

@@ -82,6 +82,10 @@ class IncidentCreate(BaseModel):
     imageUrl: Optional[str] = None
     videoUrl: Optional[str] = None
     audioUrl: Optional[str] = None
+    image: Optional[str] = None      # Inline base64-encoded image data
+    audio: Optional[str] = None      # Inline base64-encoded audio data
+    has_image: Optional[bool] = None
+    has_audio: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     altitude: Optional[float] = None
