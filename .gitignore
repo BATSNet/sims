@@ -165,6 +165,9 @@ research/hardware-inventory.md
 # Third-party tool directories
 .aivory/
 
+# Remotion presentation (generated video project)
+sims-presentation/
+
 # Temporary screenshots
 *.png
 !resources/*.png
