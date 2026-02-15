@@ -61,6 +61,9 @@ private:
     LoRaTransport* loraTransport;
     MeshProtocol* meshProtocol;
 
+    char storedDeviceName[16];  // Unique BLE name (e.g. "SIMS-A4D3")
+    char storedShortName[5];    // 4-char short name (e.g. "A4D3")
+
     bool initialized;
     int connectedClients;
 

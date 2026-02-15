@@ -506,7 +506,12 @@ void setupServices() {
 
     #ifdef MESHTASTIC_TEST_MODE
     Serial.println("[INIT] MESHTASTIC_TEST_MODE active - initializing BLE service");
-    if (meshtasticBLE.begin("SIMS-MESH", &loraTransport, &meshProtocol)) {
+    // Build unique BLE name from device ID so nodes are distinguishable
+    char bleName[16];
+    uint32_t devId = meshProtocol.getDeviceId();
+    snprintf(bleName, sizeof(bleName), "SIMS-%04X", (unsigned)(devId & 0xFFFF));
+    Serial.printf("[INIT] BLE device name: %s (deviceId: 0x%08X)\n", bleName, devId);
+    if (meshtasticBLE.begin(bleName, &loraTransport, &meshProtocol)) {
         Serial.println("[INIT] Meshtastic BLE service ready - device should appear in app!");
     } else {
         Serial.println("[ERROR] Meshtastic BLE service failed to start");

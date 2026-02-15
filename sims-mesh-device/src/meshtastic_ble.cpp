@@ -25,11 +25,25 @@ MeshtasticBLE::MeshtasticBLE()
       queueHead(0), queueTail(0), queueCount(0) {
     memset(messageQueue, 0, sizeof(messageQueue));
     memset(messageQueueLen, 0, sizeof(messageQueueLen));
+    memset(storedDeviceName, 0, sizeof(storedDeviceName));
+    memset(storedShortName, 0, sizeof(storedShortName));
 }
 
 bool MeshtasticBLE::begin(const char* deviceName, LoRaTransport* lora, MeshProtocol* mesh) {
     loraTransport = lora;
     meshProtocol = mesh;
+
+    // Store device name for NodeInfo responses
+    strncpy(storedDeviceName, deviceName, sizeof(storedDeviceName) - 1);
+    storedDeviceName[sizeof(storedDeviceName) - 1] = '\0';
+    // Extract short name: last 4 chars (the hex suffix after "SIMS-")
+    const char* dash = strrchr(deviceName, '-');
+    if (dash && strlen(dash + 1) >= 4) {
+        strncpy(storedShortName, dash + 1, 4);
+    } else {
+        strncpy(storedShortName, "SIMS", 4);
+    }
+    storedShortName[4] = '\0';
 
     Serial.println("[Meshtastic BLE] Initializing...");
 
@@ -125,7 +139,7 @@ size_t MeshtasticBLE::getFromRadio(uint8_t* buffer, size_t maxLen) {
             break;
 
         case STATE_SEND_OWN_NODEINFO:
-            len = buildFromRadio_NodeInfo(buffer, maxLen, deviceId, "SIMS-MESH", "SIMS");
+            len = buildFromRadio_NodeInfo(buffer, maxLen, deviceId, storedDeviceName, storedShortName);
             if (len > 0) {
                 configState = STATE_SEND_COMPLETE_ID;
                 Serial.printf("[State] OWN_NODEINFO sent (%zu bytes), next: COMPLETE_ID\n", len);
