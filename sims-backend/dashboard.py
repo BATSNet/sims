@@ -21,13 +21,19 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
     else:
         timestamp = created_at
 
-    # Format location
+    # Format location - treat (0, 0) as missing
     lat = incident.get('latitude')
     lon = incident.get('longitude')
+    metadata = incident.get('metadata', {}) or {}
+    location_approximate = metadata.get('location_approximate', False)
+    if lat == 0 and lon == 0:
+        lat = None
+        lon = None
     if lat is not None and lon is not None:
-        location_label = f"{lat:.3f}, {lon:.3f}"
+        location_label = f"~{lat:.3f}, {lon:.3f}" if location_approximate else f"{lat:.3f}, {lon:.3f}"
     else:
         location_label = "No location"
+        location_approximate = True
 
     # Get category and capitalize/format it
     category = incident.get('category', 'unclassified')
@@ -97,6 +103,7 @@ def format_incident_for_dashboard(incident: Dict) -> Dict:
         'audioUrl': audio_url,
         'videoUrl': video_url,
         'audioTranscript': incident.get('audioTranscript'),
+        'location_approximate': location_approximate,
     }
 
 
@@ -590,7 +597,8 @@ async def render_map(incidents: List[Dict]):
             continue
 
         priority = incident['priority']
-        color = colors.get(priority, '#63ABFF')
+        is_approx = incident.get('location_approximate', False)
+        color = '#808080' if is_approx else colors.get(priority, '#63ABFF')
         inc_id = incident['id']
         valid_marker_count += 1
 
@@ -688,6 +696,9 @@ async def render_map(incidents: List[Dict]):
         # Get translated label for Forward button
         forward_button_label = i18n.t('ui.buttons.forward')
 
+        # Approximate location badge for popup
+        approx_badge_html = '<div style="color: #999; font-size: 10px; font-style: italic; margin-bottom: 4px;">~ Approximate location</div>' if is_approx else ''
+
         # Create marker with custom icon and popup with clickable button using JavaScript
         # Add to cluster group instead of directly to map
         # Wait for cluster group to be ready before adding marker
@@ -714,8 +725,9 @@ async def render_map(incidents: List[Dict]):
                     }}
 
                     var markerColor = "{color}";
+                    var markerStyle = "background: " + markerColor + "; width: 12px; height: 12px; border: 2px {'dashed' if is_approx else 'solid'} #fff; box-shadow: 0 0 8px " + markerColor + "; cursor: pointer;{'opacity: 0.6;' if is_approx else ''}";
                     var icon = L.divIcon({{
-                        html: '<div style="background: ' + markerColor + '; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 8px ' + markerColor + '; cursor: pointer;"></div>',
+                        html: '<div style="' + markerStyle + '"></div>',
                         className: 'custom-marker',
                         iconSize: [16, 16],
                         iconAnchor: [8, 8]
@@ -724,6 +736,7 @@ async def render_map(incidents: List[Dict]):
                     var marker = L.marker([{lat}, {lon}], {{ icon: icon }});
 
                     var popupContent = '<div class="popup-title">{inc_id_escaped}</div>' +
+                                     '{approx_badge_html}' +
                                      '<div class="popup-description">{inc_desc}</div>' +
                                      '<div class="popup-priority priority-{priority}">{priority.upper()}</div>' +
                                      '<div style="margin-top: 12px;">' +

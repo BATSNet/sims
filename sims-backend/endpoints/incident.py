@@ -123,6 +123,31 @@ async def create_incident(
         logger.info(f"Creating incident {incident_id}")
 
         # Create PostGIS point if lat/lon provided
+        # Treat (0, 0) as missing - it's in the Gulf of Guinea, not a real location
+        location_approximate = False
+        has_coords = (
+            incident_data.latitude is not None
+            and incident_data.longitude is not None
+            and not (incident_data.latitude == 0.0 and incident_data.longitude == 0.0)
+        )
+        if not has_coords:
+            # Fall back to last known coordinates from any recent incident
+            recent = db.query(IncidentORM).filter(
+                IncidentORM.latitude.isnot(None),
+                IncidentORM.longitude.isnot(None),
+                IncidentORM.latitude != 0.0,
+                IncidentORM.longitude != 0.0
+            ).order_by(IncidentORM.created_at.desc()).first()
+
+            if recent:
+                incident_data.latitude = recent.latitude
+                incident_data.longitude = recent.longitude
+                location_approximate = True
+                logger.warning(
+                    f"No coordinates provided - using last known location "
+                    f"({recent.latitude:.5f}, {recent.longitude:.5f}) from {recent.incident_id}"
+                )
+
         location_geom = None
         if incident_data.latitude is not None and incident_data.longitude is not None:
             # PostGIS uses (lon, lat) order for POINT
@@ -155,7 +180,10 @@ async def create_incident(
             priority='medium',
             category='Unclassified',
             tags=[],
-            meta_data=incident_data.metadata or {}
+            meta_data={
+                **(incident_data.metadata or {}),
+                **({"location_approximate": True} if location_approximate else {})
+            }
         )
 
         db.add(db_incident)
