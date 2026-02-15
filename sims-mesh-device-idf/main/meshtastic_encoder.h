@@ -19,6 +19,11 @@ size_t buildFromRadio_MyNodeInfo(uint8_t* buffer, size_t maxLen, uint32_t device
 size_t buildFromRadio_NodeInfo(uint8_t* buffer, size_t maxLen, uint32_t deviceId,
                                  const char* longName, const char* shortName);
 
+size_t buildFromRadio_Channel(uint8_t* buffer, size_t maxLen,
+                                int channelIndex, int role,
+                                const char* name,
+                                const uint8_t* psk, size_t pskLen);
+
 size_t buildFromRadio_ConfigComplete(uint8_t* buffer, size_t maxLen);
 
 #ifdef __cplusplus

@@ -220,14 +220,13 @@ static void start_advertising(void) {
     struct ble_gap_adv_params adv_params = {};
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    adv_params.itvl_min = 0x0020;  // 20ms (fast discovery)
+    adv_params.itvl_max = 0x0040;  // 40ms
 
-    // Set advertising data
+    // Primary advertising data: flags + service UUID (21 bytes, well within 31-byte limit)
+    // Name goes in scan response to avoid exceeding adv packet size
     struct ble_hs_adv_fields fields = {};
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    fields.name = (uint8_t*)ble_svc_gap_device_name();
-    fields.name_len = strlen(ble_svc_gap_device_name());
-    fields.name_is_complete = 1;
-    // Advertise the Meshtastic service UUID
     fields.uuids128 = &meshtasticServiceUuid;
     fields.num_uuids128 = 1;
     fields.uuids128_is_complete = 1;
@@ -235,22 +234,18 @@ static void start_advertising(void) {
     int rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
         ESP_LOGE(TAG, "Error setting adv fields: %d", rc);
-        // Try without UUID (might not fit in 31 bytes)
-        fields.uuids128 = NULL;
-        fields.num_uuids128 = 0;
-        fields.uuids128_is_complete = 0;
-        rc = ble_gap_adv_set_fields(&fields);
-        if (rc != 0) {
-            ESP_LOGE(TAG, "Error setting minimal adv fields: %d", rc);
-            return;
-        }
+        return;
+    }
 
-        // Put UUID in scan response
-        struct ble_hs_adv_fields rsp_fields = {};
-        rsp_fields.uuids128 = &meshtasticServiceUuid;
-        rsp_fields.num_uuids128 = 1;
-        rsp_fields.uuids128_is_complete = 1;
-        ble_gap_adv_rsp_set_fields(&rsp_fields);
+    // Scan response: device name (so phone can see it after active scan)
+    struct ble_hs_adv_fields rsp_fields = {};
+    rsp_fields.name = (uint8_t*)ble_svc_gap_device_name();
+    rsp_fields.name_len = strlen(ble_svc_gap_device_name());
+    rsp_fields.name_is_complete = 1;
+
+    rc = ble_gap_adv_rsp_set_fields(&rsp_fields);
+    if (rc != 0) {
+        ESP_LOGW(TAG, "Error setting scan response: %d", rc);
     }
 
     rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_HS_FOREVER,
@@ -258,7 +253,7 @@ static void start_advertising(void) {
     if (rc != 0) {
         ESP_LOGE(TAG, "Error starting advertising: %d", rc);
     } else {
-        ESP_LOGI(TAG, "Advertising started");
+        ESP_LOGI(TAG, "Advertising started (UUID in adv, name in scan response)");
     }
 }
 
@@ -291,16 +286,31 @@ MeshtasticBLE::MeshtasticBLE()
     : loraTransport(nullptr), meshProtocol(nullptr),
       initialized(false), connectedClients(0), connHandle(0),
       configState(STATE_SEND_NOTHING), configNonce(0), fromNum(0),
+      channelIndex(0),
       queueHead(0), queueTail(0), queueCount(0),
       fromNumValHandle(0), fromRadioValHandle(0) {
     memset(messageQueue, 0, sizeof(messageQueue));
     memset(messageQueueLen, 0, sizeof(messageQueueLen));
+    memset(storedDeviceName, 0, sizeof(storedDeviceName));
+    memset(storedShortName, 0, sizeof(storedShortName));
 }
 
 bool MeshtasticBLE::begin(const char* deviceName, LoRaTransport* lora, MeshProtocol* mesh) {
     loraTransport = lora;
     meshProtocol = mesh;
     g_ble = this;
+
+    // Store device name for NodeInfo responses
+    strncpy(storedDeviceName, deviceName, sizeof(storedDeviceName) - 1);
+    storedDeviceName[sizeof(storedDeviceName) - 1] = '\0';
+    // Extract short name: last 4 chars (the hex suffix after "SIMS-")
+    const char* dash = strrchr(deviceName, '-');
+    if (dash && strlen(dash + 1) >= 4) {
+        strncpy(storedShortName, dash + 1, 4);
+    } else {
+        strncpy(storedShortName, "SIMS", 4);
+    }
+    storedShortName[4] = '\0';
 
     ESP_LOGI(TAG, "Initializing NimBLE...");
 
@@ -311,16 +321,17 @@ bool MeshtasticBLE::begin(const char* deviceName, LoRaTransport* lora, MeshProto
         return false;
     }
 
-    // Set device name
-    ble_svc_gap_device_name_set(deviceName);
-
     // Configure host callbacks
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.reset_cb = on_reset;
 
-    // Initialize GATT services
+    // Initialize GATT services (must come before setting device name,
+    // because ble_svc_gap_init() resets the name to the default)
     ble_svc_gap_init();
     ble_svc_gatt_init();
+
+    // Set device name AFTER gap_init (gap_init resets it to default)
+    ble_svc_gap_device_name_set(deviceName);
 
     // Register our custom GATT service
     rc = ble_gatts_count_cfg(gatt_services);
@@ -392,12 +403,42 @@ size_t MeshtasticBLE::getFromRadio(uint8_t* buffer, size_t maxLen) {
             break;
 
         case STATE_SEND_OWN_NODEINFO:
-            len = buildFromRadio_NodeInfo(buffer, maxLen, deviceId, "SIMS-MESH", "SIMS");
+            len = buildFromRadio_NodeInfo(buffer, maxLen, deviceId, storedDeviceName, storedShortName);
             if (len > 0) {
-                configState = STATE_SEND_COMPLETE_ID;
-                ESP_LOGI(TAG, "OWN_NODEINFO sent (%zu bytes), next: COMPLETE_ID", len);
+                channelIndex = 0;
+                configState = STATE_SEND_CHANNELS;
+                ESP_LOGI(TAG, "OWN_NODEINFO sent (%zu bytes), next: CHANNELS", len);
             }
             break;
+
+        case STATE_SEND_CHANNELS: {
+            // Channel 0: PRIMARY, default Meshtastic PSK (1 byte = 0x01)
+            // Channel 1: SECONDARY, AES-256 "SIMS" encrypted
+            static const uint8_t defaultPsk[] = { 0x01 };  // Meshtastic default key shorthand
+            static const uint8_t simsPsk[32] = {  // AES-256 key for SIMS channel
+                0x53, 0x49, 0x4D, 0x53, 0x2D, 0x4D, 0x45, 0x53,  // "SIMS-MES"
+                0x48, 0x2D, 0x53, 0x45, 0x43, 0x55, 0x52, 0x45,  // "H-SECURE"
+                0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6, 0x07, 0x18,
+                0x29, 0x3A, 0x4B, 0x5C, 0x6D, 0x7E, 0x8F, 0x90
+            };
+
+            if (channelIndex == 0) {
+                len = buildFromRadio_Channel(buffer, maxLen, 0,
+                    meshtastic_Channel_Role_PRIMARY, "", defaultPsk, sizeof(defaultPsk));
+            } else if (channelIndex == 1) {
+                len = buildFromRadio_Channel(buffer, maxLen, 1,
+                    meshtastic_Channel_Role_SECONDARY, "SIMS", simsPsk, sizeof(simsPsk));
+            }
+
+            if (len > 0) {
+                channelIndex++;
+                if (channelIndex >= 2) {
+                    configState = STATE_SEND_COMPLETE_ID;
+                    ESP_LOGI(TAG, "All channels sent, next: COMPLETE_ID");
+                }
+            }
+            break;
+        }
 
         case STATE_SEND_COMPLETE_ID:
             len = buildFromRadio_ConfigComplete(buffer, maxLen);
@@ -423,6 +464,103 @@ size_t MeshtasticBLE::getFromRadio(uint8_t* buffer, size_t maxLen) {
     }
 
     return len;
+}
+
+// --- Protobuf field extraction helpers ---
+// Extract a length-delimited field from raw protobuf bytes.
+// Returns pointer to field data and sets outLen. Returns NULL if not found.
+static const uint8_t* extractLengthDelimited(const uint8_t* data, size_t len,
+                                               int targetField, size_t* outLen) {
+    size_t pos = 0;
+    while (pos < len) {
+        // Read tag varint
+        uint32_t tag = 0;
+        int shift = 0;
+        while (pos < len) {
+            uint8_t b = data[pos++];
+            tag |= (uint32_t)(b & 0x7F) << shift;
+            if ((b & 0x80) == 0) break;
+            shift += 7;
+        }
+
+        int fieldNumber = tag >> 3;
+        int wireType = tag & 0x07;
+
+        if (wireType == 0) {
+            // Varint - skip
+            while (pos < len && (data[pos++] & 0x80)) {}
+        } else if (wireType == 2) {
+            // Length-delimited
+            uint32_t fieldLen = 0;
+            shift = 0;
+            while (pos < len) {
+                uint8_t b = data[pos++];
+                fieldLen |= (uint32_t)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            if (fieldNumber == targetField && pos + fieldLen <= len) {
+                *outLen = fieldLen;
+                return &data[pos];
+            }
+            pos += fieldLen;
+        } else if (wireType == 5) {
+            pos += 4;
+        } else if (wireType == 1) {
+            pos += 8;
+        } else {
+            break;
+        }
+    }
+    *outLen = 0;
+    return NULL;
+}
+
+// Extract a varint field value. Returns -1 if not found.
+static int32_t extractVarint(const uint8_t* data, size_t len, int targetField) {
+    size_t pos = 0;
+    while (pos < len) {
+        uint32_t tag = 0;
+        int shift = 0;
+        while (pos < len) {
+            uint8_t b = data[pos++];
+            tag |= (uint32_t)(b & 0x7F) << shift;
+            if ((b & 0x80) == 0) break;
+            shift += 7;
+        }
+
+        int fieldNumber = tag >> 3;
+        int wireType = tag & 0x07;
+
+        if (wireType == 0) {
+            uint32_t value = 0;
+            shift = 0;
+            while (pos < len) {
+                uint8_t b = data[pos++];
+                value |= (uint32_t)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            if (fieldNumber == targetField) return (int32_t)value;
+        } else if (wireType == 2) {
+            uint32_t fieldLen = 0;
+            shift = 0;
+            while (pos < len) {
+                uint8_t b = data[pos++];
+                fieldLen |= (uint32_t)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            pos += fieldLen;
+        } else if (wireType == 5) {
+            pos += 4;
+        } else if (wireType == 1) {
+            pos += 8;
+        } else {
+            break;
+        }
+    }
+    return -1;
 }
 
 void MeshtasticBLE::handleToRadio(const uint8_t* data, size_t len) {
@@ -452,7 +590,25 @@ void MeshtasticBLE::handleToRadio(const uint8_t* data, size_t len) {
         notifyFromNum();
 
     } else if (toRadio.which_payload_variant == meshtastic_ToRadio_packet_tag) {
-        ESP_LOGI(TAG, "Mesh packet from app");
+        // Extract raw MeshPacket bytes from ToRadio and forward directly over LoRa.
+        // This preserves the full Meshtastic packet (from, to, portnum, payload, etc.)
+        size_t meshPacketLen = 0;
+        const uint8_t* meshPacket = extractLengthDelimited(data, len, 1, &meshPacketLen);
+        if (!meshPacket || meshPacketLen == 0) {
+            ESP_LOGW(TAG, "Could not extract MeshPacket from ToRadio");
+            return;
+        }
+
+        ESP_LOGI(TAG, "MeshPacket from app: %d bytes, forwarding raw over LoRa", meshPacketLen);
+
+        // Send raw MeshPacket bytes directly over LoRa
+        if (loraTransport) {
+            if (loraTransport->send((uint8_t*)meshPacket, meshPacketLen)) {
+                ESP_LOGI(TAG, "Raw MeshPacket forwarded to LoRa (%d bytes)", meshPacketLen);
+            } else {
+                ESP_LOGE(TAG, "Failed to forward MeshPacket to LoRa");
+            }
+        }
     } else {
         ESP_LOGW(TAG, "Unknown ToRadio variant: %d", toRadio.which_payload_variant);
     }
@@ -480,4 +636,45 @@ void MeshtasticBLE::onFromNumSubscribe(bool subscribed) {
     } else {
         ESP_LOGI(TAG, "Client unsubscribed from FromNum");
     }
+}
+
+void MeshtasticBLE::queueReceivedPayload(const uint8_t* payload, size_t len, uint32_t fromNodeId) {
+    // Legacy method - forward to queueRawMeshPacket if it's a raw MeshPacket
+    queueRawMeshPacket(payload, len);
+}
+
+void MeshtasticBLE::queueRawMeshPacket(const uint8_t* meshPacketData, size_t meshPacketLen) {
+    if (configState != STATE_SEND_PACKETS) {
+        ESP_LOGW(TAG, "Not in steady state, dropping received packet");
+        return;
+    }
+    if (queueCount >= MAX_QUEUE) {
+        ESP_LOGW(TAG, "BLE queue full, dropping received packet");
+        return;
+    }
+    if (meshPacketLen > 240) {
+        ESP_LOGW(TAG, "MeshPacket too large (%d bytes), dropping", meshPacketLen);
+        return;
+    }
+
+    // Wrap raw MeshPacket bytes in FromRadio { packet = <raw bytes> }
+    // FromRadio.packet = field 2, length-delimited (wire type 2)
+    uint8_t* buf = messageQueue[queueTail];
+    size_t pos = 0;
+
+    buf[pos++] = (2 << 3) | 2;  // field 2, wire type 2
+    // Encode length as varint
+    size_t pLen = meshPacketLen;
+    while (pLen > 0x7F) { buf[pos++] = (pLen & 0x7F) | 0x80; pLen >>= 7; }
+    buf[pos++] = pLen & 0x7F;
+    memcpy(&buf[pos], meshPacketData, meshPacketLen);
+    pos += meshPacketLen;
+
+    messageQueueLen[queueTail] = pos;
+    queueTail = (queueTail + 1) % MAX_QUEUE;
+    queueCount++;
+
+    ESP_LOGI(TAG, "Queued raw MeshPacket for BLE: %d bytes (FromRadio: %d)", (int)meshPacketLen, (int)pos);
+
+    notifyFromNum();
 }

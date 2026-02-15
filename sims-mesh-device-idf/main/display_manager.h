@@ -87,6 +87,9 @@ public:
     // Sleep screen (brief text before deep sleep)
     void showSleepScreen();
 
+    // Idle animation - call periodically while in idle state
+    void updateIdleAnimation(int batteryPercent);
+
     // Display power
     void setScreenPower(bool on);
     bool isDisplayOn();
@@ -94,6 +97,9 @@ public:
     // Activity tracking for idle timeout
     void registerActivity();
     bool isIdle(unsigned long timeoutMs);
+
+    // Set device name/ID to show on status screen
+    void setDeviceName(const char* name);
 
     // Clear display
     void clear();
@@ -120,6 +126,12 @@ private:
 
     // Activity tracking
     unsigned long lastActivityTime;
+
+    // Idle animation timing
+    unsigned long lastAnimationTime;
+
+    // Device name for display
+    char deviceName[16];
 
     // Helper methods
     void drawProgressBar(int x, int y, int width, int height, int percent);

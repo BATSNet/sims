@@ -102,7 +102,7 @@
 // Battery ADC (GPIO 1 / ADC1_CH0 on Heltec V3)
 #define BATTERY_ADC_PIN      1
 #define BATTERY_ADC_CTRL     37       // GPIO 37 must be LOW to enable battery voltage divider
-#define BATTERY_DIVIDER      4.9f     // Heltec V3: 390K/100K divider = (390+100)/100
+#define BATTERY_DIVIDER      4.9f     // Heltec V3: 390K/100K voltage divider
 #define BATTERY_FULL_V       4.2f
 #define BATTERY_EMPTY_V      3.0f
 #define BATTERY_SAMPLES      16
@@ -114,6 +114,10 @@
 
 // Idle/display timeout
 #define IDLE_SCREEN_TIMEOUT_MS     120000  // 2 minutes
+#define IDLE_ANIMATION_INTERVAL_MS 30000   // Animate idle screen every 30s
+
+// Auto-sleep after extended idle (no BLE clients connected)
+#define AUTO_SLEEP_TIMEOUT_MS      300000  // 5 minutes
 
 // Storage configuration
 #define MAX_STORED_MESSAGES 100

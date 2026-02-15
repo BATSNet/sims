@@ -30,10 +30,11 @@ DisplayManager::DisplayManager()
       currentScreen(SCREEN_NONE), screenLineCount(0),
       statusDrawn(false),
       txActive(false), txStartTime(0), txDurationMs(0),
-      lastActivityTime(0) {
+      lastActivityTime(0), lastAnimationTime(0) {
     memset(screenLines, 0, sizeof(screenLines));
     memset(screenLineYPos, 0, sizeof(screenLineYPos));
     memset(prevFields, 0, sizeof(prevFields));
+    memset(deviceName, 0, sizeof(deviceName));
 }
 
 bool DisplayManager::begin() {
@@ -231,6 +232,11 @@ void DisplayManager::drawBatteryIcon(int16_t x, int16_t y, int percent) {
     }
 }
 
+void DisplayManager::setDeviceName(const char* name) {
+    strncpy(deviceName, name, sizeof(deviceName) - 1);
+    deviceName[sizeof(deviceName) - 1] = '\0';
+}
+
 void DisplayManager::drawTopBar(StatusIcon icon, const char* statusText,
                                  bool bleConnected, int bleClients,
                                  int batteryPercent) {
@@ -245,11 +251,19 @@ void DisplayManager::drawTopBar(StatusIcon icon, const char* statusText,
     display->setCursor(10, 1);
     display->print(statusText);
 
-    // BLE client count at (70, 1) - show "B:N" if connected
+    // Device name after status text (e.g. "IDLE 56D8")
+    if (deviceName[0] != '\0') {
+        int statusLen = strlen(statusText);
+        int nameX = 10 + statusLen * 6 + 4;  // gap after status text
+        display->setCursor(nameX, 1);
+        display->print(deviceName);
+    }
+
+    // BLE client count at (76, 1) - show "B:N" if connected
     if (bleConnected && bleClients > 0) {
         char bleBuf[16];
         snprintf(bleBuf, sizeof(bleBuf), "B:%d", bleClients);
-        display->setCursor(70, 1);
+        display->setCursor(76, 1);
         display->print(bleBuf);
     }
 
@@ -391,6 +405,7 @@ void DisplayManager::showIdleScreen(int batteryPercent) {
 
     currentScreen = SCREEN_IDLE;
     statusDrawn = false;
+    lastAnimationTime = millis();  // Start animation timer from when we enter idle
 
     display->clearDisplay();
     display->setTextColor(SSD1306_WHITE);
@@ -402,6 +417,42 @@ void DisplayManager::showIdleScreen(int batteryPercent) {
     uint16_t w, h;
     display->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
     display->setCursor((SCREEN_WIDTH - w) / 2, 20);
+    display->print(text);
+
+    // Battery icon centered below
+    drawBatteryIcon((SCREEN_WIDTH - 14) / 2, 45, batteryPercent);
+
+    display->display();
+}
+
+// --- Idle animation ---
+
+void DisplayManager::updateIdleAnimation(int batteryPercent) {
+    if (!initialized || !screenOn) return;
+    if (currentScreen != SCREEN_IDLE) return;
+
+    unsigned long now = millis();
+    if (lastAnimationTime != 0 && (now - lastAnimationTime) < IDLE_ANIMATION_INTERVAL_MS) {
+        return;  // Not time yet
+    }
+    lastAnimationTime = now;
+
+    // Play sweep animation across the "SIMS" text area
+    display->setTextSize(2);
+    const char* text = "SIMS";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    int textX = (SCREEN_WIDTH - w) / 2;
+    int textY = 20;
+
+    sweepCursorAcrossLine(textY, w, 80);
+
+    // Redraw idle screen content after animation
+    display->clearDisplay();
+    display->setTextColor(SSD1306_WHITE);
+    display->setTextSize(2);
+    display->setCursor(textX, textY);
     display->print(text);
 
     // Battery icon centered below

@@ -26,6 +26,7 @@ enum ConfigState {
     STATE_SEND_NOTHING = 0,
     STATE_SEND_MY_INFO,
     STATE_SEND_OWN_NODEINFO,
+    STATE_SEND_CHANNELS,
     STATE_SEND_COMPLETE_ID,
     STATE_SEND_PACKETS,
 };
@@ -50,8 +51,18 @@ public:
     void onDisconnect();
     void onFromNumSubscribe(bool subscribed);
 
+    // Queue a received LoRa payload for the BLE client (legacy, calls queueRawMeshPacket)
+    void queueReceivedPayload(const uint8_t* payload, size_t len, uint32_t fromNodeId);
+
+    // Queue a raw Meshtastic MeshPacket for the BLE client to read via FromRadio.
+    // Wraps in FromRadio { packet: <raw MeshPacket bytes> }
+    void queueRawMeshPacket(const uint8_t* meshPacketData, size_t meshPacketLen);
+
     LoRaTransport* loraTransport;
     MeshProtocol* meshProtocol;
+
+    char storedDeviceName[16];  // Unique BLE name (e.g. "SIMS-A4D3")
+    char storedShortName[5];    // 4-char short name (e.g. "A4D3")
 
     bool initialized;
     int connectedClients;
@@ -60,6 +71,7 @@ public:
     ConfigState configState;
     uint32_t configNonce;
     uint32_t fromNum;
+    int channelIndex;  // Tracks which channel to send next
 
     // Message queue
     static const int MAX_QUEUE = 10;

@@ -5,6 +5,7 @@
 
 #include "meshtastic_encoder.h"
 #include "meshtastic/mesh.pb.h"
+#include "meshtastic/channel.pb.h"
 #include <pb_encode.h>
 #include <string.h>
 #include <stdio.h>
@@ -24,6 +25,25 @@ static bool encode_string(pb_ostream_t *stream, const pb_field_t *field, void * 
     }
 
     return pb_encode_string(stream, (const uint8_t*)str, strlen(str));
+}
+
+// Helper to encode bytes fields (PSK) using callbacks
+typedef struct {
+    const uint8_t* data;
+    size_t len;
+} BytesArg;
+
+static bool encode_bytes(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
+    const BytesArg* bytes = (const BytesArg*)(*arg);
+    if (!bytes || !bytes->data || bytes->len == 0) {
+        return true;  // Empty field, skip
+    }
+
+    if (!pb_encode_tag_for_field(stream, field)) {
+        return false;
+    }
+
+    return pb_encode_string(stream, bytes->data, bytes->len);
 }
 
 size_t buildFromRadio_MyNodeInfo(uint8_t* buffer, size_t maxLen, uint32_t deviceId) {
@@ -94,6 +114,48 @@ size_t buildFromRadio_NodeInfo(uint8_t* buffer, size_t maxLen, uint32_t deviceId
 
     ESP_LOGI(TAG, "NodeInfo: %zu bytes, id=%u, nodeNum=%u",
              stream.bytes_written, (unsigned int)fromRadio.id, (unsigned int)nodeInfo->num);
+
+    return stream.bytes_written;
+}
+
+size_t buildFromRadio_Channel(uint8_t* buffer, size_t maxLen,
+                                int channelIndex, int role,
+                                const char* name,
+                                const uint8_t* psk, size_t pskLen) {
+    if (!buffer || maxLen == 0) return 0;
+
+    meshtastic_FromRadio fromRadio = meshtastic_FromRadio_init_zero;
+    fromRadio.which_payload_variant = meshtastic_FromRadio_channel_tag;
+    fromRadio.id = 10 + channelIndex;  // Unique id per channel
+
+    meshtastic_Channel* channel = &fromRadio.payload_variant.channel;
+    channel->index = channelIndex;
+    channel->role = (meshtastic_Channel_Role)role;
+    channel->has_settings = true;
+
+    meshtastic_ChannelSettings* settings = &channel->settings;
+
+    // PSK (bytes callback)
+    static BytesArg pskArg;
+    pskArg.data = psk;
+    pskArg.len = pskLen;
+    settings->psk.funcs.encode = &encode_bytes;
+    settings->psk.arg = (void*)&pskArg;
+
+    // Name (string callback)
+    settings->name.funcs.encode = &encode_string;
+    settings->name.arg = (void*)(name ? name : "");
+
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, maxLen);
+    bool status = pb_encode(&stream, meshtastic_FromRadio_fields, &fromRadio);
+
+    if (!status) {
+        ESP_LOGE(TAG, "Channel encode failed: %s", PB_GET_ERROR(&stream));
+        return 0;
+    }
+
+    ESP_LOGI(TAG, "Channel[%d]: %zu bytes, role=%d, pskLen=%d, name=%s",
+             channelIndex, stream.bytes_written, role, (int)pskLen, name ? name : "");
 
     return stream.bytes_written;
 }
