@@ -24,6 +24,7 @@ from endpoints.organization import organization_router
 from endpoints.responder import responder_router
 from endpoints.integration import integration_router
 from endpoints.inbound_webhook import inbound_webhook_router
+from endpoints.lora import lora_router
 from db.connection import get_db
 # Import all models to ensure SQLAlchemy relationships are resolved
 import models
@@ -68,6 +69,7 @@ app.include_router(organization_router)
 app.include_router(responder_router)
 app.include_router(integration_router)
 app.include_router(inbound_webhook_router)
+app.include_router(lora_router)
 
 # Import responder portal to register NiceGUI routes
 import responder_portal

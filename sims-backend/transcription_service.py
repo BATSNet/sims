@@ -56,7 +56,7 @@ class TranscriptionService:
             logger.error(f'Error generating public URL: {e}')
             return None
 
-    async def transcribe_audio(self, audio_file_path: str) -> Optional[dict]:
+    async def transcribe_audio(self, audio_file_path: str, **kwargs) -> Optional[dict]:
         """
         Transcribe an audio file using the configured AI provider.
         Tries URL-based transcription first (if PUBLIC_SERVER_URL is configured and provider supports it),
@@ -80,7 +80,7 @@ class TranscriptionService:
             if public_url and hasattr(self.provider, 'transcribe_audio_url'):
                 logger.info(f'Attempting URL-based transcription: {public_url}')
                 try:
-                    result = await self.provider.transcribe_audio_url(public_url)
+                    result = await self.provider.transcribe_audio_url(public_url, **kwargs)
                     logger.info(f'URL-based transcription successful: {result.text[:100]}...')
                     return {'text': result.text, 'model': result.model}
                 except Exception as e:
@@ -90,7 +90,7 @@ class TranscriptionService:
 
             # Fall back to file upload
             logger.info(f'Using file upload method for: {audio_file_path}')
-            result = await self.provider.transcribe_audio(audio_file_path)
+            result = await self.provider.transcribe_audio(audio_file_path, **kwargs)
             logger.info(f'File upload transcription successful: {result.text[:100]}...')
             return {'text': result.text, 'model': result.model}
 

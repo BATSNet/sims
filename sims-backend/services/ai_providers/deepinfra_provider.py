@@ -141,8 +141,11 @@ class DeepInfraTranscriptionProvider(BaseTranscriptionProvider):
                 files = {
                     'audio': audio_file
                 }
+                data = {}
+                if 'language' in kwargs:
+                    data['language'] = kwargs['language']
 
-                response = await client.post(url, headers=headers, files=files)
+                response = await client.post(url, headers=headers, files=files, data=data)
                 response.raise_for_status()
 
                 data = response.json()
@@ -166,6 +169,8 @@ class DeepInfraTranscriptionProvider(BaseTranscriptionProvider):
         payload = {
             "audio_url": audio_url
         }
+        if 'language' in kwargs:
+            payload['language'] = kwargs['language']
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(url, headers=headers, json=payload)

@@ -142,6 +142,8 @@ class OpenAITranscriptionProvider(BaseTranscriptionProvider):
                     'file': audio_file,
                     'model': (None, self.model)
                 }
+                if 'language' in kwargs:
+                    files['language'] = (None, kwargs['language'])
 
                 response = await client.post(url, headers=headers, files=files)
                 response.raise_for_status()
