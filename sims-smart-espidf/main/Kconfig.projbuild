@@ -14,7 +14,7 @@ menu "SIMS-SMART Configuration"
 
     config SIMS_BACKEND_URL
         string "Backend API URL"
-        default "http://91.99.179.35:8000/api/incidents"
+        default "http://91.99.179.35:8000/api/lora/incident"
         help
             URL for the SIMS backend incident upload endpoint.
 

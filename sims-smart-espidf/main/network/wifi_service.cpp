@@ -321,23 +321,28 @@ void WiFiService::handleReconnect() {
     unsigned long now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     // Check if it's time to attempt reconnection (non-blocking)
-    if (now - lastReconnectAttempt >= getBackoffInterval()) {
+    unsigned long backoff = getBackoffInterval();
+    if (now - lastReconnectAttempt >= backoff) {
         lastReconnectAttempt = now;
         reconnectAttempts++;
 
-        ESP_LOGI(TAG, "Reconnect attempt %d (non-blocking)...", reconnectAttempts);
+        ESP_LOGI(TAG, "Reconnect attempt %d (next in %lus)...",
+                 reconnectAttempts, getBackoffInterval() / 1000);
 
-        // Just kick off a connect - the event handler will update state
+        // Re-apply config and connect - disconnect first to avoid ESP_ERR_WIFI_STATE
         retryCount = 0;
         state = WIFI_STATE_CONNECTING;
-        esp_wifi_connect();
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(50));
+        connectInternal(WIFI_SSID, WIFI_PASSWORD);
     }
 }
 
 unsigned long WiFiService::getBackoffInterval() {
-    // Exponential backoff: 30s, 60s, 120s, 240s, max 300s (5 min)
-    unsigned long interval = reconnectInterval * (1 << (reconnectAttempts < 4 ? reconnectAttempts : 4));
-    return interval < 300000 ? interval : 300000;  // Cap at 5 minutes
+    // Backoff: 10s, 10s, 20s, 30s, 30s... - reset after 10 attempts
+    int attempt = reconnectAttempts % 10;
+    unsigned long interval = 10000 * (1 << (attempt < 2 ? 0 : (attempt < 3 ? 1 : 2)));
+    return interval < 30000 ? interval : 30000;  // Cap at 30 seconds
 }
 
 // Static event handlers

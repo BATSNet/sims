@@ -1,8 +1,8 @@
 /**
  * Command Parser - ESP-IDF Port
  *
- * ESP32-SR MultiNet6 integration for voice command recognition.
- * Recognizes: take photo, record voice, send incident, cancel, status check
+ * ESP32-SR MultiNet7 integration for voice command recognition.
+ * Short 2-word command phrases for reliable recognition.
  */
 
 #ifndef COMMAND_PARSER_H
@@ -14,38 +14,55 @@
 // Forward declaration for ESP32-SR model data
 struct model_iface_data_t;
 
+// Command IDs - action commands
+#define CMD_SEND              0
+#define CMD_CANCEL            1
+#define CMD_TAKE_PHOTO        2
+#define CMD_CAPTURE           3
+#define CMD_PICTURE           4
+
+// Command IDs - incident description phrases (2 words each)
+#define CMD_DRONE_NORTH       5
+#define CMD_DRONE_SOUTH       6
+#define CMD_DRONE_EAST        7
+#define CMD_DRONE_WEST        8
+#define CMD_VEHICLE_NORTH     9
+#define CMD_VEHICLE_SOUTH     10
+#define CMD_VEHICLE_EAST      11
+#define CMD_VEHICLE_WEST      12
+#define CMD_DRONE_SPOTTED     13
+#define CMD_VEHICLE_SPOTTED   14
+#define CMD_PERSON_SPOTTED    15
+#define CMD_FIRE_DETECTED     16
+#define CMD_SMOKE_DETECTED    17
+#define CMD_ARMED_DRONE       18
+
+#define CMD_COUNT             19
+#define CMD_NONE             -1
+
+// Legacy aliases for main.cpp compatibility
+#define WORD_SEND    CMD_SEND
+#define WORD_CANCEL  CMD_CANCEL
+#define WORD_NONE    CMD_NONE
+
 class CommandParser {
 public:
-    // Supported voice commands
-    enum VoiceCommand {
-        CMD_NONE = 0,
-        CMD_TAKE_PHOTO,
-        CMD_RECORD_VOICE,
-        CMD_SEND_INCIDENT,
-        CMD_CANCEL,
-        CMD_STATUS_CHECK,
-        CMD_UNKNOWN
-    };
-
     CommandParser();
     ~CommandParser();
 
-    // Initialize command recognition
     bool begin();
-
-    // Stop command recognition
     void end();
 
-    // Parse audio buffer and return recognized command
-    VoiceCommand parseCommand(int16_t* audioBuffer, size_t samples);
+    int parseCommand(int16_t* audioBuffer, size_t samples);
 
-    // Get command as string
-    static const char* commandToString(VoiceCommand cmd);
+    static const char* getWordString(int cmdId);
+    static const char* getDescription(int cmdId);
+    static bool isActionWord(int cmdId);
+    static bool isPhotoWord(int cmdId);
+    static bool isDescriptiveWord(int cmdId);
 
-    // Get last command confidence (0-100)
     uint8_t getConfidence() const { return _confidence; }
 
-    // Get current state
     enum State {
         STATE_UNINITIALIZED,
         STATE_READY,
@@ -55,40 +72,28 @@ public:
     };
     State getState() const { return _state; }
 
-    // Reset to ready state
     void reset();
-
-    // Enable/disable command recognition
     void enable();
     void disable();
     bool isEnabled() const { return _enabled; }
 
-    // Get required audio chunk size for MultiNet
     int getChunkSize() const { return _chunkSize; }
-
-    // Get required sample rate
     int getSampleRate() const { return _sampleRate; }
 
 private:
     State _state;
     bool _enabled;
-    VoiceCommand _lastCommand;
+    int _lastWordId;
     uint8_t _confidence;
 
-    // ESP32-SR model handles (opaque pointers)
-    void* _multinetHandle;    // esp_mn_iface_t*
+    void* _multinetHandle;
     model_iface_data_t* _modelData;
 
-    // Audio parameters from model
     int _chunkSize;
     int _sampleRate;
 
-    // Internal methods
-    VoiceCommand mapCommandId(int commandId);
-
-    // Command recognition timeout
     unsigned long _commandStartTime;
-    static const unsigned long COMMAND_TIMEOUT = 5000; // 5 seconds
+    static const unsigned long COMMAND_TIMEOUT = 5000;
 };
 
 #endif // COMMAND_PARSER_H

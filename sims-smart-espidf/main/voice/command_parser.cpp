@@ -1,8 +1,8 @@
 /**
  * Command Parser Implementation - ESP-IDF Port
  *
- * Now with direct ESP32-SR MultiNet6 support.
- * Command recognition for: take photo, record voice, send incident, cancel, status check
+ * MultiNet7 voice command recognition with short 2-word phrases.
+ * Each phrase maps to a complete incident description string.
  */
 
 #include "voice/command_parser.h"
@@ -10,16 +10,63 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// ESP32-SR includes (only available in ESP-IDF)
+// ESP32-SR includes
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
+#include "esp_mn_speech_commands.h"
 
 static const char *TAG = "CmdParser";
+
+// Spoken phrases - what the user says (all 2 words or less)
+static const char* CMD_PHRASES[CMD_COUNT] = {
+    "send it",              // 0  - submit
+    "cancel",               // 1  - abort
+    "take photo",           // 2  - photo capture
+    "capture",              // 3  - photo capture
+    "picture",              // 4  - photo capture
+    "drone north",          // 5
+    "drone south",          // 6
+    "drone east",           // 7
+    "drone west",           // 8
+    "vehicle north",        // 9
+    "vehicle south",        // 10
+    "vehicle east",         // 11
+    "vehicle west",         // 12
+    "drone spotted",        // 13
+    "vehicle spotted",      // 14
+    "person spotted",       // 15
+    "fire detected",        // 16
+    "smoke detected",       // 17
+    "armed drone",          // 18
+};
+
+// Description strings - what gets sent as the incident description
+static const char* CMD_DESCRIPTIONS[CMD_COUNT] = {
+    "",                                     // 0  - send
+    "",                                     // 1  - cancel
+    "",                                     // 2  - take photo
+    "",                                     // 3  - capture
+    "",                                     // 4  - picture
+    "Drone spotted, heading north",         // 5
+    "Drone spotted, heading south",         // 6
+    "Drone spotted, heading east",          // 7
+    "Drone spotted, heading west",          // 8
+    "Vehicle spotted, heading north",       // 9
+    "Vehicle spotted, heading south",       // 10
+    "Vehicle spotted, heading east",        // 11
+    "Vehicle spotted, heading west",        // 12
+    "Drone spotted",                        // 13
+    "Vehicle spotted",                      // 14
+    "Person spotted",                       // 15
+    "Fire detected",                        // 16
+    "Smoke detected",                       // 17
+    "Armed drone spotted",                  // 18
+};
 
 CommandParser::CommandParser()
     : _state(STATE_UNINITIALIZED),
       _enabled(false),
-      _lastCommand(CMD_NONE),
+      _lastWordId(CMD_NONE),
       _confidence(0),
       _multinetHandle(nullptr),
       _modelData(nullptr),
@@ -33,63 +80,61 @@ CommandParser::~CommandParser() {
 }
 
 bool CommandParser::begin() {
-    ESP_LOGI(TAG, "Initializing command parser...");
+    ESP_LOGI(TAG, "Initializing command parser with %d phrases (MultiNet7)...", CMD_COUNT);
 
-    // Get MultiNet interface handle
-    esp_mn_iface_t *multinet = esp_mn_handle_from_name("mn6_en");
+    esp_mn_iface_t *multinet = esp_mn_handle_from_name("mn7_en");
     if (multinet == nullptr) {
-        ESP_LOGE(TAG, "Failed to get MultiNet handle for 'mn6_en'");
+        ESP_LOGE(TAG, "Failed to get MultiNet handle for 'mn7_en'");
         _state = STATE_ERROR;
         return false;
     }
 
-    // Create MultiNet model instance
-    model_iface_data_t *model_data = multinet->create("mn6_en", 5760);
+    model_iface_data_t *model_data = multinet->create("mn7_en", 5760);
     if (model_data == nullptr) {
-        ESP_LOGE(TAG, "Failed to create MultiNet instance");
+        ESP_LOGE(TAG, "Failed to create MultiNet7 instance");
         _state = STATE_ERROR;
         return false;
-    }
-
-    // Build command list using ESP32-SR linked list structure
-    static const int NUM_COMMANDS = 4;
-    static esp_mn_phrase_t phrases[NUM_COMMANDS];
-    static esp_mn_node_t nodes[NUM_COMMANDS];
-
-    // Define commands - single words for reliable recognition
-    phrases[0] = { .string = (char*)"photo", .phonemes = nullptr,
-                   .command_id = 0, .threshold = 0.0, .wave = nullptr };
-    phrases[1] = { .string = (char*)"record", .phonemes = nullptr,
-                   .command_id = 1, .threshold = 0.0, .wave = nullptr };
-    phrases[2] = { .string = (char*)"send", .phonemes = nullptr,
-                   .command_id = 2, .threshold = 0.0, .wave = nullptr };
-    phrases[3] = { .string = (char*)"cancel", .phonemes = nullptr,
-                   .command_id = 3, .threshold = 0.0, .wave = nullptr };
-
-    // Build linked list
-    for (int i = 0; i < NUM_COMMANDS; i++) {
-        nodes[i].phrase = &phrases[i];
-        nodes[i].next = (i < NUM_COMMANDS - 1) ? &nodes[i + 1] : nullptr;
-    }
-
-    // Set commands in model
-    esp_mn_error_t *err = multinet->set_speech_commands(model_data, &nodes[0]);
-    if (err && err->num > 0) {
-        ESP_LOGW(TAG, "%d commands failed to add", err->num);
     }
 
     _modelData = model_data;
     _multinetHandle = (void*)multinet;
 
-    // Get audio parameters from model
+    esp_err_t err = esp_mn_commands_alloc(multinet, model_data);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to alloc commands: %s", esp_err_to_name(err));
+        multinet->destroy(model_data);
+        _modelData = nullptr;
+        _multinetHandle = nullptr;
+        _state = STATE_ERROR;
+        return false;
+    }
+
+    for (int i = 0; i < CMD_COUNT; i++) {
+        err = esp_mn_commands_add(i, CMD_PHRASES[i]);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to add phrase '%s': %s", CMD_PHRASES[i], esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "Added phrase [%d]: '%s'", i, CMD_PHRASES[i]);
+        }
+    }
+
+    esp_mn_error_t *mn_err = esp_mn_commands_update();
+    if (mn_err != nullptr) {
+        ESP_LOGW(TAG, "%d phrases failed phoneme parsing", mn_err->num);
+        for (int i = 0; i < mn_err->num; i++) {
+            if (mn_err->phrases[i]) {
+                ESP_LOGW(TAG, "  Failed: '%s'", mn_err->phrases[i]->string);
+            }
+        }
+    }
+
     _sampleRate = multinet->get_samp_rate(model_data);
     _chunkSize = multinet->get_samp_chunksize(model_data);
 
     _state = STATE_READY;
-    _enabled = true;
+    _enabled = false;
 
-    ESP_LOGI(TAG, "MultiNet6 initialized successfully");
-    ESP_LOGI(TAG, "Commands: photo, record, send, cancel");
+    ESP_LOGI(TAG, "MultiNet7 initialized with %d command phrases", CMD_COUNT);
     ESP_LOGI(TAG, "Sample rate: %d Hz, Chunk size: %d samples", _sampleRate, _chunkSize);
 
     return true;
@@ -97,6 +142,7 @@ bool CommandParser::begin() {
 
 void CommandParser::end() {
     if (_modelData != nullptr && _multinetHandle != nullptr) {
+        esp_mn_commands_free();
         esp_mn_iface_t *multinet = (esp_mn_iface_t*)_multinetHandle;
         multinet->destroy(_modelData);
         _modelData = nullptr;
@@ -106,16 +152,8 @@ void CommandParser::end() {
     _enabled = false;
 }
 
-CommandParser::VoiceCommand CommandParser::parseCommand(int16_t* audioBuffer, size_t samples) {
+int CommandParser::parseCommand(int16_t* audioBuffer, size_t samples) {
     if (!_enabled || _state != STATE_LISTENING) {
-        return CMD_NONE;
-    }
-
-    // Check timeout
-    unsigned long now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    if (_commandStartTime > 0 && (now - _commandStartTime > COMMAND_TIMEOUT)) {
-        ESP_LOGW(TAG, "Command timeout");
-        reset();
         return CMD_NONE;
     }
 
@@ -124,43 +162,52 @@ CommandParser::VoiceCommand CommandParser::parseCommand(int16_t* audioBuffer, si
     }
 
     esp_mn_iface_t *multinet = (esp_mn_iface_t*)_multinetHandle;
-
-    // Detect command in audio buffer
     esp_mn_state_t mn_state = multinet->detect(_modelData, audioBuffer);
 
     if (mn_state == ESP_MN_STATE_DETECTED) {
-        // Command detected - get command ID
         esp_mn_results_t *mn_result = multinet->get_results(_modelData);
-        int command_id = mn_result->command_id[0];
+        int cmdId = mn_result->command_id[0];
 
-        _lastCommand = mapCommandId(command_id);
-        _confidence = 90;
-        _state = STATE_READY;
+        if (cmdId >= 0 && cmdId < CMD_COUNT) {
+            _lastWordId = cmdId;
+            _confidence = 90;
 
-        ESP_LOGI(TAG, "Command detected: %s (ID: %d, confidence: %d%%)",
-                 commandToString(_lastCommand), command_id, _confidence);
-
-        return _lastCommand;
+            ESP_LOGI(TAG, "Phrase detected: \"%s\" (ID: %d)", getWordString(cmdId), cmdId);
+            return cmdId;
+        }
     }
 
     return CMD_NONE;
 }
 
-const char* CommandParser::commandToString(VoiceCommand cmd) {
-    switch (cmd) {
-        case CMD_NONE:          return "none";
-        case CMD_TAKE_PHOTO:    return "photo";
-        case CMD_RECORD_VOICE:  return "record";
-        case CMD_SEND_INCIDENT: return "send";
-        case CMD_CANCEL:        return "cancel";
-        case CMD_STATUS_CHECK:  return "status check";
-        case CMD_UNKNOWN:       return "unknown";
-        default:                return "invalid";
+const char* CommandParser::getWordString(int cmdId) {
+    if (cmdId >= 0 && cmdId < CMD_COUNT) {
+        return CMD_PHRASES[cmdId];
     }
+    return "";
+}
+
+const char* CommandParser::getDescription(int cmdId) {
+    if (cmdId >= 0 && cmdId < CMD_COUNT) {
+        return CMD_DESCRIPTIONS[cmdId];
+    }
+    return "";
+}
+
+bool CommandParser::isActionWord(int cmdId) {
+    return cmdId == CMD_SEND || cmdId == CMD_CANCEL;
+}
+
+bool CommandParser::isPhotoWord(int cmdId) {
+    return cmdId == CMD_TAKE_PHOTO || cmdId == CMD_CAPTURE || cmdId == CMD_PICTURE;
+}
+
+bool CommandParser::isDescriptiveWord(int cmdId) {
+    return cmdId >= CMD_DRONE_NORTH && cmdId < CMD_COUNT;
 }
 
 void CommandParser::reset() {
-    _lastCommand = CMD_NONE;
+    _lastWordId = CMD_NONE;
     _confidence = 0;
     _state = STATE_READY;
     _commandStartTime = 0;
@@ -171,7 +218,7 @@ void CommandParser::enable() {
         _enabled = true;
         _state = STATE_LISTENING;
         _commandStartTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        ESP_LOGI(TAG, "Listening for command...");
+        ESP_LOGI(TAG, "Listening for command phrases...");
     }
 }
 
@@ -179,16 +226,5 @@ void CommandParser::disable() {
     _enabled = false;
     if (_state == STATE_LISTENING) {
         _state = STATE_READY;
-    }
-}
-
-CommandParser::VoiceCommand CommandParser::mapCommandId(int commandId) {
-    switch (commandId) {
-        case 0: return CMD_TAKE_PHOTO;
-        case 1: return CMD_RECORD_VOICE;
-        case 2: return CMD_SEND_INCIDENT;
-        case 3: return CMD_CANCEL;
-        case 4: return CMD_STATUS_CHECK;
-        default: return CMD_UNKNOWN;
     }
 }

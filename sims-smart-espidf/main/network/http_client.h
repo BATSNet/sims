@@ -30,6 +30,17 @@ public:
         char incidentId[64];
     };
 
+    // Transcription result
+    struct TranscribeResult {
+        bool success;
+        int httpCode;
+        char text[512];
+        char error[128];
+    };
+
+    // Transcribe raw PCM audio via backend Whisper
+    TranscribeResult transcribeAudio(const uint8_t* pcmData, size_t pcmSize);
+
     // Upload incident with voice command metadata
     IncidentUploadResult uploadIncident(
         float latitude,
@@ -54,6 +65,21 @@ public:
 
     // Health check
     bool ping();
+
+    // Build binary payload (public - used by mesh send path too)
+    // Caller must free() the returned buffer.
+    uint8_t* buildIncidentBinary(
+        float latitude,
+        float longitude,
+        float altitude,
+        uint8_t priority,
+        const char* description,
+        uint8_t* imageData,
+        size_t imageSize,
+        uint8_t* audioData,
+        size_t audioSize,
+        size_t* outLen
+    );
 
 private:
     char backendURL[256];

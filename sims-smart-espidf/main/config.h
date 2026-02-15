@@ -38,13 +38,17 @@
 #define WIFI_SSID          CONFIG_SIMS_WIFI_SSID
 #define WIFI_PASSWORD      CONFIG_SIMS_WIFI_PASSWORD
 #define WIFI_CONNECT_TIMEOUT_MS    10000  // 10s timeout for connection
-#define WIFI_RECONNECT_INTERVAL_MS 30000  // 30s between reconnect attempts
+#define WIFI_RECONNECT_INTERVAL_MS 10000  // 10s initial reconnect interval
 #define WIFI_MAX_RETRY     5
 #define WIFI_MAX_STORED_NETWORKS 5     // Store up to 5 WiFi credentials in NVS
 
 // Backend API configuration (configurable via idf.py menuconfig)
 #define BACKEND_URL        CONFIG_SIMS_BACKEND_URL
 #define API_TIMEOUT_MS     30000
+
+// Binary payload format (compact encoding for LoRa/WiFi upload)
+#define USE_BINARY_FORMAT       1
+#define BINARY_FORMAT_VERSION   0x01
 
 // Incident priority levels
 #define PRIORITY_CRITICAL  0  // SOS, urgent threats
@@ -54,10 +58,28 @@
 
 // Voice recognition settings
 #define WAKE_WORD          "hiesp"  // WakeNet9 wake word
-#define COMMAND_TIMEOUT_MS 5000  // 5 seconds to issue command after wake word
+#define COMMAND_TIMEOUT_MS 10000  // 10 seconds - allows two phrases with pause between
 #define AUDIO_SAMPLE_RATE  16000 // 16kHz for voice
 #define AUDIO_BUFFER_SIZE  4096
 #define AUDIO_BUFFER_COUNT 4
+#define AUDIO_TRANSCRIBE_TIMEOUT_MS 15000  // 15s timeout for backend transcription
+
+// OLED Display (SSD1306 128x64, I2C)
+#define OLED_SDA_PIN       5
+#define OLED_SCL_PIN       6
+#define OLED_WIDTH         128
+#define OLED_HEIGHT        64
+#define OLED_I2C_ADDR      0x3C
+
+// Physical buttons (active LOW, internal pull-up)
+#define BTN_ACTION_PIN     2    // GPIO2 - action/PTT button
+#define BTN_CANCEL_PIN     3    // GPIO3 - cancel button
+#define BTN_MODE_PIN       4    // GPIO4 - mode/menu button
+#define BTN_DEBOUNCE_MS    50
+#define BTN_LONG_PRESS_MS  1000
+
+// LED flashlight
+#define FLASHLIGHT_PIN     7    // GPIO7 - external LED lamp
 
 // Camera settings (OV2640)
 #define CAMERA_PIXEL_FORMAT  PIXFORMAT_GRAYSCALE
@@ -83,8 +105,18 @@
 #define CAM_PIN_HREF       47
 #define CAM_PIN_PCLK       13
 
+// BLE Mesh client settings
+#define BLE_SCAN_DURATION_MS     15000  // 15s scan for mesh devices
+#define BLE_CONNECT_TIMEOUT_MS   10000  // 10s connection timeout
+#define BLE_CONFIG_TIMEOUT_MS    10000  // 10s config exchange timeout
+#define BLE_CONFIG_POLL_MS       100    // 100ms FromRadio poll interval
+#define BLE_MTU_DESIRED          512    // Requested MTU
+#define BLE_RECONNECT_INITIAL_MS 5000   // Initial reconnect delay
+#define BLE_RECONNECT_MAX_MS     60000  // Max reconnect delay (60s)
+
 // Recording settings
 #define MAX_VOICE_DURATION_MS  10000  // 10 seconds max voice recording
+#define RAW_PCM_MAX_DURATION_S 5      // 5 seconds of raw PCM recording (8kHz 16-bit = 80KB)
 #define MAX_IMAGE_SIZE_KB      100    // Max JPEG size for upload
 
 // GPS settings
@@ -114,7 +146,7 @@
 
 // Task stack sizes (bytes)
 #define TASK_STACK_MAIN        16384
-#define TASK_STACK_VOICE       8192
+#define TASK_STACK_VOICE       16384
 #define TASK_STACK_GPS         2048
 #define TASK_STACK_LED         2048
 

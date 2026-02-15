@@ -13,6 +13,11 @@ set(SRCS
     "voice/command_parser.cpp"
     "led/led_feedback.cpp"
     "power/power_manager.cpp"
+    "display/ssd1306.cpp"
+    "display/display_manager.cpp"
+    "input/button_handler.cpp"
+    "mesh/mesh_packet_encoder.cpp"
+    "mesh/mesh_ble_client.cpp"
 )
 
 idf_component_register(
@@ -36,6 +41,7 @@ idf_component_register(
         TinyGPSPlus
         esp-sr
         libwebp
+        bt
 )
 
 # C++ standard for all source files
