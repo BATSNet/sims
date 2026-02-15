@@ -11,10 +11,12 @@ import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/location_service.dart';
 import '../services/media_upload_service.dart';
+import '../services/degraded_mode_service.dart';
 import '../repositories/user_repository.dart';
 import '../config/app_config.dart';
 import '../utils/sims_colors.dart';
 import '../connection/websocket_service.dart';
+import '../connection/connection_manager.dart';
 
 export '../services/media_upload_service.dart' show UploadResult;
 
@@ -73,10 +75,14 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final LocationService _locationService = LocationService();
   final MediaUploadService _uploadService = MediaUploadService();
   final WebSocketService _websocketService = WebSocketService();
+  final ConnectionManager _connectionManager = ConnectionManager();
+  final DegradedModeService _degradedService = DegradedModeService();
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   StreamSubscription? _websocketSubscription;
+  StreamSubscription<ConnectionMode>? _modeSub;
+  StreamSubscription<String>? _transcriptionSub;
 
   bool _isInitialized = false;
   FlashMode _flashMode = FlashMode.auto;
@@ -86,12 +92,19 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   String? _currentIncidentUuid; // Database UUID for API calls
   bool _creatingIncident = false; // Flag to prevent concurrent incident creation
   late final String _sessionId; // Generate immediately on screen creation
+  ConnectionMode _connectionMode = ConnectionMode.normal;
+  bool _isTranscribing = false;
+  String _partialTranscription = '';
 
   @override
   void initState() {
     super.initState();
     // Generate session ID immediately - don't wait for backend
     _sessionId = const Uuid().v4();
+    _connectionMode = _connectionManager.mode;
+    _modeSub = _connectionManager.modeStream.listen((mode) {
+      if (mounted) setState(() => _connectionMode = mode);
+    });
     _initializeServices();
     _initializeWebSocket();
   }
@@ -166,12 +179,18 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   @override
   void dispose() {
     _websocketSubscription?.cancel();
+    _modeSub?.cancel();
+    _transcriptionSub?.cancel();
     _cameraService.dispose();
     _audioService.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
+
+  bool get _isMeshMode =>
+      _connectionMode == ConnectionMode.meshConnected ||
+      _connectionMode == ConnectionMode.meshScanning;
 
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -318,6 +337,12 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
     _scrollToBottom();
 
+    if (_isMeshMode) {
+      // In mesh mode, text is accumulated and sent with next photo or via explicit send
+      _updateMessageStatus(messageId, uploaded: true);
+      return;
+    }
+
     // Create incident if not already created
     if (_currentIncidentId == null) {
       _currentIncidentId = await _createIncident(description: text);
@@ -395,6 +420,12 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
       _scrollToBottom();
 
+      if (_isMeshMode) {
+        // Mesh mode: compress and send via BLE
+        await _sendImageViaMesh(image, messageId);
+        return;
+      }
+
       // Create incident in background if needed
       if (_currentIncidentId == null) {
         _currentIncidentId = await _createIncident();
@@ -420,7 +451,58 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     }
   }
 
+  /// Compress and send image via mesh BLE.
+  Future<void> _sendImageViaMesh(File image, String messageId) async {
+    try {
+      final compressed = await DegradedModeService.compressImageForMesh(image);
+      if (compressed == null) {
+        _updateMessageStatus(messageId, failed: true);
+        _showError('Failed to compress image for mesh');
+        return;
+      }
+
+      debugPrint('Mesh image: ${compressed.length} bytes (compressed from ${await image.length()})');
+
+      // Build description from existing text messages
+      final description = _buildMeshDescription();
+      final location = await _locationService.getCurrentLocation();
+
+      final success = await _connectionManager.sendIncidentViaMesh(
+        description: description.isNotEmpty ? description : 'Photo report',
+        latitude: location?.latitude ?? 0,
+        longitude: location?.longitude ?? 0,
+        altitude: location?.altitude ?? 0,
+        compressedImage: compressed,
+        deviceId: _sessionId,
+      );
+
+      if (success == true) {
+        _updateMessageStatus(messageId, uploaded: true);
+        _currentIncidentId = 'MESH-${_sessionId.substring(0, 8)}';
+      } else {
+        _updateMessageStatus(messageId, failed: true);
+        _showError('Failed to send via mesh');
+      }
+    } catch (e) {
+      debugPrint('Mesh send error: $e');
+      _updateMessageStatus(messageId, failed: true);
+    }
+  }
+
+  String _buildMeshDescription() {
+    final textMessages = _messages
+        .where((m) => m.type == MessageType.text && m.text != null)
+        .map((m) => m.text!)
+        .toList();
+    return textMessages.join(' ');
+  }
+
   Future<void> _startVideoRecording() async {
+    if (_isMeshMode) {
+      // Mesh mode: take still frame instead of video
+      _takePicture();
+      return;
+    }
     try {
       final started = await _cameraService.startVideoRecording();
       if (!started) {
@@ -434,6 +516,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   }
 
   Future<void> _stopVideoRecording() async {
+    if (_isMeshMode) return; // Still frame already captured in _startVideoRecording
     try {
       final video = await _cameraService.stopVideoRecording();
       if (video == null) {
@@ -484,6 +567,11 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   }
 
   Future<void> _toggleRecording() async {
+    if (_isMeshMode) {
+      await _toggleMeshRecording();
+      return;
+    }
+
     if (_audioService.isRecording) {
       final audio = await _audioService.stopRecording();
       if (audio == null) {
@@ -533,6 +621,61 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
         _showError('Failed to start recording');
       }
       setState(() {});
+    }
+  }
+
+  /// Mesh mode: use Vosk offline STT instead of audio recording.
+  Future<void> _toggleMeshRecording() async {
+    if (_isTranscribing) {
+      // Stop transcription
+      _transcriptionSub?.cancel();
+      final result = await _degradedService.stopListening();
+      setState(() {
+        _isTranscribing = false;
+      });
+
+      final text = (result ?? _partialTranscription).trim();
+      if (text.isNotEmpty) {
+        // Add transcribed text as a message
+        final messageId = const Uuid().v4();
+        setState(() {
+          _messages.add(ChatMessage(
+            id: messageId,
+            type: MessageType.text,
+            text: text,
+            timestamp: DateTime.now(),
+          ));
+          _partialTranscription = '';
+        });
+        _scrollToBottom();
+      }
+    } else {
+      // Start Vosk STT
+      if (!_degradedService.isModelLoaded) {
+        _showError('Loading speech model...');
+        final loaded = await _degradedService.initializeVosk();
+        if (!loaded) {
+          _showError('Failed to load speech recognition model');
+          return;
+        }
+      }
+
+      final started = await _degradedService.startListening();
+      if (!started) {
+        _showError('Failed to start speech recognition');
+        return;
+      }
+
+      _transcriptionSub = _degradedService.transcriptionStream.listen((text) {
+        if (mounted) {
+          setState(() => _partialTranscription = text);
+        }
+      });
+
+      setState(() {
+        _isTranscribing = true;
+        _partialTranscription = '';
+      });
     }
   }
 
@@ -723,6 +866,46 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                     icon: const Icon(Icons.close, color: Colors.white, size: 32),
                     onPressed: () => context.pop(),
                   ),
+                  // Connection mode badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _connectionMode == ConnectionMode.normal
+                          ? SimsColors.lowGreen.withOpacity(0.9)
+                          : _connectionMode == ConnectionMode.meshConnected
+                              ? SimsColors.highOrange.withOpacity(0.9)
+                              : SimsColors.criticalRed.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _connectionMode == ConnectionMode.normal
+                              ? Icons.wifi
+                              : _connectionMode == ConnectionMode.meshConnected
+                                  ? Icons.bluetooth_connected
+                                  : Icons.wifi_off,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _connectionMode == ConnectionMode.normal
+                              ? 'ONLINE'
+                              : _connectionMode == ConnectionMode.meshConnected
+                                  ? 'MESH'
+                                  : 'OFFLINE',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   IconButton(
                     icon: Icon(
                       _flashMode == FlashMode.off
@@ -738,6 +921,48 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                 ],
               ),
             ),
+
+            // Vosk transcription overlay (mesh mode)
+            if (_isTranscribing)
+              Positioned(
+                top: 80,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: SimsColors.highOrange.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: SimsColors.criticalRed,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _partialTranscription.isNotEmpty
+                              ? _partialTranscription
+                              : 'Listening...',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Chat area (only when there are messages) - positioned at bottom 5/8 of screen
             if (_messages.isNotEmpty)
@@ -828,9 +1053,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                               ),
                             ),
                             _buildControlButton(
-                              icon: _audioService.isRecording ? Icons.stop : Icons.mic,
-                              color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
-                              iconColor: _audioService.isRecording ? Colors.white : SimsColors.blue,
+                              icon: (_audioService.isRecording || _isTranscribing) ? Icons.stop : Icons.mic,
+                              color: (_audioService.isRecording || _isTranscribing) ? SimsColors.criticalRed : SimsColors.white,
+                              iconColor: (_audioService.isRecording || _isTranscribing) ? Colors.white : SimsColors.blue,
                               onTap: _toggleRecording,
                             ),
                             _buildControlButton(
@@ -928,9 +1153,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                             ),
                           ),
                           _buildControlButton(
-                            icon: _audioService.isRecording ? Icons.stop : Icons.mic,
-                            color: _audioService.isRecording ? SimsColors.criticalRed : SimsColors.white,
-                            iconColor: _audioService.isRecording ? Colors.white : SimsColors.accentTactical,
+                            icon: (_audioService.isRecording || _isTranscribing) ? Icons.stop : Icons.mic,
+                            color: (_audioService.isRecording || _isTranscribing) ? SimsColors.criticalRed : SimsColors.white,
+                            iconColor: (_audioService.isRecording || _isTranscribing) ? Colors.white : SimsColors.accentTactical,
                             onTap: _toggleRecording,
                           ),
                           _buildControlButton(

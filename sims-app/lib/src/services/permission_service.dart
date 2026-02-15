@@ -27,12 +27,21 @@ class PermissionService {
       await Permission.microphone.status,
       await Permission.location.status,
       await Permission.locationWhenInUse.status,
+      await Permission.bluetoothScan.status,
+      await Permission.bluetoothConnect.status,
     ];
   }
 
   Future<bool> _requestAllPermissions() async {
     final cameraStatus = await Permission.camera.request();
     final microphoneStatus = await Permission.microphone.request();
+
+    // Request Bluetooth permissions (needed for mesh fallback)
+    final btScanStatus = await Permission.bluetoothScan.request();
+    final btConnectStatus = await Permission.bluetoothConnect.request();
+    if (!btScanStatus.isGranted || !btConnectStatus.isGranted) {
+      debugPrint('Bluetooth permissions not granted - mesh fallback will be unavailable');
+    }
 
     bool locationGranted = false;
     try {
@@ -50,6 +59,7 @@ class PermissionService {
       locationGranted = false;
     }
 
+    // BLE permissions are optional - don't block app if denied
     return cameraStatus.isGranted &&
         microphoneStatus.isGranted &&
         locationGranted;
@@ -64,10 +74,11 @@ class PermissionService {
           title: const Text('Permissions Required'),
           content: const Text(
             'SIMS requires the following permissions to function properly:\n\n'
-            '• Camera - to capture incident photos and videos\n'
-            '• Microphone - to record audio descriptions\n'
-            '• Location - to automatically capture incident location\n\n'
-            'These permissions are mandatory for using the app.',
+            '- Camera - to capture incident photos and videos\n'
+            '- Microphone - to record audio descriptions\n'
+            '- Location - to automatically capture incident location\n'
+            '- Bluetooth - for mesh network fallback (optional)\n\n'
+            'Camera, microphone, and location are mandatory.',
           ),
           actions: [
             TextButton(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -7,6 +8,8 @@ import '../config/app_config.dart';
 import '../utils/sims_colors.dart';
 import '../connection/bloc/websocket_bloc.dart';
 import '../connection/bloc/websocket_event.dart';
+import '../connection/connection_manager.dart';
+import '../mesh/meshtastic_ble_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,15 +21,43 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late SettingsRepository _settingsRepo;
   final TextEditingController _urlController = TextEditingController();
+  final ConnectionManager _connectionManager = ConnectionManager();
+  StreamSubscription<ConnectionMode>? _modeSub;
+  StreamSubscription<MeshConnectionState>? _meshSub;
 
   bool _isLoading = true;
   bool _useCustomUrl = false;
   String? _validationError;
   bool _isSaving = false;
+  bool _meshFallbackEnabled = true;
+  bool _gatewayEnabled = false;
+  bool _isScanning = false;
+  StreamSubscription<String>? _gatewayLogSub;
+  final List<String> _gatewayLogs = [];
 
   @override
   void initState() {
     super.initState();
+    _meshFallbackEnabled = _connectionManager.meshFallbackEnabled;
+    _gatewayEnabled = _connectionManager.gatewayEnabled;
+    _gatewayLogSub = _connectionManager.gatewayService.logStream.listen((log) {
+      if (mounted) {
+        setState(() {
+          _gatewayLogs.add(log);
+          if (_gatewayLogs.length > 20) _gatewayLogs.removeAt(0);
+        });
+      }
+    });
+    _modeSub = _connectionManager.modeStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+    _meshSub = _connectionManager.meshService.stateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isScanning = state == MeshConnectionState.scanning;
+        });
+      }
+    });
     _loadSettings();
   }
 
@@ -337,6 +368,197 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Icons.cloud,
             ),
 
+            const SizedBox(height: 32),
+
+            // Mesh Network Section
+            _buildSectionTitle('Mesh Network'),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: SimsColors.navyBlueLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SwitchListTile(
+                title: const Text(
+                  'Enable Mesh Fallback',
+                  style: TextStyle(color: SimsColors.white),
+                ),
+                subtitle: Text(
+                  'Auto-connect to mesh when server is unreachable',
+                  style: TextStyle(
+                    color: SimsColors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
+                ),
+                value: _meshFallbackEnabled,
+                onChanged: (value) {
+                  setState(() => _meshFallbackEnabled = value);
+                  _connectionManager.setMeshFallbackEnabled(value);
+                },
+                activeColor: SimsColors.accentBlue,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: SimsColors.navyBlueLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.bluetooth,
+                        color: _connectionManager.isMeshMode
+                            ? SimsColors.accentCyan
+                            : SimsColors.slate600,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _connectionManager.isMeshMode
+                              ? 'Connected: ${_connectionManager.meshService.connectedDeviceName ?? "Mesh Device"}'
+                              : _isScanning
+                                  ? 'Scanning for mesh devices...'
+                                  : 'Not connected',
+                          style: TextStyle(
+                            color: SimsColors.white.withOpacity(0.9),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isScanning
+                          ? null
+                          : () async {
+                              setState(() => _isScanning = true);
+                              await _connectionManager.manualMeshScan();
+                              if (mounted) setState(() => _isScanning = false);
+                            },
+                      icon: _isScanning
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: SimsColors.white,
+                              ),
+                            )
+                          : const Icon(Icons.bluetooth_searching, size: 18),
+                      label: Text(_isScanning ? 'Scanning...' : 'Scan for Mesh Devices'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: SimsColors.accentBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // LoRa Gateway Section
+            _buildSectionTitle('LoRa Gateway'),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: SimsColors.navyBlueLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SwitchListTile(
+                title: const Text(
+                  'Enable Gateway Mode',
+                  style: TextStyle(color: SimsColors.white),
+                ),
+                subtitle: Text(
+                  'Relay mesh HTTP requests to the backend server',
+                  style: TextStyle(
+                    color: SimsColors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
+                ),
+                value: _gatewayEnabled,
+                onChanged: (value) {
+                  setState(() => _gatewayEnabled = value);
+                  _connectionManager.setGatewayEnabled(value);
+                },
+                activeColor: SimsColors.accentCyan,
+              ),
+            ),
+            if (_gatewayEnabled) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: SimsColors.navyBlueLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _connectionManager.gatewayService.isEnabled
+                              ? Icons.cell_tower
+                              : Icons.cell_tower_outlined,
+                          color: _connectionManager.gatewayService.isEnabled
+                              ? SimsColors.accentCyan
+                              : SimsColors.slate600,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _connectionManager.gatewayService.isEnabled
+                                ? 'Gateway active - ${_connectionManager.gatewayService.relayedCount} requests relayed'
+                                : 'Waiting for mesh connection...',
+                            style: TextStyle(
+                              color: SimsColors.white.withOpacity(0.9),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_gatewayLogs.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        child: SingleChildScrollView(
+                          reverse: true,
+                          child: Text(
+                            _gatewayLogs.join('\n'),
+                            style: TextStyle(
+                              color: SimsColors.white.withOpacity(0.6),
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
 
             // Info Section
@@ -434,6 +656,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _modeSub?.cancel();
+    _meshSub?.cancel();
+    _gatewayLogSub?.cancel();
     _urlController.dispose();
     super.dispose();
   }

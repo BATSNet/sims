@@ -24,6 +24,10 @@ class WebSocketService {
   Timer? _reconnectTimer;
   Timer? _pingTimer;
 
+  // Health tracking for mesh fallback
+  int _consecutiveFailures = 0;
+  DateTime? _lastDisconnectTime;
+
   // State storage
   final List<Incident> _incidents = [];
   Map<String, dynamic> _stats = {};
@@ -32,6 +36,8 @@ class WebSocketService {
   Stream<dynamic> get messageStream => _messageController.stream;
   Stream<bool> get connectionStateStream => _connectionStateController.stream;
   bool get isConnected => _isConnected;
+  int get consecutiveFailures => _consecutiveFailures;
+  DateTime? get lastDisconnectTime => _lastDisconnectTime;
   List<Incident> get incidents => List.unmodifiable(_incidents);
   Map<String, dynamic> get stats => Map.unmodifiable(_stats);
 
@@ -81,6 +87,8 @@ class WebSocketService {
       );
 
       _isConnected = true;
+      _consecutiveFailures = 0;
+      _lastDisconnectTime = null;
       _connectionStateController.add(true);
       _startPingTimer();
 
@@ -139,6 +147,8 @@ class WebSocketService {
 
   void _handleError(dynamic error) {
     debugPrint('WebSocket error: $error');
+    _consecutiveFailures++;
+    _lastDisconnectTime ??= DateTime.now();
     _isConnected = false;
     _connectionStateController.add(false);
     _scheduleReconnect();
@@ -146,6 +156,8 @@ class WebSocketService {
 
   void _handleDisconnect() {
     debugPrint('WebSocket disconnected');
+    _consecutiveFailures++;
+    _lastDisconnectTime ??= DateTime.now();
     _isConnected = false;
     _connectionStateController.add(false);
     _pingTimer?.cancel();

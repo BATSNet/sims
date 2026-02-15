@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.8.0
 
 dependencies:
   flutter:
@@ -49,6 +49,17 @@ dependencies:
   # WebSocket
   web_socket_channel: ^3.0.3
 
+  # Mesh / BLE
+  flutter_blue_plus: ^1.35.0
+  protobuf: ^3.1.0
+  uuid: ^4.5.1
+
+  # Offline STT
+  vosk_flutter_service: ^0.0.6
+
+  # Image processing
+  image: ^4.5.0
+
   # Notifications (for future use)
   # flutter_local_notifications: ^19.1.0
   # rxdart: ^0.28.0
@@ -81,6 +92,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/models/vosk-model-small-en-us/
 
   fonts:
     - family: SpaceGrotesk

@@ -1,14 +1,41 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../connection/bloc/websocket_bloc.dart';
 import '../connection/bloc/websocket_state.dart';
+import '../connection/connection_manager.dart';
 import '../models/incident.dart';
 import '../utils/sims_colors.dart';
 import '../widgets/orbit_spinner.dart';
 
-class IncidentOverviewScreen extends StatelessWidget {
+class IncidentOverviewScreen extends StatefulWidget {
   const IncidentOverviewScreen({super.key});
+
+  @override
+  State<IncidentOverviewScreen> createState() => _IncidentOverviewScreenState();
+}
+
+class _IncidentOverviewScreenState extends State<IncidentOverviewScreen> {
+  final ConnectionManager _connectionManager = ConnectionManager();
+  StreamSubscription<ConnectionMode>? _modeSub;
+  ConnectionMode _connectionMode = ConnectionMode.disconnected;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectionManager.initialize();
+    _connectionMode = _connectionManager.mode;
+    _modeSub = _connectionManager.modeStream.listen((mode) {
+      if (mounted) setState(() => _connectionMode = mode);
+    });
+  }
+
+  @override
+  void dispose() {
+    _modeSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,66 +61,77 @@ class IncidentOverviewScreen extends StatelessWidget {
             },
             tooltip: 'Settings',
           ),
-          // Connection status indicator with glassmorphic effect
-          BlocBuilder<WebSocketBloc, WebSocketState>(
-            builder: (context, state) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: (state.isConnected
-                              ? SimsColors.accentTactical
+          // Connection status indicator with mesh mode support
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (_connectionMode == ConnectionMode.normal
+                          ? SimsColors.accentTactical
+                          : _connectionMode == ConnectionMode.meshConnected
+                              ? SimsColors.highOrange
                               : SimsColors.slate700)
-                          .withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: (state.isConnected
-                                ? SimsColors.accentTactical
+                      .withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: (_connectionMode == ConnectionMode.normal
+                            ? SimsColors.accentTactical
+                            : _connectionMode == ConnectionMode.meshConnected
+                                ? SimsColors.highOrange
                                 : SimsColors.slate600)
-                            .withOpacity(0.4),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: state.isConnected
-                                ? SimsColors.accentCyan
-                                : SimsColors.criticalRed,
-                            shape: BoxShape.circle,
-                            boxShadow: state.isConnected
-                                ? [
-                                    BoxShadow(
-                                      color: SimsColors.accentCyan.withOpacity(0.5),
-                                      blurRadius: 4,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          state.isConnected ? 'Live' : 'Offline',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: SimsColors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
+                        .withOpacity(0.4),
+                    width: 1,
                   ),
                 ),
-              );
-            },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: _connectionMode == ConnectionMode.normal
+                            ? SimsColors.accentCyan
+                            : _connectionMode == ConnectionMode.meshConnected
+                                ? SimsColors.highOrange
+                                : SimsColors.criticalRed,
+                        shape: BoxShape.circle,
+                        boxShadow: _connectionMode != ConnectionMode.disconnected
+                            ? [
+                                BoxShadow(
+                                  color: (_connectionMode == ConnectionMode.normal
+                                          ? SimsColors.accentCyan
+                                          : SimsColors.highOrange)
+                                      .withOpacity(0.5),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _connectionMode == ConnectionMode.normal
+                          ? 'Live'
+                          : _connectionMode == ConnectionMode.meshConnected
+                              ? 'Mesh'
+                              : _connectionMode == ConnectionMode.meshScanning
+                                  ? 'Scanning'
+                                  : 'Offline',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: SimsColors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -107,7 +145,7 @@ class IncidentOverviewScreen extends StatelessWidget {
             },
             child: CustomScrollView(
               slivers: [
-                if (!state.isConnected)
+                if (!state.isConnected || _connectionMode == ConnectionMode.meshConnected)
                   SliverToBoxAdapter(
                     child: Container(
                       margin: const EdgeInsets.all(16),
@@ -116,7 +154,10 @@ class IncidentOverviewScreen extends StatelessWidget {
                         color: SimsColors.backgroundLight,
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: SimsColors.highOrange.withOpacity(0.3),
+                          color: (_connectionMode == ConnectionMode.meshConnected
+                                  ? SimsColors.highOrange
+                                  : SimsColors.highOrange)
+                              .withOpacity(0.3),
                           width: 1,
                         ),
                         boxShadow: [
@@ -129,15 +170,21 @@ class IncidentOverviewScreen extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: SimsColors.accentAmber,
+                          Icon(
+                            _connectionMode == ConnectionMode.meshConnected
+                                ? Icons.bluetooth_connected
+                                : Icons.info_outline,
+                            color: _connectionMode == ConnectionMode.meshConnected
+                                ? SimsColors.highOrange
+                                : SimsColors.accentAmber,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Offline mode - You can still report incidents',
+                              _connectionMode == ConnectionMode.meshConnected
+                                  ? 'Mesh mode - Reports sent via LoRa mesh network'
+                                  : 'Offline mode - You can still report incidents',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: SimsColors.white.withOpacity(0.9),

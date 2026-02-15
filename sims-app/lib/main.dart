@@ -4,6 +4,7 @@ import 'src/bloc/incident_bloc.dart';
 import 'src/connection/websocket_service.dart';
 import 'src/connection/bloc/websocket_bloc.dart';
 import 'src/connection/bloc/websocket_event.dart';
+import 'src/connection/connection_manager.dart';
 import 'src/routes/app_routes.dart';
 import 'src/utils/sims_colors.dart';
 import 'src/repositories/settings_repository.dart';
@@ -28,6 +29,9 @@ void main() async {
       FlutterError.dumpErrorToConsole(details);
     }
   };
+
+  // Initialize ConnectionManager (monitors WS health, manages mesh fallback)
+  ConnectionManager().initialize();
 
   runApp(const SimsApp());
 }
